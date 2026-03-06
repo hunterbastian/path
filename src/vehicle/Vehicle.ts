@@ -2,78 +2,177 @@ import * as THREE from 'three';
 import { DrivingState } from './DrivingState';
 import { VEHICLE_WHEEL_OFFSETS } from './vehicleShared';
 
+export interface VehicleOptions {
+  scale?: number;
+  bodyColor?: THREE.ColorRepresentation;
+  roofColor?: THREE.ColorRepresentation;
+  trimColor?: THREE.ColorRepresentation;
+  markerColor?: THREE.ColorRepresentation;
+  boostColor?: THREE.ColorRepresentation;
+}
+
 export class Vehicle {
   readonly mesh = new THREE.Group();
   readonly #bodyVisual = new THREE.Group();
   readonly #wheelMounts: THREE.Group[] = [];
   readonly #wheelMeshes: THREE.Mesh[] = [];
   readonly #boostStripMaterial: THREE.MeshStandardMaterial;
+  readonly #sandBermMaterial: THREE.MeshStandardMaterial;
+  readonly #sandBerms: THREE.Mesh[] = [];
   #bodyRoll = 0;
   #bodyPitch = 0;
+  #bodySink = 0;
+  #bodyHeave = 0;
+  #bodyHeaveVelocity = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, options: VehicleOptions = {}) {
     const bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6a281a,
-      roughness: 0.7,
-      metalness: 0.32,
+      color: options.bodyColor ?? 0x586859,
+      roughness: 0.82,
+      metalness: 0.18,
+    });
+    const roofMaterial = new THREE.MeshStandardMaterial({
+      color: options.roofColor ?? 0xd0c7b3,
+      roughness: 0.88,
+      metalness: 0.06,
     });
     const metalMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4f4c48,
-      roughness: 0.58,
+      color: 0x484843,
+      roughness: 0.62,
       metalness: 0.82,
     });
     const trimMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b6842,
-      roughness: 0.74,
-      metalness: 0.22,
+      color: options.trimColor ?? 0x88745a,
+      roughness: 0.82,
+      metalness: 0.16,
+    });
+    const plasticMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2d2d28,
+      roughness: 0.94,
+      metalness: 0.04,
     });
     const glassMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x8ca2a0,
-      roughness: 0.18,
+      color: 0x9aabaf,
+      roughness: 0.22,
       metalness: 0.1,
       clearcoat: 1,
-      clearcoatRoughness: 0.15,
-      opacity: 0.52,
+      clearcoatRoughness: 0.12,
+      opacity: 0.48,
       transparent: true,
     });
+    const markerMaterial = new THREE.MeshStandardMaterial({
+      color: options.markerColor ?? 0xc59552,
+      emissive: options.markerColor ?? 0xffb15e,
+      emissiveIntensity: 0.42,
+      roughness: 0.34,
+      metalness: 0.28,
+    });
     this.#boostStripMaterial = new THREE.MeshStandardMaterial({
-      color: 0xcba266,
-      emissive: 0xffb45a,
-      emissiveIntensity: 0.7,
-      roughness: 0.3,
-      metalness: 0.6,
+      color: options.boostColor ?? 0x954c33,
+      emissive: options.boostColor ?? 0xff8f48,
+      emissiveIntensity: 0.62,
+      roughness: 0.42,
+      metalness: 0.28,
+    });
+    this.#sandBermMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd6c18a,
+      roughness: 0.96,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
     });
 
     this.mesh.add(this.#bodyVisual);
 
-    this.#bodyVisual.add(this.#box(bodyMaterial, [2.25, 0.72, 4.8], [0, 0.02, 0]));
-    this.#bodyVisual.add(this.#box(metalMaterial, [1.98, 0.18, 4.95], [0, -0.28, 0.05]));
-    this.#bodyVisual.add(this.#box(bodyMaterial, [1.78, 0.5, 1.68], [0, 0.44, 1.35]));
-    this.#bodyVisual.add(this.#box(metalMaterial, [1.52, 0.86, 2.08], [-0.04, 0.72, -0.2]));
-    this.#bodyVisual.add(this.#box(glassMaterial, [1.36, 0.42, 0.06], [0, 0.82, 0.45], [-0.58, 0, 0]));
-    this.#bodyVisual.add(this.#box(glassMaterial, [1.14, 0.32, 0.05], [0, 0.78, -1.02], [0.34, 0, 0]));
-    this.#bodyVisual.add(this.#box(trimMaterial, [0.9, 0.16, 1.02], [0, 0.52, 1.64]));
-    this.#bodyVisual.add(this.#box(metalMaterial, [0.42, 0.38, 0.7], [0, 0.72, 1.74]));
-    this.#bodyVisual.add(this.#box(this.#boostStripMaterial, [0.8, 0.12, 0.22], [0, 0.12, -2.38]));
+    this.#bodyVisual.add(this.#box(bodyMaterial, [2.24, 0.76, 4.76], [0, 0.03, -0.04]));
+    this.#bodyVisual.add(this.#box(metalMaterial, [1.92, 0.16, 4.58], [0, -0.33, 0.02]));
+    this.#bodyVisual.add(this.#box(bodyMaterial, [1.88, 0.62, 2.82], [0, 0.68, -0.12]));
+    this.#bodyVisual.add(this.#box(roofMaterial, [1.72, 0.16, 2.24], [0, 1.08, -0.12]));
+    this.#bodyVisual.add(this.#box(bodyMaterial, [1.82, 0.24, 1.34], [0, 0.5, 1.46], [-0.09, 0, 0]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [2.02, 0.18, 0.52], [0, -0.08, 2.13]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [1.92, 0.18, 0.44], [0, -0.08, -2.18]));
+    this.#bodyVisual.add(this.#box(trimMaterial, [1.18, 0.14, 0.26], [0, 0.34, 2.29]));
+    this.#bodyVisual.add(this.#box(glassMaterial, [1.46, 0.48, 0.06], [0, 0.86, 0.72], [-0.54, 0, 0]));
+    this.#bodyVisual.add(this.#box(glassMaterial, [1.32, 0.38, 0.06], [0, 0.84, -1.52], [0.28, 0, 0]));
+    this.#bodyVisual.add(this.#box(glassMaterial, [0.06, 0.36, 1.58], [-0.9, 0.82, -0.12], [0, 0, -0.08]));
+    this.#bodyVisual.add(this.#box(glassMaterial, [0.06, 0.36, 1.58], [0.9, 0.82, -0.12], [0, 0, 0.08]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [0.3, 0.4, 0.84], [-0.98, 0.08, 1.16]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [0.3, 0.4, 0.84], [0.98, 0.08, 1.16]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [0.3, 0.4, 0.84], [-0.98, 0.08, -1.3]));
+    this.#bodyVisual.add(this.#box(plasticMaterial, [0.3, 0.4, 0.84], [0.98, 0.08, -1.3]));
+    this.#bodyVisual.add(this.#box(this.#boostStripMaterial, [0.92, 0.12, 0.12], [0, 0.34, -2.34]));
+    this.#bodyVisual.add(this.#box(markerMaterial, [0.2, 0.1, 0.08], [-0.64, 0.35, 2.34]));
+    this.#bodyVisual.add(this.#box(markerMaterial, [0.2, 0.1, 0.08], [0.64, 0.35, 2.34]));
 
-    const ram = new THREE.Group();
-    ram.position.set(0, 0.02, 2.44);
-    ram.add(this.#box(metalMaterial, [1.8, 0.08, 0.12], [0, 0, 0]));
-    ram.add(this.#box(metalMaterial, [1.58, 0.08, 0.12], [0, 0.22, -0.06]));
-    ram.add(this.#box(metalMaterial, [0.08, 0.34, 0.1], [-0.66, 0.12, -0.03]));
-    ram.add(this.#box(metalMaterial, [0.08, 0.34, 0.1], [0.66, 0.12, -0.03]));
-    this.#bodyVisual.add(ram);
+    const brushGuard = new THREE.Group();
+    brushGuard.position.set(0, 0.04, 2.4);
+    brushGuard.add(this.#box(metalMaterial, [1.76, 0.08, 0.1], [0, -0.02, 0]));
+    brushGuard.add(this.#box(metalMaterial, [1.48, 0.08, 0.1], [0, 0.18, -0.04]));
+    brushGuard.add(this.#box(metalMaterial, [0.08, 0.38, 0.08], [-0.62, 0.14, -0.02]));
+    brushGuard.add(this.#box(metalMaterial, [0.08, 0.38, 0.08], [0.62, 0.14, -0.02]));
+    brushGuard.add(this.#box(metalMaterial, [0.08, 0.3, 0.08], [0, 0.11, -0.01]));
+    this.#bodyVisual.add(brushGuard);
 
     const rack = new THREE.Group();
-    rack.position.set(0, 1.2, -0.24);
-    rack.add(this.#box(metalMaterial, [1.72, 0.06, 1.92], [0, 0, 0]));
-    rack.add(this.#box(trimMaterial, [0.56, 0.28, 0.72], [-0.34, 0.18, -0.18]));
-    rack.add(this.#box(trimMaterial, [0.38, 0.22, 0.46], [0.38, 0.14, 0.22]));
+    rack.position.set(0, 1.18, -0.12);
+    rack.add(this.#box(metalMaterial, [1.72, 0.06, 2.08], [0, 0, 0]));
+    rack.add(this.#box(metalMaterial, [0.08, 0.26, 2.02], [-0.8, -0.1, 0]));
+    rack.add(this.#box(metalMaterial, [0.08, 0.26, 2.02], [0.8, -0.1, 0]));
+    rack.add(this.#box(trimMaterial, [0.68, 0.24, 0.72], [-0.28, 0.16, -0.34]));
+    rack.add(this.#box(trimMaterial, [0.4, 0.18, 0.52], [0.42, 0.13, 0.26]));
+    rack.add(this.#cylinder(trimMaterial, 0.11, 0.62, [0.52, 0.12, -0.44], [0, 0, Math.PI / 2]));
     this.#bodyVisual.add(rack);
 
-    const exhaustLeft = this.#cylinder(metalMaterial, 0.06, 0.9, [-0.82, 0.48, -1.98], [0.2, 0, 0]);
-    const exhaustRight = this.#cylinder(metalMaterial, 0.06, 0.9, [0.82, 0.48, -1.98], [0.2, 0, 0]);
-    this.#bodyVisual.add(exhaustLeft, exhaustRight);
+    const sliderLeft = this.#box(metalMaterial, [0.14, 0.14, 2.84], [-1.08, -0.12, -0.08]);
+    const sliderRight = this.#box(metalMaterial, [0.14, 0.14, 2.84], [1.08, -0.12, -0.08]);
+    this.#bodyVisual.add(sliderLeft, sliderRight);
+
+    const spare = this.#wheel(metalMaterial);
+    spare.scale.setScalar(0.82);
+    spare.position.set(0, 0.7, -2.38);
+    spare.rotation.y = Math.PI / 2;
+    this.#bodyVisual.add(spare);
+
+    const antenna = this.#cylinder(metalMaterial, 0.02, 0.94, [-0.72, 1.42, -1.18], [0.06, 0, 0]);
+    this.#bodyVisual.add(antenna);
+
+    const bermGeometry = new THREE.SphereGeometry(0.52, 14, 10);
+    const bermConfigs = [
+      {
+        position: new THREE.Vector3(-0.92, -0.54, 1.26),
+        scale: new THREE.Vector3(1.2, 0.4, 1),
+      },
+      {
+        position: new THREE.Vector3(0.92, -0.54, 1.26),
+        scale: new THREE.Vector3(1.2, 0.4, 1),
+      },
+      {
+        position: new THREE.Vector3(-0.92, -0.54, -1.2),
+        scale: new THREE.Vector3(1.14, 0.36, 0.96),
+      },
+      {
+        position: new THREE.Vector3(0.92, -0.54, -1.2),
+        scale: new THREE.Vector3(1.14, 0.36, 0.96),
+      },
+      {
+        position: new THREE.Vector3(0, -0.62, 0.12),
+        scale: new THREE.Vector3(1.55, 0.32, 1.9),
+      },
+    ];
+
+    for (const config of bermConfigs) {
+      const berm = new THREE.Mesh(bermGeometry, this.#sandBermMaterial);
+      berm.position.copy(config.position);
+      berm.scale.copy(config.scale).multiplyScalar(0.2);
+      berm.visible = false;
+      berm.castShadow = false;
+      berm.receiveShadow = true;
+      berm.userData.basePosition = config.position.clone();
+      berm.userData.baseScale = config.scale.clone();
+      this.#sandBerms.push(berm);
+      this.mesh.add(berm);
+    }
 
     for (const offset of VEHICLE_WHEEL_OFFSETS) {
       const mount = new THREE.Group();
@@ -83,6 +182,10 @@ export class Vehicle {
       this.#wheelMounts.push(mount);
       this.#wheelMeshes.push(tire);
       this.mesh.add(mount);
+    }
+
+    if (options.scale && options.scale !== 1) {
+      this.mesh.scale.setScalar(options.scale);
     }
 
     scene.add(this.mesh);
@@ -105,13 +208,52 @@ export class Vehicle {
     if (frontRight) frontRight.rotation.y = state.steering * 0.48;
 
     const targetRoll = THREE.MathUtils.clamp(-state.lateralSpeed * 0.018, -0.12, 0.12);
-    const targetPitch = state.isBraking ? -0.05 : state.isAccelerating ? 0.03 : 0;
+    const targetPitch =
+      (state.isBraking ? -0.05 : state.isAccelerating ? 0.03 : 0)
+      + THREE.MathUtils.clamp(-state.verticalSpeed * 0.012, -0.025, 0.045);
+    const targetSink = state.surface === 'sand' ? state.sinkDepth * 0.72 : 0;
+    const averageCompression =
+      state.wheelCompression.reduce((sum, compression) => sum + Math.max(compression, 0), 0)
+      / state.wheelCompression.length;
+    const heaveTarget = THREE.MathUtils.clamp(
+      averageCompression * 0.1
+        + (state.isGrounded ? Math.max(-state.verticalSpeed, 0) * 0.004 : 0),
+      0,
+      0.13,
+    );
+    if (state.wasAirborne) {
+      this.#bodyHeaveVelocity += THREE.MathUtils.clamp(
+        0.12 + Math.max(-state.verticalSpeed, 0) * 0.02,
+        0.12,
+        0.26,
+      );
+    }
+    const heaveAcceleration =
+      (heaveTarget - this.#bodyHeave) * 24
+      - this.#bodyHeaveVelocity * 8.5;
+    this.#bodyHeaveVelocity += heaveAcceleration * dt;
+    this.#bodyHeave += this.#bodyHeaveVelocity * dt;
+    this.#bodyHeave = THREE.MathUtils.clamp(this.#bodyHeave, -0.035, 0.16);
+    if (
+      Math.abs(this.#bodyHeave) < 0.0006
+      && Math.abs(this.#bodyHeaveVelocity) < 0.0006
+      && heaveTarget < 0.002
+    ) {
+      this.#bodyHeave = 0;
+      this.#bodyHeaveVelocity = 0;
+    }
     this.#bodyRoll += (targetRoll - this.#bodyRoll) * (1 - Math.exp(-8 * dt));
     this.#bodyPitch += (targetPitch - this.#bodyPitch) * (1 - Math.exp(-8 * dt));
+    this.#bodySink += (targetSink - this.#bodySink) * (1 - Math.exp(-9 * dt));
+    this.#bodyVisual.position.y = -(this.#bodySink + this.#bodyHeave);
     this.#bodyVisual.rotation.z = this.#bodyRoll;
     this.#bodyVisual.rotation.x = this.#bodyPitch;
 
     this.#boostStripMaterial.emissiveIntensity = state.isBoosting ? 1.8 : 0.7;
+    this.#sandBermMaterial.opacity =
+      state.surface === 'sand'
+        ? THREE.MathUtils.clamp(0.08 + state.surfaceBuildup * 0.26 + state.sinkDepth * 0.6, 0, 0.42)
+        : 0;
 
     for (let index = 0; index < this.#wheelMounts.length; index += 1) {
       const mount = this.#wheelMounts[index];
@@ -122,6 +264,31 @@ export class Vehicle {
         offset.x,
         offset.y + compression * 0.16,
         offset.z,
+      );
+    }
+
+    const sandVisible = state.surface === 'sand' && (state.sinkDepth > 0.015 || state.surfaceBuildup > 0.05);
+    const sinkBlend = THREE.MathUtils.clamp(state.sinkDepth / 0.24, 0, 1);
+    const pileBlend = THREE.MathUtils.clamp(state.surfaceBuildup, 0, 1);
+    for (let index = 0; index < this.#sandBerms.length; index += 1) {
+      const berm = this.#sandBerms[index];
+      if (!berm) continue;
+      berm.visible = sandVisible;
+      if (!sandVisible) continue;
+
+      const basePosition = berm.userData.basePosition as THREE.Vector3;
+      const baseScale = berm.userData.baseScale as THREE.Vector3;
+      const spread = 0.42 + pileBlend * 0.82 + sinkBlend * 0.34;
+      const height = 0.22 + sinkBlend * 1.18 + pileBlend * 0.56;
+      berm.position.set(
+        basePosition.x,
+        basePosition.y - sinkBlend * (index === 4 ? 0.12 : 0.08),
+        basePosition.z,
+      );
+      berm.scale.set(
+        baseScale.x * spread,
+        baseScale.y * height,
+        baseScale.z * spread,
       );
     }
   }

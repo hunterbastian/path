@@ -5,12 +5,16 @@ export interface HudSnapshot {
   driveLabel: string;
   landmarkLabel: string;
   boostLabel: string;
+  routeLabel: string;
 }
 
 export interface ArrivalSnapshot {
   timeLabel: string;
   peakSpeedLabel: string;
   boostLabel: string;
+  mappedLabel: string;
+  relayLabel: string;
+  weatherLabel: string;
 }
 
 export interface MapLayoutSnapshot {
@@ -19,6 +23,7 @@ export interface MapLayoutSnapshot {
   discoveryRows: number;
   pathPoints: Array<{ x: number; z: number }>;
   waterPools: Array<{ x: number; z: number; radius: number }>;
+  outposts: Array<{ x: number; z: number; objective: boolean }>;
   objective: { x: number; z: number };
   landmark: { x: number; z: number };
 }
@@ -26,6 +31,7 @@ export interface MapLayoutSnapshot {
 export interface MapRuntimeSnapshot {
   discoveredCells: number[];
   discoveredRatio: number;
+  checkpointStates: Array<'pending' | 'current' | 'reached'>;
   pulse: number;
   statusLabel: string;
   vehicle: { x: number; z: number; heading: number };
@@ -43,7 +49,11 @@ interface AppShellElements {
   arrivalTime: HTMLSpanElement;
   arrivalPeak: HTMLSpanElement;
   arrivalBoost: HTMLSpanElement;
+  arrivalMapped: HTMLSpanElement;
+  arrivalRelay: HTMLSpanElement;
+  arrivalWeather: HTMLSpanElement;
   speed: HTMLSpanElement;
+  routeLabel: HTMLDivElement;
   traction: HTMLSpanElement;
   surface: HTMLSpanElement;
   drive: HTMLSpanElement;
@@ -68,7 +78,7 @@ export class AppShell {
         <div id="loading" class="screen loading-screen" aria-live="polite">
           <div class="loading-card">
             <div class="loading-title">PATH</div>
-            <div class="loading-copy">calibrating valley systems</div>
+            <div class="loading-copy">loading route, weather, and terrain</div>
           </div>
         </div>
 
@@ -78,24 +88,61 @@ export class AppShell {
           aria-hidden="true"
         >
           <div class="title-card">
-            <div class="title-kicker">Dust, water, and momentum</div>
+            <div class="title-topline">
+              <div class="title-kicker">Relay Basin Survey</div>
+              <div class="title-edition">Field Notes 01</div>
+            </div>
+            <div class="title-region">Tower Basin route, wet season</div>
             <div class="title-name">Path</div>
             <div class="title-rule"></div>
             <p class="title-copy">
-              Follow the valley seam, hold the chassis together, and aim for the
-              white mountain beyond the basin.
+              Drive through rain, snow, sand, and meltwater to reach the summit
+              relay on the last marked route below the mountain.
             </p>
+            <div class="title-facts">
+              <div class="title-fact title-fact--conditions">
+                <span class="title-fact-label">Conditions</span>
+                <span class="title-fact-value">Cold rain, crust snow, soft sand</span>
+              </div>
+              <div class="title-fact title-fact--objective">
+                <span class="title-fact-label">Objective</span>
+                <span class="title-fact-value">Reach the summit relay</span>
+              </div>
+              <div class="title-fact title-fact--terrain">
+                <span class="title-fact-label">Terrain</span>
+                <span class="title-fact-value">Basin tracks and melt seams</span>
+              </div>
+            </div>
             <div class="title-actions">
               <button id="start-button" class="start-button" type="button">
                 Start Drive
               </button>
-              <div class="title-meta">Press Enter to roll out</div>
+              <div class="title-meta">Press Enter, Start, or A to start</div>
             </div>
             <div class="title-controls">
-              <div>WASD or arrows to steer and drive</div>
-              <div>Shift brakes, Space boosts, F toggles fullscreen</div>
-              <div>R resets the run, M pulls the field map</div>
-              <div>Drag to orbit the camera</div>
+              <div class="title-controls-heading">Controls</div>
+              <div class="title-controls-grid">
+                <div class="title-control-item">
+                  <span>Accelerate / steer</span>
+                  <strong>WASD or arrow keys</strong>
+                </div>
+                <div class="title-control-item">
+                  <span>Brake / reverse / boost</span>
+                  <strong>S or Down brakes first, Shift slide-brakes, Space boosts</strong>
+                </div>
+                <div class="title-control-item">
+                  <span>Navigation</span>
+                  <strong>Press M to open the map</strong>
+                </div>
+                <div class="title-control-item">
+                  <span>Reset / view</span>
+                  <strong>Press R to reset, drag to look around</strong>
+                </div>
+                <div class="title-control-item">
+                  <span>Controller</span>
+                  <strong>Left stick steers, RT drives, LT brakes, A boosts</strong>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -106,15 +153,19 @@ export class AppShell {
           aria-hidden="true"
         >
           <div class="arrival-card">
-            <div class="title-kicker">Signal flare secured</div>
+            <div class="arrival-eyebrow">
+              <span class="arrival-badge">Relay secured</span>
+              <span id="arrival-weather" class="arrival-weather">Cold rain on the ridge</span>
+            </div>
+            <div class="title-kicker">Summit relay online</div>
             <div class="title-name arrival-name">Tower Mountain</div>
             <div class="title-rule"></div>
             <p class="title-copy">
-              You made the basin marker. Reset the rig, take another line, and
-              see if you can bring more speed into the climb.
+              The summit line is lit. Run it again and see how much more speed
+              you can carry between the basin relays and the final climb.
             </p>
             <div class="arrival-grid">
-              <div class="arrival-stat">
+              <div class="arrival-stat arrival-stat--emphasis">
                 <span class="status-label">Run time</span>
                 <span id="arrival-time" class="status-value">0:00</span>
               </div>
@@ -123,15 +174,24 @@ export class AppShell {
                 <span id="arrival-peak" class="status-value">0 km/h</span>
               </div>
               <div class="arrival-stat">
+                <span class="status-label">Mapped</span>
+                <span id="arrival-mapped" class="status-value">0%</span>
+              </div>
+              <div class="arrival-stat">
                 <span class="status-label">Boost left</span>
                 <span id="arrival-boost" class="status-value">0%</span>
               </div>
             </div>
+            <div class="arrival-footnote">
+              <span id="arrival-route" class="arrival-route">Basin line restored</span>
+              <span class="arrival-dot"></span>
+              <span class="arrival-route-copy">Press Enter to run it back</span>
+            </div>
             <div class="title-actions">
               <button id="restart-button" class="start-button" type="button">
-                Run Again
+                Start Another Run
               </button>
-              <div class="title-meta">Press Enter to reset at spawn</div>
+              <div class="title-meta">Press Enter, Start, or A to restart</div>
             </div>
           </div>
         </section>
@@ -140,27 +200,27 @@ export class AppShell {
           <div class="hud-panel">
             <div class="hud-main">
               <div class="speed-readout">
-                <div class="hud-subtitle">Forward speed</div>
+                <div class="hud-subtitle">Speed</div>
                 <span id="speed" class="speed-value">0 km/h</span>
               </div>
-              <div class="hud-subtitle">Signal flare route</div>
+              <div id="hud-route-label" class="hud-subtitle hud-route-label">Route to summit relay</div>
             </div>
             <div class="hud-grid">
               <div class="hud-stack">
-                <span class="status-label">Traction</span>
-                <span id="status-ground" class="status-value">Settled</span>
+                <span class="status-label">Contact</span>
+                <span id="status-ground" class="status-value">Grounded</span>
               </div>
               <div class="hud-stack">
                 <span class="status-label">Surface</span>
                 <span id="status-surface" class="status-value">Dirt</span>
               </div>
               <div class="hud-stack">
-                <span class="status-label">Drive state</span>
-                <span id="status-drive" class="status-value">Holding</span>
+                <span class="status-label">Status</span>
+                <span id="status-drive" class="status-value">Cruising</span>
               </div>
-              <div class="hud-stack">
-                <span class="status-label">Objective</span>
-                <span id="status-landmark" class="status-value">0 m out</span>
+              <div class="hud-stack hud-stack-objective">
+                <span class="status-label">Relay</span>
+                <span id="status-landmark" class="status-value">0 m away</span>
               </div>
               <div class="hud-stack">
                 <span class="status-label">Boost</span>
@@ -186,8 +246,8 @@ export class AppShell {
               ></canvas>
             </div>
             <div class="map-footer">
-              <span id="map-status" class="map-status">Signal flare 0 m</span>
-              <span class="map-meta">M to stow</span>
+              <span id="map-status" class="map-status">Summit relay 0 m away</span>
+              <span class="map-meta">Press M or Y to close</span>
             </div>
             <div class="map-controls">
               <div class="map-dpad">
@@ -215,7 +275,11 @@ export class AppShell {
       arrivalTime: this.#query(root, '#arrival-time'),
       arrivalPeak: this.#query(root, '#arrival-peak'),
       arrivalBoost: this.#query(root, '#arrival-boost'),
+      arrivalMapped: this.#query(root, '#arrival-mapped'),
+      arrivalRelay: this.#query(root, '#arrival-route'),
+      arrivalWeather: this.#query(root, '#arrival-weather'),
       speed: this.#query(root, '#speed'),
+      routeLabel: this.#query(root, '#hud-route-label'),
       traction: this.#query(root, '#status-ground'),
       surface: this.#query(root, '#status-surface'),
       drive: this.#query(root, '#status-drive'),
@@ -286,12 +350,41 @@ export class AppShell {
     this.elements.drive.textContent = snapshot.driveLabel;
     this.elements.landmark.textContent = snapshot.landmarkLabel;
     this.elements.boost.textContent = snapshot.boostLabel;
+    this.elements.routeLabel.textContent = snapshot.routeLabel;
+
+    this.elements.traction.dataset.tone =
+      snapshot.tractionLabel === 'Airborne' ? 'warn' : 'stable';
+    this.elements.surface.dataset.tone =
+      snapshot.surfaceLabel === 'Water' ? 'cool' : 'stable';
+    this.elements.drive.dataset.tone =
+      snapshot.driveLabel === 'Arrived'
+        ? 'goal'
+        : snapshot.driveLabel === 'Boosting'
+          ? 'boost'
+          : snapshot.driveLabel === 'Airborne'
+            ? 'warn'
+            : snapshot.driveLabel === 'Drifting'
+              ? 'active'
+              : snapshot.driveLabel === 'Braking'
+                ? 'cool'
+                : 'stable';
+    this.elements.landmark.dataset.tone =
+      snapshot.landmarkLabel === 'Reached' ? 'goal' : 'objective';
+    this.elements.boost.dataset.tone =
+      snapshot.boostLabel === 'Ready'
+        ? 'boost'
+        : snapshot.boostLabel.endsWith('%') && Number.parseInt(snapshot.boostLabel, 10) < 25
+          ? 'warn'
+          : 'stable';
   }
 
   updateArrival(snapshot: ArrivalSnapshot): void {
     this.elements.arrivalTime.textContent = snapshot.timeLabel;
     this.elements.arrivalPeak.textContent = snapshot.peakSpeedLabel;
     this.elements.arrivalBoost.textContent = snapshot.boostLabel;
+    this.elements.arrivalMapped.textContent = snapshot.mappedLabel;
+    this.elements.arrivalRelay.textContent = snapshot.relayLabel;
+    this.elements.arrivalWeather.textContent = snapshot.weatherLabel;
   }
 
   configureMap(layout: MapLayoutSnapshot): void {
@@ -434,15 +527,63 @@ export class AppShell {
     context.closePath();
     context.fill();
 
+    this.#mapLayout.outposts.forEach((outpost, index) => {
+      const [outpostX, outpostY] = project(outpost.x, outpost.z);
+      const pulse = snapshot ? 0.55 + 0.45 * Math.sin(snapshot.pulse * 4.4) : 0.5;
+      const checkpointState = snapshot?.checkpointStates[index] ?? 'pending';
+      context.globalAlpha = Math.max(
+        0.5,
+        this.#getDiscoveryAlpha(
+          outpost.x,
+          outpost.z,
+          discovery,
+        ),
+      );
+      context.strokeStyle = '#0f380f';
+      context.fillStyle =
+        checkpointState === 'reached'
+          ? '#0f380f'
+          : checkpointState === 'current' && pulse > 0.62
+            ? '#0f380f'
+            : '#306230';
+      context.lineWidth = outpost.objective ? 2 : 1.5;
+      if (outpost.objective) {
+        context.strokeRect(outpostX - 5, outpostY - 5, 10, 10);
+        context.fillRect(outpostX - 3, outpostY - 3, 6, 6);
+      } else {
+        context.strokeRect(outpostX - 4.5, outpostY - 4.5, 9, 9);
+        context.fillRect(outpostX - 2.5, outpostY - 2.5, 5, 5);
+        context.beginPath();
+        context.moveTo(outpostX + 5.5, outpostY - 1.5);
+        context.lineTo(outpostX + 8.5, outpostY - 7.5);
+        context.stroke();
+      }
+      if (checkpointState === 'reached') {
+        context.beginPath();
+        context.moveTo(outpostX - 2.6, outpostY + 0.2);
+        context.lineTo(outpostX - 0.5, outpostY + 2.3);
+        context.lineTo(outpostX + 3.2, outpostY - 2.1);
+        context.stroke();
+      } else if (checkpointState === 'current') {
+        context.beginPath();
+        context.arc(outpostX, outpostY, outpost.objective ? 8 : 7, 0, Math.PI * 2);
+        context.stroke();
+      }
+      context.globalAlpha = 1;
+    });
+
     const [objectiveX, objectiveY] = project(
       this.#mapLayout.objective.x,
       this.#mapLayout.objective.z,
     );
     const pulse = snapshot ? 0.55 + 0.45 * Math.sin(snapshot.pulse * 4.4) : 0.5;
-    context.globalAlpha = this.#getDiscoveryAlpha(
-      this.#mapLayout.objective.x,
-      this.#mapLayout.objective.z,
-      discovery,
+    context.globalAlpha = Math.max(
+      0.62,
+      this.#getDiscoveryAlpha(
+        this.#mapLayout.objective.x,
+        this.#mapLayout.objective.z,
+        discovery,
+      ),
     );
     context.strokeStyle = '#0f380f';
     context.lineWidth = 2;

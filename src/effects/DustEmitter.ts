@@ -28,6 +28,15 @@ const BRAKE_DUST: DustConfig = {
   jitter: 0.7,
 };
 
+const SOFT_SAND_DUST: DustConfig = {
+  size: 0.98,
+  growth: 1.7,
+  life: 0.82,
+  spread: 0.46,
+  lift: 0.22,
+  jitter: 0.95,
+};
+
 export class DustEmitter {
   readonly #dust: DustSystem;
   #driveTimer = 0;
@@ -48,8 +57,15 @@ export class DustEmitter {
 
     if (state.isAccelerating && this.#driveTimer >= 0.06) {
       this.#driveTimer = 0;
-      for (const wheelIndex of [2, 3] as const) {
-        this.#emit(vehicle, wheelIndex, DRIVE_DUST, 1);
+      const driveConfig = state.surface === 'sand' ? SOFT_SAND_DUST : DRIVE_DUST;
+      const wheels = state.surface === 'sand'
+        ? ([0, 1, 2, 3] as const)
+        : ([2, 3] as const);
+      const count = state.surface === 'sand'
+        ? (state.sinkDepth > 0.1 || state.surfaceBuildup > 0.3 ? 2 : 1)
+        : 1;
+      for (const wheelIndex of wheels) {
+        this.#emit(vehicle, wheelIndex, driveConfig, count);
       }
     }
 

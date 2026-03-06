@@ -42,6 +42,7 @@ const WATER_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uShallowColor;
   uniform vec3 uCameraPos;
   uniform float uTime;
+  uniform float uOpacity;
 
   varying vec2 vUv;
   varying vec3 vWorldPos;
@@ -56,21 +57,30 @@ const WATER_FRAGMENT_SHADER = /* glsl */ `
     color = mix(color, vec3(0.88, 0.93, 0.94), fresnel * 0.38);
 
     float edge = 1.0 - smoothstep(0.74, 1.0, length(vUv - 0.5) * 1.9);
-    gl_FragColor = vec4(color, edge * 0.72);
+    gl_FragColor = vec4(color, edge * 0.72 * uOpacity);
   }
 `;
 
 export class Water {
   readonly pools: WaterPool[];
   readonly #material: THREE.ShaderMaterial;
+  readonly #mesh: THREE.Mesh | null;
+  #activity = 1;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.pools = this.#createPools(terrain);
     this.#material = this.#createMaterial();
 
-    const mesh = this.#buildMesh();
-    if (mesh) {
-      scene.add(mesh);
+    this.#mesh = this.#buildMesh();
+    if (this.#mesh) {
+      scene.add(this.#mesh);
+    }
+  }
+
+  setActivity(activity: number): void {
+    this.#activity = THREE.MathUtils.clamp(activity, 0, 1);
+    if (this.#mesh) {
+      this.#mesh.visible = this.#activity > 0.04;
     }
   }
 
@@ -78,9 +88,11 @@ export class Water {
     const uniforms = this.#material.uniforms as {
       uTime: { value: number };
       uCameraPos: { value: THREE.Vector3 };
+      uOpacity: { value: number };
     };
-    uniforms.uTime.value += dt;
+    uniforms.uTime.value += dt * THREE.MathUtils.lerp(0.4, 1, this.#activity);
     uniforms.uCameraPos.value.copy(cameraPosition);
+    uniforms.uOpacity.value = THREE.MathUtils.lerp(0.3, 1, this.#activity);
   }
 
   getWaterHeightAt(x: number, z: number): number | null {
@@ -535,6 +547,7 @@ export class Water {
         uDeepColor: { value: new THREE.Color(0x2f7186) },
         uShallowColor: { value: new THREE.Color(0x8fe5df) },
         uCameraPos: { value: new THREE.Vector3() },
+        uOpacity: { value: 1 },
       },
       transparent: true,
       depthWrite: false,

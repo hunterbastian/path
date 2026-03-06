@@ -7,7 +7,13 @@ declare global {
     render_game_to_text?: () => string;
     startPathGame?: () => void;
     jumpPathToObjective?: () => void;
+    jumpPathToSand?: () => void;
+    jumpPathToFixture?: (fixtureId: string) => void;
+    togglePathDebug?: () => boolean;
+    getPathTuningDebug?: () => ReturnType<PathGame['getTuningDebug']>;
     getPathAudioDebug?: () => ReturnType<PathGame['getAudioDebug']>;
+    setPathRenderDebugView?: (viewId: string) => ReturnType<PathGame['setRenderDebugView']>;
+    getPathRenderDebug?: () => ReturnType<PathGame['getRenderDebugState']>;
   }
 }
 
@@ -27,6 +33,14 @@ window.jumpPathToObjective = () => {
   game.jumpToObjective();
 };
 
+window.jumpPathToSand = () => {
+  game.jumpToSand();
+};
+
+window.jumpPathToFixture = (fixtureId: string) => {
+  game.jumpToFixture(fixtureId);
+};
+
 window.advanceTime = (milliseconds: number) => {
   game.advanceTime(milliseconds);
 };
@@ -37,6 +51,22 @@ window.render_game_to_text = () => {
 
 window.getPathAudioDebug = () => {
   return game.getAudioDebug();
+};
+
+window.togglePathDebug = () => {
+  return game.toggleDebugPanel();
+};
+
+window.getPathTuningDebug = () => {
+  return game.getTuningDebug();
+};
+
+window.setPathRenderDebugView = (viewId: string) => {
+  return game.setRenderDebugView(viewId);
+};
+
+window.getPathRenderDebug = () => {
+  return game.getRenderDebugState();
 };
 
 void game.boot().catch((error: unknown) => {

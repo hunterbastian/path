@@ -11,12 +11,14 @@ export class Terrain {
   readonly segments = 220;
   readonly landmarkCenter = new THREE.Vector2(44, 360);
   readonly objectiveCenter: THREE.Vector2;
+  readonly outpostCenters: THREE.Vector2[];
   readonly #noise: ReturnType<typeof createNoise2D>;
 
   constructor(scene: THREE.Scene) {
     const random = new SeededRandom(0x50415448);
     this.#noise = createNoise2D(() => random.next());
     this.objectiveCenter = this.#findObjectiveCenter();
+    this.outpostCenters = this.#findOutpostCenters();
     this.mesh = this.#createMesh();
     this.mesh.receiveShadow = true;
     scene.add(this.mesh);
@@ -32,10 +34,57 @@ export class Terrain {
     return new THREE.Vector3(x, this.getHeightAt(x, z), z);
   }
 
+  getRouteCrestPosition(): THREE.Vector3 {
+    const z = 72;
+    const x = this.getPathCenterX(z);
+    return new THREE.Vector3(x, this.getHeightAt(x, z), z);
+  }
+
   getObjectivePosition(): THREE.Vector3 {
     const x = this.objectiveCenter.x;
     const z = this.objectiveCenter.y;
     return new THREE.Vector3(x, this.getHeightAt(x, z), z);
+  }
+
+  getOutpostPositions(): THREE.Vector3[] {
+    return this.outpostCenters.map((center) =>
+      new THREE.Vector3(center.x, this.getHeightAt(center.x, center.y), center.y),
+    );
+  }
+
+  getSandStartPosition(): THREE.Vector3 {
+    const basin = this.#getSandBasinCenter();
+    let best = basin.clone();
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (let z = basin.y - 88; z <= basin.y + 88; z += 6) {
+      for (let x = basin.x - 124; x <= basin.x + 124; x += 6) {
+        if (!this.isWithinBounds(x, z)) continue;
+
+        const surface = this.getSurfaceAt(x, z);
+        const slope = 1 - this.getNormalAt(x, z).y;
+        const basinInfluence = this.#getSandBasinInfluence(x, z);
+        if (surface !== 'sand' && basinInfluence < 0.22) continue;
+        if (slope > 0.28) continue;
+
+        const height = this.getHeightAt(x, z);
+        const pathInfluence = this.getPathInfluence(x, z);
+        const score =
+          Math.hypot(x - basin.x, (z - basin.y) * 1.1) +
+          Math.abs(height - 12) * 0.7 +
+          slope * 160 -
+          basinInfluence * 42 -
+          pathInfluence * 5 +
+          (surface === 'sand' ? 0 : 18);
+
+        if (score < bestScore) {
+          bestScore = score;
+          best.set(x, z);
+        }
+      }
+    }
+
+    return new THREE.Vector3(best.x, this.getHeightAt(best.x, best.y) + VEHICLE_CLEARANCE, best.y);
   }
 
   isWithinBounds(x: number, z: number): boolean {
@@ -77,6 +126,7 @@ export class Terrain {
       height = THREE.MathUtils.lerp(height, 0, blend);
     }
 
+    height += this.#routeCrestContribution(x, z);
     height += this.#landmarkContribution(x, z);
     return Math.max(height, 0);
   }
@@ -97,12 +147,15 @@ export class Terrain {
     const moisture = this.#getMoisture(x, z, slope);
     const pathInfluence = this.getPathInfluence(x, z);
     const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
+    const sandBasinInfluence = this.#getSandBasinInfluence(x, z);
 
     if (height > 122) return 'snow';
-    if (snowCoverage > 0.72 && slope < 0.4) return 'snow';
+    if (snowCoverage > 0.72 && slope < 0.4 && sandBasinInfluence < 0.46) return 'snow';
     if (height > 88 || slope > 0.5) return 'rock';
-    if (pathInfluence > 0.52) return 'dirt';
+    if (pathInfluence > 0.52 && sandBasinInfluence < 0.32) return 'dirt';
+    if (sandBasinInfluence > 0.36 && slope < 0.3 && height < 34) return 'sand';
     if (height < 14 && moisture < 0.46) return 'sand';
+    if (sandBasinInfluence > 0.18 && slope < 0.24 && moisture < 0.64) return 'sand';
     if (moisture > 0.58 && slope < 0.24) return 'grass';
     if (moisture > 0.5 && slope < 0.18) return 'grass';
     if (height < 20 && moisture < 0.38) return 'sand';
@@ -146,6 +199,19 @@ export class Terrain {
     return massif + shoulder + spire;
   }
 
+  #routeCrestContribution(x: number, z: number): number {
+    const crestZ = 72;
+    const lateral = x - this.getPathCenterX(z);
+    const laneMask = Math.exp(-(lateral * lateral) / (17 * 17));
+    const ramp =
+      Math.exp(-((z - (crestZ - 6)) ** 2) / (12 * 12)) * 3.4;
+    const lip =
+      Math.exp(-((z - crestZ) ** 2) / (5.6 * 5.6)) * 2.9;
+    const landingCut =
+      Math.exp(-((z - (crestZ + 14)) ** 2) / (13 * 13)) * -3.8;
+    return laneMask * (ramp + lip + landingCut);
+  }
+
   #findObjectiveCenter(): THREE.Vector2 {
     const targetZ = this.landmarkCenter.y - 88;
     const pathX = this.getPathCenterX(targetZ);
@@ -177,6 +243,54 @@ export class Terrain {
     }
 
     return best;
+  }
+
+  #findOutpostCenters(): THREE.Vector2[] {
+    return [
+      this.#findRouteOutpostCenter(84, 20),
+      this.#findRouteOutpostCenter(176, 48),
+      this.objectiveCenter.clone(),
+    ];
+  }
+
+  #findRouteOutpostCenter(targetZ: number, lateralOffset: number): THREE.Vector2 {
+    let best = new THREE.Vector2(this.getPathCenterX(targetZ) + lateralOffset, targetZ);
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (let dz = -24; dz <= 24; dz += 4) {
+      for (let dx = -28; dx <= 28; dx += 4) {
+        const z = targetZ + dz;
+        const pathX = this.getPathCenterX(z);
+        const x = pathX + lateralOffset + dx;
+        if (!this.isWithinBounds(x, z)) continue;
+
+        const height = this.getHeightAt(x, z);
+        const slope = 1 - this.getNormalAt(x, z).y;
+        const surface = this.getSurfaceAt(x, z);
+        const pathDistance = Math.abs(x - pathX);
+        const sandBias = this.#getSandBasinInfluence(x, z);
+        const score =
+          slope * 135 +
+          Math.abs(pathDistance - 24) * 0.9 +
+          Math.abs(height - 22) * 0.34 +
+          Math.hypot(dx, dz * 0.8) * 0.58 +
+          sandBias * 18 +
+          (surface === 'rock' ? 26 : 0);
+
+        if (score < bestScore) {
+          bestScore = score;
+          best.set(x, z);
+        }
+      }
+    }
+
+    return best;
+  }
+
+  #getSandBasinCenter(): THREE.Vector2 {
+    const z = 176;
+    const x = this.getPathCenterX(z) + 54;
+    return new THREE.Vector2(x, z);
   }
 
   #getMoisture(x: number, z: number, slope: number): number {
@@ -214,6 +328,19 @@ export class Terrain {
       0,
       1,
     );
+  }
+
+  #getSandBasinInfluence(x: number, z: number): number {
+    const basin = this.#getSandBasinCenter();
+    const dx = x - basin.x;
+    const dz = z - basin.y;
+    const primary =
+      Math.exp(-((dx * dx) / (86 * 86) + (dz * dz) / (58 * 58)));
+    const shoulder =
+      Math.exp(-(((dx + 24) ** 2) / (42 * 42) + ((dz - 10) ** 2) / (30 * 30))) *
+      0.42;
+
+    return THREE.MathUtils.clamp(primary + shoulder, 0, 1);
   }
 
   #createMesh(): THREE.Mesh {

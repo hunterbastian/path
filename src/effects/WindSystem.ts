@@ -8,6 +8,7 @@ export class WindSystem {
   readonly #field: SpriteParticleField;
   readonly #random = new SeededRandom(0x57494e44);
   readonly #windDirection = new THREE.Vector3(-1, -0.04, 0.35).normalize();
+  #densityScale = 1;
 
   constructor(scene: THREE.Scene) {
     this.#field = new SpriteParticleField(scene, {
@@ -23,8 +24,13 @@ export class WindSystem {
     });
   }
 
+  setDensityScale(scale: number): void {
+    this.#densityScale = Math.max(0, scale);
+  }
+
   update(dt: number, cameraPosition: THREE.Vector3): void {
-    const deficit = Math.max(0, TARGET_PARTICLES - this.#field.activeCount);
+    const targetParticles = Math.round(TARGET_PARTICLES * this.#densityScale);
+    const deficit = Math.max(0, targetParticles - this.#field.activeCount);
 
     for (let index = 0; index < Math.min(deficit, 10); index += 1) {
       const spawnX =
