@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { EngineAudio, type AmbientAudioState } from '../audio/EngineAudio';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { GameTuningStore } from '../config/GameTuning';
@@ -34,6 +36,7 @@ import {
   isRenderDebugViewId,
   type RenderDebugViewId,
 } from '../render/RenderDebugView';
+import { TitleAlphaPreviewEmbed } from '../remotion/TitleAlphaPreviewEmbed';
 import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
 import { MountainHub } from '../world/MountainHub';
@@ -66,6 +69,7 @@ const SCENARIO_IDS: ScenarioFixtureId[] = [
 
 export class PathGame {
   readonly #shell: AppShell;
+  readonly #titlePreviewRoot: Root;
   readonly #tuningStore: GameTuningStore;
   readonly #engine: Engine;
   readonly #input: InputManager;
@@ -132,6 +136,7 @@ export class PathGame {
 
   constructor(root: HTMLElement) {
     this.#shell = new AppShell(root);
+    this.#titlePreviewRoot = createRoot(this.#shell.elements.titlePreviewMount);
     this.#tuningStore = new GameTuningStore();
     this.#engine = new Engine(this.#shell.elements.canvasMount);
     this.#shell.mountCanvas(this.#engine.renderer.domElement);
@@ -265,6 +270,7 @@ export class PathGame {
     this.#shell.bindRestart(() => this.#restartRun());
     this.#shell.bindPauseResume(() => this.#setPauseVisible(false));
     this.#shell.bindPauseRestart(() => this.#restartRun());
+    this.#mountTitlePreview();
     this.#installAudioUnlockListeners();
     this.#shell.setLoadingVisible(false);
     this.#shell.setTitleVisible(true);
@@ -285,6 +291,7 @@ export class PathGame {
   dispose(): void {
     this.#loop.stop();
     this.#removeAudioUnlockListeners();
+    this.#titlePreviewRoot.unmount();
     this.#input.dispose();
     this.#camera.dispose();
     this.#engineAudio.dispose();
@@ -977,11 +984,20 @@ export class PathGame {
       this.#controller.position.x,
       this.#controller.position.z,
     );
+    this.#clearTitlePreview();
     this.#shell.setMode(this.#runSession.mode);
     this.#shell.setTitleVisible(false);
     this.#shell.setArrivalVisible(false);
     this.#shell.setMapVisible(false);
     void this.#activateAudio();
+  }
+
+  #mountTitlePreview(): void {
+    this.#titlePreviewRoot.render(createElement(TitleAlphaPreviewEmbed));
+  }
+
+  #clearTitlePreview(): void {
+    this.#titlePreviewRoot.render(null);
   }
 
   async #activateAudio(): Promise<void> {

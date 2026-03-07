@@ -48,6 +48,7 @@ interface AppShellElements {
   canvasMount: HTMLDivElement;
   loading: HTMLDivElement;
   title: HTMLDivElement;
+  titlePreviewMount: HTMLDivElement;
   startButton: HTMLButtonElement;
   arrival: HTMLDivElement;
   restartButton: HTMLButtonElement;
@@ -104,13 +105,31 @@ export class AppShell {
               <div class="title-kicker">Relay Basin Survey</div>
               <div class="title-edition">Field Notes 01</div>
             </div>
-            <div class="title-region">Tower Basin route, wet season</div>
-            <div class="title-name">Path</div>
-            <div class="title-rule"></div>
-            <p class="title-copy">
-              Drive through rain, snow, sand, and meltwater to reach the summit
-              relay on the last marked route below the mountain.
-            </p>
+            <div class="title-hero">
+              <div class="title-copy-block">
+                <div class="title-region">Tower Basin route, wet season</div>
+                <div class="title-name">Path</div>
+                <div class="title-rule"></div>
+                <p class="title-copy">
+                  Drive through rain, snow, sand, and meltwater to reach the summit
+                  relay on the last marked route below the mountain.
+                </p>
+              </div>
+              <div class="title-preview-shell" aria-label="Early alpha preview reel">
+                <div class="title-preview-topline">
+                  <span class="title-preview-kicker">Alpha reel</span>
+                  <span class="title-preview-meta">Remotion loop / 00:08</span>
+                </div>
+                <div class="title-preview-frame">
+                  <div id="title-alpha-preview" class="title-alpha-preview"></div>
+                </div>
+                <div class="title-preview-notes">
+                  <span>Seeded terrain</span>
+                  <span>Weather shifts</span>
+                  <span>Relay route</span>
+                </div>
+              </div>
+            </div>
             <div class="title-facts">
               <div class="title-fact title-fact--conditions">
                 <span class="title-fact-label">Weather</span>
@@ -318,6 +337,7 @@ export class AppShell {
       canvasMount: this.#query(root, '#game-stage'),
       loading: this.#query(root, '#loading'),
       title: this.#query(root, '#title-screen'),
+      titlePreviewMount: this.#query(root, '#title-alpha-preview'),
       startButton: this.#query(root, '#start-button'),
       arrival: this.#query(root, '#arrival-screen'),
       restartButton: this.#query(root, '#restart-button'),
