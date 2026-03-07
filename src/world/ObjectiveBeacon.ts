@@ -10,6 +10,7 @@ interface AuxiliaryLight {
   baseIntensity: number;
   pulseIntensity: number;
   completionBoost: number;
+  phase: number;
 }
 
 function createLink(
@@ -138,6 +139,7 @@ export class ObjectiveBeacon {
         baseIntensity,
         pulseIntensity,
         completionBoost,
+        phase: positionVector.x * 0.41 + positionVector.z * 0.17,
       });
     };
 
@@ -424,6 +426,8 @@ export class ObjectiveBeacon {
     this.group.visible = activity > 0.03;
 
     const pulse = 0.5 + 0.5 * Math.sin(this.#time * (this.#isObjective ? 1.8 : 1.1));
+    const shimmer = 0.5 + 0.5 * Math.sin(this.#time * 2.7 + this.group.position.x * 0.04);
+    const hum = 0.5 + 0.5 * Math.sin(this.#time * 0.62 + this.group.position.z * 0.016);
     const completionRamp = completed ? Math.min(this.#completionTime / 1.25, 1) : 0;
     const completionBurst =
       completed
@@ -431,21 +435,24 @@ export class ObjectiveBeacon {
         : 0;
 
     this.#windowMaterial.emissiveIntensity =
-      ((this.#isObjective ? 1.42 : 0.98) + pulse * 0.55 + completionBurst * 0.7)
+      ((this.#isObjective ? 1.42 : 0.98) + pulse * 0.55 + hum * 0.12 + completionBurst * 0.7)
       * activity;
     this.#lanternMaterial.emissiveIntensity =
-      ((this.#isObjective ? 2.3 : 1.58) + pulse * 0.95 + completionBurst * 1.25)
+      ((this.#isObjective ? 2.3 : 1.58) + pulse * 0.95 + shimmer * 0.24 + completionBurst * 1.25)
       * activity;
     this.#light.intensity =
       ((this.#isObjective ? 12 : 6.8)
         + pulse * (this.#isObjective ? 8.6 : 3.2)
+        + shimmer * (this.#isObjective ? 1.8 : 0.72)
         + completionBurst * 15)
       * activity;
 
     for (const auxLight of this.#auxLights) {
+      const localPulse =
+        0.5 + 0.5 * Math.sin(this.#time * 1.6 + auxLight.phase);
       auxLight.light.intensity =
         (auxLight.baseIntensity
-          + pulse * auxLight.pulseIntensity
+          + localPulse * auxLight.pulseIntensity
           + completionBurst * auxLight.completionBoost)
         * activity;
     }

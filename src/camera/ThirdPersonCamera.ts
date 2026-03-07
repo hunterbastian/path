@@ -40,6 +40,7 @@ export class ThirdPersonCamera {
     canvas.addEventListener('pointerup', this.#handlePointerUp);
     canvas.addEventListener('pointermove', this.#handlePointerMove);
     canvas.addEventListener('pointercancel', this.#handlePointerUp);
+    canvas.addEventListener('dblclick', this.#handleDoubleClick);
     canvas.addEventListener('contextmenu', this.#handleContextMenu);
   }
 
@@ -48,6 +49,7 @@ export class ThirdPersonCamera {
     this.#canvas.removeEventListener('pointerup', this.#handlePointerUp);
     this.#canvas.removeEventListener('pointermove', this.#handlePointerMove);
     this.#canvas.removeEventListener('pointercancel', this.#handlePointerUp);
+    this.#canvas.removeEventListener('dblclick', this.#handleDoubleClick);
     this.#canvas.removeEventListener('contextmenu', this.#handleContextMenu);
   }
 
@@ -85,6 +87,8 @@ export class ThirdPersonCamera {
     yawTargetDegrees: number;
     pitchDegrees: number;
     pitchTargetDegrees: number;
+    returnDelayRemainingSeconds: number;
+    returningToChase: boolean;
   } {
     return {
       heave: Number(this.#driveHeave.toFixed(3)),
@@ -104,6 +108,8 @@ export class ThirdPersonCamera {
       pitchTargetDegrees: Number(
         THREE.MathUtils.radToDeg(this.#pitchOrbitTarget).toFixed(2),
       ),
+      returnDelayRemainingSeconds: 0,
+      returningToChase: false,
     };
   }
 
@@ -116,7 +122,7 @@ export class ThirdPersonCamera {
     nextCheckpointPoint: THREE.Vector3 | null,
   ): void {
     const driveTuning = this.#tuning.camera.drive;
-    this.#updateOrbitDrag(dt, 0.18);
+    this.#updateOrbitDrag(dt);
 
     const speed = state.speed;
     this.#driveMotionTime += dt * (1.4 + speed * 0.18);
@@ -505,7 +511,18 @@ export class ThirdPersonCamera {
     event.preventDefault();
   };
 
-  #updateOrbitDrag(dt: number, basePitch: number): void {
+  #handleDoubleClick = (): void => {
+    this.#yawOrbitTarget = 0;
+    this.#pitchOrbitTarget = 0.16;
+    this.#yawOrbitMomentum = 0;
+    this.#pitchOrbitMomentum = 0;
+    if (this.#prefersReducedMotion) {
+      this.#yawOrbit = 0;
+      this.#pitchOrbit = 0.16;
+    }
+  };
+
+  #updateOrbitDrag(dt: number): void {
     if (!this.#isDragging) {
       if (!this.#prefersReducedMotion) {
         this.#yawOrbitTarget += this.#yawOrbitMomentum * dt * 0.24;
@@ -518,11 +535,6 @@ export class ThirdPersonCamera {
         this.#yawOrbitMomentum *= momentumDamping;
         this.#pitchOrbitMomentum *= momentumDamping;
       }
-
-      this.#yawOrbitTarget +=
-        (0 - this.#yawOrbitTarget) * (1 - Math.exp(-2.2 * dt));
-      this.#pitchOrbitTarget +=
-        (basePitch - this.#pitchOrbitTarget) * (1 - Math.exp(-2.4 * dt));
     }
 
     const response = this.#prefersReducedMotion

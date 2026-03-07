@@ -5,6 +5,8 @@ export interface HudSnapshot {
   driveLabel: string;
   landmarkLabel: string;
   boostLabel: string;
+  weatherLabel: string;
+  weatherCondition: 'cloudy' | 'rainy' | 'sunny';
   routeLabel: string;
 }
 
@@ -22,10 +24,12 @@ export interface MapLayoutSnapshot {
   discoveryColumns: number;
   discoveryRows: number;
   pathPoints: Array<{ x: number; z: number }>;
+  servicePaths: Array<Array<{ x: number; z: number }>>;
   waterPools: Array<{ x: number; z: number; radius: number }>;
   outposts: Array<{ x: number; z: number; objective: boolean }>;
   objective: { x: number; z: number };
   landmark: { x: number; z: number };
+  cityCenter: { x: number; z: number };
 }
 
 export interface MapRuntimeSnapshot {
@@ -34,6 +38,7 @@ export interface MapRuntimeSnapshot {
   checkpointStates: Array<'pending' | 'current' | 'reached'>;
   pulse: number;
   statusLabel: string;
+  weatherCondition: 'cloudy' | 'rainy' | 'sunny';
   vehicle: { x: number; z: number; heading: number };
 }
 
@@ -46,6 +51,11 @@ interface AppShellElements {
   startButton: HTMLButtonElement;
   arrival: HTMLDivElement;
   restartButton: HTMLButtonElement;
+  pause: HTMLDivElement;
+  pauseResumeButton: HTMLButtonElement;
+  pauseRestartButton: HTMLButtonElement;
+  titleWeather: HTMLSpanElement;
+  titleAudio: HTMLSpanElement;
   arrivalTime: HTMLSpanElement;
   arrivalPeak: HTMLSpanElement;
   arrivalBoost: HTMLSpanElement;
@@ -59,6 +69,8 @@ interface AppShellElements {
   drive: HTMLSpanElement;
   landmark: HTMLSpanElement;
   boost: HTMLSpanElement;
+  weather: HTMLSpanElement;
+  weatherGlyph: HTMLSpanElement;
   mapDevice: HTMLDivElement;
   mapCanvas: HTMLCanvasElement;
   mapStatus: HTMLSpanElement;
@@ -101,8 +113,12 @@ export class AppShell {
             </p>
             <div class="title-facts">
               <div class="title-fact title-fact--conditions">
-                <span class="title-fact-label">Conditions</span>
-                <span class="title-fact-value">Cold rain, crust snow, soft sand</span>
+                <span class="title-fact-label">Weather</span>
+                <span id="title-weather" class="title-fact-value">Cloudy now, rainy next in 1:30</span>
+              </div>
+              <div class="title-fact title-fact--audio">
+                <span class="title-fact-label">Audio</span>
+                <span id="title-audio" class="title-fact-value">Tap or press a key to enable</span>
               </div>
               <div class="title-fact title-fact--objective">
                 <span class="title-fact-label">Objective</span>
@@ -136,7 +152,7 @@ export class AppShell {
                 </div>
                 <div class="title-control-item">
                   <span>Reset / view</span>
-                  <strong>Press R to reset, drag to look around</strong>
+                  <strong>Press Esc for the menu, R to reset, drag to orbit, double-click to center</strong>
                 </div>
                 <div class="title-control-item">
                   <span>Controller</span>
@@ -196,6 +212,35 @@ export class AppShell {
           </div>
         </section>
 
+        <section
+          id="pause-screen"
+          class="screen pause-screen"
+          aria-hidden="true"
+          hidden
+        >
+          <div class="pause-card">
+            <div class="pause-eyebrow">Field menu</div>
+            <div class="pause-title">Route Paused</div>
+            <p class="pause-copy">
+              Hold your line, check the weather, or start the basin route over
+              from the trailhead.
+            </p>
+            <div class="pause-actions">
+              <button id="pause-resume-button" class="start-button" type="button">
+                Resume Drive
+              </button>
+              <button
+                id="pause-restart-button"
+                class="start-button start-button--secondary"
+                type="button"
+              >
+                Restart Run
+              </button>
+            </div>
+            <div class="pause-meta">Press Esc or Start to close</div>
+          </div>
+        </section>
+
         <aside id="hud" class="hud" aria-live="polite">
           <div class="hud-panel">
             <div class="hud-main">
@@ -219,12 +264,16 @@ export class AppShell {
                 <span id="status-drive" class="status-value">Cruising</span>
               </div>
               <div class="hud-stack hud-stack-objective">
-                <span class="status-label">Relay</span>
+                <span class="status-label status-label--icon"><span class="hud-glyph hud-glyph--relay" aria-hidden="true"></span>Relay</span>
                 <span id="status-landmark" class="status-value">0 m away</span>
               </div>
               <div class="hud-stack">
                 <span class="status-label">Boost</span>
                 <span id="status-boost" class="status-value">Ready</span>
+              </div>
+              <div class="hud-stack">
+                <span class="status-label status-label--icon"><span id="status-weather-glyph" class="hud-glyph hud-glyph--weather" data-condition="cloudy" aria-hidden="true"></span>Weather</span>
+                <span id="status-weather" class="status-value">Cloudy</span>
               </div>
             </div>
           </div>
@@ -272,6 +321,11 @@ export class AppShell {
       startButton: this.#query(root, '#start-button'),
       arrival: this.#query(root, '#arrival-screen'),
       restartButton: this.#query(root, '#restart-button'),
+      pause: this.#query(root, '#pause-screen'),
+      pauseResumeButton: this.#query(root, '#pause-resume-button'),
+      pauseRestartButton: this.#query(root, '#pause-restart-button'),
+      titleWeather: this.#query(root, '#title-weather'),
+      titleAudio: this.#query(root, '#title-audio'),
       arrivalTime: this.#query(root, '#arrival-time'),
       arrivalPeak: this.#query(root, '#arrival-peak'),
       arrivalBoost: this.#query(root, '#arrival-boost'),
@@ -285,6 +339,8 @@ export class AppShell {
       drive: this.#query(root, '#status-drive'),
       landmark: this.#query(root, '#status-landmark'),
       boost: this.#query(root, '#status-boost'),
+      weather: this.#query(root, '#status-weather'),
+      weatherGlyph: this.#query(root, '#status-weather-glyph'),
       mapDevice: this.#query(root, '#map-device'),
       mapCanvas: this.#query(root, '#map-canvas'),
       mapStatus: this.#query(root, '#map-status'),
@@ -323,6 +379,20 @@ export class AppShell {
     this.elements.arrival.setAttribute('aria-hidden', String(!visible));
   }
 
+  setPauseVisible(visible: boolean): void {
+    if (visible) {
+      this.elements.pause.hidden = false;
+      this.elements.pauseResumeButton.focus();
+    } else if (this.elements.pause.contains(document.activeElement)) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+
+    this.elements.pause.classList.toggle('visible', visible);
+    this.elements.pause.hidden = !visible;
+    this.elements.pause.setAttribute('aria-hidden', String(!visible));
+    document.body.classList.toggle('pause-menu-open', visible);
+  }
+
   setMode(mode: ShellMode): void {
     document.body.classList.toggle('game-started', mode === 'driving');
     document.body.classList.toggle('game-arrived', mode === 'arrived');
@@ -343,6 +413,14 @@ export class AppShell {
     this.elements.restartButton.addEventListener('click', handler);
   }
 
+  bindPauseResume(handler: () => void): void {
+    this.elements.pauseResumeButton.addEventListener('click', handler);
+  }
+
+  bindPauseRestart(handler: () => void): void {
+    this.elements.pauseRestartButton.addEventListener('click', handler);
+  }
+
   updateHud(snapshot: HudSnapshot): void {
     this.elements.speed.textContent = snapshot.speedLabel;
     this.elements.traction.textContent = snapshot.tractionLabel;
@@ -350,6 +428,8 @@ export class AppShell {
     this.elements.drive.textContent = snapshot.driveLabel;
     this.elements.landmark.textContent = snapshot.landmarkLabel;
     this.elements.boost.textContent = snapshot.boostLabel;
+    this.elements.weather.textContent = snapshot.weatherLabel;
+    this.elements.weatherGlyph.dataset.condition = snapshot.weatherCondition;
     this.elements.routeLabel.textContent = snapshot.routeLabel;
 
     this.elements.traction.dataset.tone =
@@ -359,6 +439,8 @@ export class AppShell {
     this.elements.drive.dataset.tone =
       snapshot.driveLabel === 'Arrived'
         ? 'goal'
+        : snapshot.driveLabel.startsWith('Traffic')
+          ? 'warn'
         : snapshot.driveLabel === 'Boosting'
           ? 'boost'
           : snapshot.driveLabel === 'Airborne'
@@ -376,6 +458,20 @@ export class AppShell {
         : snapshot.boostLabel.endsWith('%') && Number.parseInt(snapshot.boostLabel, 10) < 25
           ? 'warn'
           : 'stable';
+    this.elements.weather.dataset.tone =
+      snapshot.weatherLabel.startsWith('Rainy')
+        ? 'cool'
+        : snapshot.weatherLabel.startsWith('Sunny')
+          ? 'boost'
+          : 'stable';
+  }
+
+  setTitleWeather(label: string): void {
+    this.elements.titleWeather.textContent = label;
+  }
+
+  setTitleAudio(label: string): void {
+    this.elements.titleAudio.textContent = label;
   }
 
   updateArrival(snapshot: ArrivalSnapshot): void {
@@ -446,21 +542,10 @@ export class AppShell {
     context.strokeStyle = '#306230';
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    context.lineWidth = 12;
-    context.beginPath();
-    this.#mapLayout.pathPoints.forEach((point, index) => {
-      const [x, y] = project(point.x, point.z);
-      if (index === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
-      }
-    });
-    context.stroke();
-
-    context.strokeStyle = '#0f380f';
-    context.lineWidth = 4;
-    context.stroke();
+    this.#drawRoadPath(context, project, this.#mapLayout.pathPoints, 13, '#3c6f2f', '#0f380f');
+    for (const servicePath of this.#mapLayout.servicePaths) {
+      this.#drawRoadPath(context, project, servicePath, 8, '#5f7d23', '#183a10');
+    }
 
     context.fillStyle = '#306230';
     this.#mapLayout.waterPools.forEach((pool) => {
@@ -519,13 +604,21 @@ export class AppShell {
       this.#mapLayout.landmark.z,
       discovery,
     );
-    context.fillStyle = '#0f380f';
-    context.beginPath();
-    context.moveTo(landmarkX, landmarkY - 9);
-    context.lineTo(landmarkX - 7, landmarkY + 7);
-    context.lineTo(landmarkX + 7, landmarkY + 7);
-    context.closePath();
-    context.fill();
+    this.#drawMountainIcon(context, landmarkX, landmarkY);
+
+    const [cityCenterX, cityCenterY] = project(
+      this.#mapLayout.cityCenter.x,
+      this.#mapLayout.cityCenter.z,
+    );
+    context.globalAlpha = Math.max(
+      0.42,
+      this.#getDiscoveryAlpha(
+        this.#mapLayout.cityCenter.x,
+        this.#mapLayout.cityCenter.z,
+        discovery,
+      ),
+    );
+    this.#drawHangarIcon(context, cityCenterX, cityCenterY);
 
     this.#mapLayout.outposts.forEach((outpost, index) => {
       const [outpostX, outpostY] = project(outpost.x, outpost.z);
@@ -546,18 +639,14 @@ export class AppShell {
           : checkpointState === 'current' && pulse > 0.62
             ? '#0f380f'
             : '#306230';
-      context.lineWidth = outpost.objective ? 2 : 1.5;
-      if (outpost.objective) {
-        context.strokeRect(outpostX - 5, outpostY - 5, 10, 10);
-        context.fillRect(outpostX - 3, outpostY - 3, 6, 6);
-      } else {
-        context.strokeRect(outpostX - 4.5, outpostY - 4.5, 9, 9);
-        context.fillRect(outpostX - 2.5, outpostY - 2.5, 5, 5);
-        context.beginPath();
-        context.moveTo(outpostX + 5.5, outpostY - 1.5);
-        context.lineTo(outpostX + 8.5, outpostY - 7.5);
-        context.stroke();
-      }
+      this.#drawOutpostIcon(
+        context,
+        outpostX,
+        outpostY,
+        outpost.objective,
+        checkpointState,
+        pulse,
+      );
       if (checkpointState === 'reached') {
         context.beginPath();
         context.moveTo(outpostX - 2.6, outpostY + 0.2);
@@ -585,32 +674,199 @@ export class AppShell {
         discovery,
       ),
     );
-    context.strokeStyle = '#0f380f';
-    context.lineWidth = 2;
-    context.strokeRect(objectiveX - 5, objectiveY - 5, 10, 10);
-    context.fillStyle = pulse > 0.72 ? '#0f380f' : '#306230';
-    context.fillRect(objectiveX - 3, objectiveY - 3, 6, 6);
+    this.#drawObjectiveIcon(context, objectiveX, objectiveY, pulse);
     context.globalAlpha = 1;
 
     if (snapshot) {
       const [vehicleX, vehicleY] = project(snapshot.vehicle.x, snapshot.vehicle.z);
-      context.save();
-      context.translate(vehicleX, vehicleY);
-      context.rotate(snapshot.vehicle.heading);
-      context.fillStyle = '#0f380f';
-      context.beginPath();
-      context.moveTo(0, -7);
-      context.lineTo(-4.5, 5);
-      context.lineTo(0, 2.5);
-      context.lineTo(4.5, 5);
-      context.closePath();
-      context.fill();
-      context.restore();
+      this.#drawTruckIcon(context, vehicleX, vehicleY, snapshot.vehicle.heading);
+      this.#drawWeatherIcon(context, width - 22, 22, snapshot.weatherCondition);
     }
 
     context.strokeStyle = '#0f380f';
     context.lineWidth = 3;
     context.strokeRect(4, 4, width - 8, height - 8);
+  }
+
+  #drawRoadPath(
+    context: CanvasRenderingContext2D,
+    project: (x: number, z: number) => [number, number],
+    path: Array<{ x: number; z: number }>,
+    width: number,
+    fill: string,
+    edge: string,
+  ): void {
+    context.strokeStyle = fill;
+    context.lineWidth = width;
+    context.beginPath();
+    path.forEach((point, index) => {
+      const [x, y] = project(point.x, point.z);
+      if (index === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    });
+    context.stroke();
+    context.strokeStyle = edge;
+    context.lineWidth = Math.max(2, width * 0.28);
+    context.stroke();
+  }
+
+  #drawMountainIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+  ): void {
+    context.fillStyle = '#0f380f';
+    context.beginPath();
+    context.moveTo(x - 10, y + 7);
+    context.lineTo(x - 1, y - 8);
+    context.lineTo(x + 8, y + 7);
+    context.closePath();
+    context.fill();
+    context.fillStyle = '#306230';
+    context.beginPath();
+    context.moveTo(x - 2, y - 4);
+    context.lineTo(x + 1, y - 8);
+    context.lineTo(x + 4, y - 3);
+    context.closePath();
+    context.fill();
+  }
+
+  #drawHangarIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+  ): void {
+    context.strokeStyle = '#0f380f';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(x - 7, y + 4);
+    context.quadraticCurveTo(x, y - 7, x + 7, y + 4);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x - 8, y + 4);
+    context.lineTo(x - 8, y + 7);
+    context.lineTo(x + 8, y + 7);
+    context.lineTo(x + 8, y + 4);
+    context.stroke();
+    context.fillStyle = '#306230';
+    context.fillRect(x - 3, y + 1, 6, 5);
+  }
+
+  #drawOutpostIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    objective: boolean,
+    state: 'pending' | 'current' | 'reached',
+    pulse: number,
+  ): void {
+    context.strokeStyle = '#0f380f';
+    context.lineWidth = objective ? 2.2 : 1.6;
+    context.fillStyle =
+      state === 'reached'
+        ? '#0f380f'
+        : state === 'current' && pulse > 0.62
+          ? '#0f380f'
+          : '#306230';
+    context.fillRect(x - 3, y + 1, 6, 4);
+    context.strokeRect(x - 4.5, y - 0.5, 9, 6);
+    context.beginPath();
+    context.moveTo(x - 5.6, y - 0.5);
+    context.lineTo(x, y - 5.5);
+    context.lineTo(x + 5.6, y - 0.5);
+    context.stroke();
+    if (objective) {
+      context.beginPath();
+      context.moveTo(x + 6.4, y + 0.8);
+      context.lineTo(x + 8.6, y - 6.2);
+      context.stroke();
+    }
+  }
+
+  #drawObjectiveIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    pulse: number,
+  ): void {
+    context.strokeStyle = '#0f380f';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(x, y, 6, 0, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x, y - 10);
+    context.lineTo(x, y - 2);
+    context.stroke();
+    context.fillStyle = pulse > 0.72 ? '#0f380f' : '#306230';
+    context.fillRect(x - 2.5, y - 1.5, 5, 5);
+  }
+
+  #drawTruckIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    heading: number,
+  ): void {
+    context.save();
+    context.translate(x, y);
+    context.rotate(heading);
+    context.fillStyle = '#0f380f';
+    context.fillRect(-4.5, -5.2, 9, 8.2);
+    context.fillRect(-2.2, -7.2, 4.4, 2.4);
+    context.fillRect(-5.2, -1.2, 1.3, 2.6);
+    context.fillRect(3.9, -1.2, 1.3, 2.6);
+    context.fillStyle = '#306230';
+    context.fillRect(-2, -3.8, 4, 2);
+    context.restore();
+  }
+
+  #drawWeatherIcon(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    condition: 'cloudy' | 'rainy' | 'sunny',
+  ): void {
+    context.save();
+    context.translate(x, y);
+    context.strokeStyle = '#0f380f';
+    context.fillStyle = '#306230';
+    context.lineWidth = 1.8;
+
+    if (condition === 'sunny') {
+      context.beginPath();
+      context.arc(0, 0, 4, 0, Math.PI * 2);
+      context.fill();
+      for (let index = 0; index < 8; index += 1) {
+        const angle = (Math.PI * 2 * index) / 8;
+        context.beginPath();
+        context.moveTo(Math.cos(angle) * 6, Math.sin(angle) * 6);
+        context.lineTo(Math.cos(angle) * 9, Math.sin(angle) * 9);
+        context.stroke();
+      }
+    } else {
+      context.beginPath();
+      context.arc(-3, 1, 3, Math.PI * 0.9, Math.PI * 2);
+      context.arc(1, -1, 4, Math.PI, Math.PI * 2);
+      context.arc(5, 1, 3, Math.PI, Math.PI * 2.1);
+      context.lineTo(8, 5);
+      context.lineTo(-6, 5);
+      context.closePath();
+      context.fill();
+      if (condition === 'rainy') {
+        for (const dropX of [-3, 1, 5]) {
+          context.beginPath();
+          context.moveTo(dropX, 7);
+          context.lineTo(dropX - 1, 10);
+          context.stroke();
+        }
+      }
+    }
+
+    context.restore();
   }
 
   #getDiscoveryAlpha(x: number, z: number, discoveredCells: number[]): number {

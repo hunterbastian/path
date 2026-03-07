@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { GameTuning } from '../config/GameTuning';
 import { InputManager } from '../core/InputManager';
+import type { WeatherSnapshot } from '../gameplay/WeatherState';
+import type { AmbientTrafficPlayerInteraction } from '../world/AmbientTrafficSystem';
 import { Terrain } from '../world/Terrain';
 import { Water } from '../world/Water';
 import { createDefaultDrivingState, type DriveSurface, type DrivingState } from './DrivingState';
@@ -29,6 +31,8 @@ export class VehicleController {
   readonly #basisMatrix = new THREE.Matrix4();
   readonly #groundNormal = new THREE.Vector3(0, 1, 0);
   readonly #worldUp = new THREE.Vector3(0, 1, 0);
+  readonly #downhill = new THREE.Vector3();
+  readonly #surfaceNormal = new THREE.Vector3(0, 1, 0);
   readonly #forward = new THREE.Vector3(0, 0, 1);
   readonly #right = new THREE.Vector3(1, 0, 0);
   readonly #correctedForward = new THREE.Vector3(0, 0, 1);
@@ -125,7 +129,57 @@ export class VehicleController {
     this.state.isBraking = true;
   }
 
-  update(dt: number, input: InputManager, controlsEnabled: boolean): void {
+  applyTrafficInteraction(
+    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
+  ): void {
+    this.#applyCollisionInteraction(interaction);
+  }
+
+  applyReactiveWorldInteraction(
+    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
+  ): void {
+    this.#applyCollisionInteraction(interaction);
+  }
+
+  #applyCollisionInteraction(
+    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
+  ): void {
+    if (!interaction.collision) return;
+
+    this.position.add(interaction.correction);
+    const halfSize = this.#terrain.size * 0.5 - 2;
+    this.position.x = THREE.MathUtils.clamp(this.position.x, -halfSize, halfSize);
+    this.position.z = THREE.MathUtils.clamp(this.position.z, -halfSize, halfSize);
+    this.velocity.x = (this.velocity.x + interaction.impulse.x) * 0.82;
+    this.velocity.z = (this.velocity.z + interaction.impulse.z) * 0.82;
+
+    const forwardSpeed =
+      this.velocity.x * this.#forward.x + this.velocity.z * this.#forward.z;
+    const lateralSpeed =
+      this.velocity.x * this.#right.x + this.velocity.z * this.#right.z;
+    this.#yawVelocity += THREE.MathUtils.clamp(lateralSpeed * 0.08, -0.22, 0.22);
+
+    if (this.state.isGrounded) {
+      this.position.y = this.#sampleSurfaceAt(this.position.x, this.position.z).rideHeight;
+    }
+
+    this.#updateOrientation(1 / 60, this.state.isGrounded);
+    this.#updateWheelData();
+    this.state.speed = Math.hypot(this.velocity.x, this.velocity.z);
+    this.state.forwardSpeed = forwardSpeed;
+    this.state.lateralSpeed = lateralSpeed;
+    this.state.verticalSpeed = this.velocity.y;
+    this.state.isBraking = true;
+    this.state.isBoosting = false;
+    this.state.wasAirborne = false;
+  }
+
+  update(
+    dt: number,
+    input: InputManager,
+    controlsEnabled: boolean,
+    weather: Pick<WeatherSnapshot, 'gripMultiplier' | 'dragMultiplier'>,
+  ): void {
     this.#time += dt;
     const previousGrounded = this.state.isGrounded;
 
@@ -139,10 +193,15 @@ export class VehicleController {
     const tuning = {
       ...surfaceTuning,
       acceleration: surfaceTuning.acceleration * vehicleTuning.accelerationMultiplier,
-      grip: surfaceTuning.grip * vehicleTuning.gripMultiplier,
+      grip:
+        surfaceTuning.grip
+        * vehicleTuning.gripMultiplier
+        * weather.gripMultiplier,
+      drag: surfaceTuning.drag * weather.dragMultiplier,
       speed: surfaceTuning.speed * vehicleTuning.speedMultiplier,
       yawDamping: surfaceTuning.yawDamping * vehicleTuning.yawDampingMultiplier,
     };
+    let slopeMagnitude = 0;
     const steerInput = controlsEnabled ? input.steering : 0;
     const maxSandSinkDepth = vehicleTuning.maxSandSinkDepth * vehicleTuning.sinkDepthMultiplier;
     const tractionControl = previousGrounded ? 1 : vehicleTuning.airControl;
@@ -150,6 +209,11 @@ export class VehicleController {
     const bogFactor = currentSurface === 'sand'
       ? 1 - THREE.MathUtils.clamp(this.#sinkDepth / maxSandSinkDepth, 0, 1) * 0.42
       : 1;
+    this.#surfaceNormal.copy(
+      previousGrounded
+        ? this.#terrain.getNormalAt(this.position.x, this.position.z)
+        : this.#groundNormal,
+    );
 
     this.#forward.set(Math.sin(this.#heading), 0, Math.cos(this.#heading)).normalize();
     this.#right.set(this.#forward.z, 0, -this.#forward.x).normalize();
@@ -259,11 +323,82 @@ export class VehicleController {
     this.velocity.x -= this.#right.x * lateralCorrection;
     this.velocity.z -= this.#right.z * lateralCorrection;
 
+    if (previousGrounded) {
+      this.#downhill
+        .copy(this.#worldUp)
+        .negate()
+        .projectOnPlane(this.#surfaceNormal);
+      slopeMagnitude = this.#downhill.length();
+      if (slopeMagnitude > vehicleTuning.slopeRollStart) {
+        this.#downhill.multiplyScalar(1 / slopeMagnitude);
+        const slopeFactor = THREE.MathUtils.clamp(
+          (slopeMagnitude - vehicleTuning.slopeRollStart)
+            / (1 - vehicleTuning.slopeRollStart),
+          0,
+          1,
+        );
+        const surfaceRollScale = THREE.MathUtils.lerp(
+          0.78,
+          1.28,
+          THREE.MathUtils.clamp(tuning.slip / 0.74, 0, 1),
+        );
+        const idleSlideWindow = THREE.MathUtils.clamp(
+          1 - planarSpeed / vehicleTuning.slopeIdleSpeedWindow,
+          0,
+          1,
+        );
+        const downhillAlignment = Math.abs(this.#downhill.dot(this.#forward));
+        const idleBoost =
+          Math.abs(driveThrottle) < 0.05 && !braking
+            ? THREE.MathUtils.lerp(
+              1.16,
+              vehicleTuning.slopeIdleSlideBoost,
+              idleSlideWindow * (0.42 + downhillAlignment * 0.58),
+            )
+            : 0.82;
+        const brakeHold = braking ? vehicleTuning.slopeBrakeHold : 1;
+        const lateralSlopeBias = 0.92 + Math.abs(this.#downhill.dot(this.#right)) * 0.22;
+        const slopeAcceleration =
+          vehicleTuning.gravity
+          * vehicleTuning.slopeRollStrength
+          * slopeFactor
+          * surfaceRollScale
+          * idleBoost
+          * brakeHold
+          * lateralSlopeBias;
+        this.velocity.x += this.#downhill.x * slopeAcceleration * dt;
+        this.velocity.z += this.#downhill.z * slopeAcceleration * dt;
+      }
+    }
+
     const sinkDrag = currentSurface === 'sand'
       ? THREE.MathUtils.clamp(this.#sinkDepth * 4.5, 0, 1.2)
       : 0;
+    const idleSlopeRelease =
+      previousGrounded
+      && !braking
+      && Math.abs(driveThrottle) < 0.05
+      && slopeMagnitude > vehicleTuning.slopeRollStart;
+    const slopeDragScale = idleSlopeRelease
+      ? THREE.MathUtils.lerp(
+        1,
+        vehicleTuning.slopeIdleDragScale,
+        THREE.MathUtils.clamp(
+          (slopeMagnitude - vehicleTuning.slopeRollStart)
+            / Math.max(0.0001, 1 - vehicleTuning.slopeRollStart),
+          0,
+          1,
+        )
+        * THREE.MathUtils.clamp(
+          1 - planarSpeed / vehicleTuning.slopeIdleSpeedWindow,
+          0,
+          1,
+        ),
+      )
+      : 1;
     const dragBase = previousGrounded
-      ? 0.92 * tuning.drag + sinkDrag + planarSpeed * vehicleTuning.dragVelocityFactor
+      ? (0.92 * tuning.drag + sinkDrag + planarSpeed * vehicleTuning.dragVelocityFactor)
+        * slopeDragScale
       : 0.14 + planarSpeed * vehicleTuning.dragVelocityFactor * 0.38;
     const dragFactor = Math.max(
       0,

@@ -10,15 +10,19 @@ export class Terrain {
   readonly size = 920;
   readonly segments = 220;
   readonly landmarkCenter = new THREE.Vector2(44, 360);
+  readonly cityCenter: THREE.Vector2;
   readonly objectiveCenter: THREE.Vector2;
   readonly outpostCenters: THREE.Vector2[];
+  readonly serviceRoadPaths: THREE.Vector2[][];
   readonly #noise: ReturnType<typeof createNoise2D>;
 
   constructor(scene: THREE.Scene) {
     const random = new SeededRandom(0x50415448);
     this.#noise = createNoise2D(() => random.next());
+    this.cityCenter = this.#findCityCenter();
     this.objectiveCenter = this.#findObjectiveCenter();
     this.outpostCenters = this.#findOutpostCenters();
+    this.serviceRoadPaths = this.#buildServiceRoadPaths();
     this.mesh = this.#createMesh();
     this.mesh.receiveShadow = true;
     scene.add(this.mesh);
@@ -31,6 +35,12 @@ export class Terrain {
   getLandmarkPosition(): THREE.Vector3 {
     const x = this.landmarkCenter.x;
     const z = this.landmarkCenter.y;
+    return new THREE.Vector3(x, this.getHeightAt(x, z), z);
+  }
+
+  getCityCenterPosition(): THREE.Vector3 {
+    const x = this.cityCenter.x;
+    const z = this.cityCenter.y;
     return new THREE.Vector3(x, this.getHeightAt(x, z), z);
   }
 
@@ -102,6 +112,20 @@ export class Terrain {
     return THREE.MathUtils.clamp(1 - distance / 28, 0, 1);
   }
 
+  getRoadInfluence(x: number, z: number): number {
+    let influence = this.getPathInfluence(x, z);
+    for (const road of this.serviceRoadPaths ?? []) {
+      influence = Math.max(influence, this.#getPolylineInfluence(x, z, road, 18));
+    }
+    return influence;
+  }
+
+  getServiceRoadPaths(): Array<Array<{ x: number; z: number }>> {
+    return this.serviceRoadPaths.map((road) =>
+      road.map((point) => ({ x: point.x, z: point.y })),
+    );
+  }
+
   getHeightAt(x: number, z: number): number {
     const pathCenter = this.getPathCenterX(z);
     const valleyDistance = Math.abs(x - pathCenter);
@@ -116,9 +140,9 @@ export class Terrain {
     const basin = THREE.MathUtils.clamp(Math.abs(z) / (this.size * 0.52), 0, 1) * 6;
 
     let height = 8 + valleyWall + basin + broad + medium + detail;
-    const pathInfluence = this.getPathInfluence(x, z);
-    const pathHeight = 3.5 + broad * 0.45 + medium * 0.2;
-    height = THREE.MathUtils.lerp(height, pathHeight, pathInfluence * 0.8);
+    const roadInfluence = this.getRoadInfluence(x, z);
+    const roadHeight = 3.5 + broad * 0.45 + medium * 0.2 - roadInfluence * 0.8;
+    height = THREE.MathUtils.lerp(height, roadHeight, roadInfluence * 0.8);
 
     const distFromSpawn = Math.hypot(x, z);
     if (distFromSpawn < 62) {
@@ -145,14 +169,14 @@ export class Terrain {
     const height = this.getHeightAt(x, z);
     const slope = 1 - this.getNormalAt(x, z).y;
     const moisture = this.#getMoisture(x, z, slope);
-    const pathInfluence = this.getPathInfluence(x, z);
+    const roadInfluence = this.getRoadInfluence(x, z);
     const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
     const sandBasinInfluence = this.#getSandBasinInfluence(x, z);
 
     if (height > 122) return 'snow';
     if (snowCoverage > 0.72 && slope < 0.4 && sandBasinInfluence < 0.46) return 'snow';
     if (height > 88 || slope > 0.5) return 'rock';
-    if (pathInfluence > 0.52 && sandBasinInfluence < 0.32) return 'dirt';
+    if (roadInfluence > 0.48 && sandBasinInfluence < 0.42) return 'dirt';
     if (sandBasinInfluence > 0.36 && slope < 0.3 && height < 34) return 'sand';
     if (height < 14 && moisture < 0.46) return 'sand';
     if (sandBasinInfluence > 0.18 && slope < 0.24 && moisture < 0.64) return 'sand';
@@ -212,6 +236,46 @@ export class Terrain {
     return laneMask * (ramp + lip + landingCut);
   }
 
+  #findCityCenter(): THREE.Vector2 {
+    const targetX = this.landmarkCenter.x + 76;
+    const targetZ = this.landmarkCenter.y - 56;
+    let best = new THREE.Vector2(targetX, targetZ);
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (let dz = -34; dz <= 24; dz += 4) {
+      for (let dx = -32; dx <= 32; dx += 4) {
+        const x = targetX + dx;
+        const z = targetZ + dz;
+        if (!this.isWithinBounds(x, z)) continue;
+
+        const height = this.getHeightAt(x, z);
+        const slope = 1 - this.getNormalAt(x, z).y;
+        const distanceToLandmark = Math.hypot(
+          x - this.landmarkCenter.x,
+          z - this.landmarkCenter.y,
+        );
+        const pathInfluence = this.getPathInfluence(x, z);
+        const score =
+          Math.abs(height - 42) * 0.48
+          + slope * 180
+          + Math.hypot(dx, dz) * 0.42
+          + Math.abs(distanceToLandmark - 92) * 0.16
+          + pathInfluence * 12;
+
+        if (slope > 0.24 || distanceToLandmark < 58 || distanceToLandmark > 132) {
+          continue;
+        }
+
+        if (score < bestScore) {
+          bestScore = score;
+          best.set(x, z);
+        }
+      }
+    }
+
+    return best;
+  }
+
   #findObjectiveCenter(): THREE.Vector2 {
     const targetZ = this.landmarkCenter.y - 88;
     const pathX = this.getPathCenterX(targetZ);
@@ -250,6 +314,17 @@ export class Terrain {
       this.#findRouteOutpostCenter(84, 20),
       this.#findRouteOutpostCenter(176, 48),
       this.objectiveCenter.clone(),
+    ];
+  }
+
+  #buildServiceRoadPaths(): THREE.Vector2[][] {
+    const outpostA = this.outpostCenters[0] ?? new THREE.Vector2(this.getPathCenterX(84) + 20, 84);
+    const outpostB = this.outpostCenters[1] ?? new THREE.Vector2(this.getPathCenterX(176) + 48, 176);
+    return [
+      this.#createServiceRoad(52, outpostA, 0.42),
+      this.#createServiceRoad(144, outpostB, -0.34),
+      this.#createServiceRoad(this.cityCenter.y - 62, this.cityCenter, 0.56),
+      this.#createConnectorRoad(this.cityCenter, this.objectiveCenter, -0.28),
     ];
   }
 
@@ -343,6 +418,78 @@ export class Terrain {
     return THREE.MathUtils.clamp(primary + shoulder, 0, 1);
   }
 
+  #createServiceRoad(
+    anchorZ: number,
+    target: THREE.Vector2,
+    bendBias: number,
+  ): THREE.Vector2[] {
+    const start = new THREE.Vector2(this.getPathCenterX(anchorZ), anchorZ);
+    const toTarget = target.clone().sub(start);
+    const length = Math.max(toTarget.length(), 1);
+    const direction = toTarget.clone().multiplyScalar(1 / length);
+    const perpendicular = new THREE.Vector2(-direction.y, direction.x);
+    const midpointA = start.clone()
+      .lerp(target, 0.34)
+      .addScaledVector(perpendicular, length * 0.18 * bendBias);
+    const midpointB = start.clone()
+      .lerp(target, 0.72)
+      .addScaledVector(perpendicular, length * -0.11 * bendBias);
+    return [start, midpointA, midpointB, target.clone()];
+  }
+
+  #createConnectorRoad(
+    start: THREE.Vector2,
+    end: THREE.Vector2,
+    bendBias: number,
+  ): THREE.Vector2[] {
+    const toEnd = end.clone().sub(start);
+    const length = Math.max(toEnd.length(), 1);
+    const direction = toEnd.clone().multiplyScalar(1 / length);
+    const perpendicular = new THREE.Vector2(-direction.y, direction.x);
+    const midpoint = start.clone()
+      .lerp(end, 0.5)
+      .addScaledVector(perpendicular, length * 0.14 * bendBias);
+    return [start.clone(), midpoint, end.clone()];
+  }
+
+  #getPolylineInfluence(
+    x: number,
+    z: number,
+    path: THREE.Vector2[],
+    width: number,
+  ): number {
+    let best = 0;
+    for (let index = 1; index < path.length; index += 1) {
+      const start = path[index - 1];
+      const end = path[index];
+      if (!start || !end) continue;
+      const distance = this.#distanceToSegment2D(x, z, start, end);
+      best = Math.max(best, THREE.MathUtils.clamp(1 - distance / width, 0, 1));
+    }
+    return best;
+  }
+
+  #distanceToSegment2D(
+    x: number,
+    z: number,
+    start: THREE.Vector2,
+    end: THREE.Vector2,
+  ): number {
+    const segment = end.clone().sub(start);
+    const lengthSquared = segment.lengthSq();
+    if (lengthSquared <= 0.0001) {
+      return Math.hypot(x - start.x, z - start.y);
+    }
+    const t = THREE.MathUtils.clamp(
+      ((x - start.x) * segment.x + (z - start.y) * segment.y) / lengthSquared,
+      0,
+      1,
+    );
+    const closestX = start.x + segment.x * t;
+    const closestZ = start.y + segment.y * t;
+    return Math.hypot(x - closestX, z - closestZ);
+  }
+
   #createMesh(): THREE.Mesh {
     const geometry = new THREE.PlaneGeometry(
       this.size,
@@ -384,7 +531,7 @@ export class Terrain {
       const detail = this.#sampleNoise01(x, z, 12.5, 2.6, -8.9);
       const moisture = this.#getMoisture(x, z, slope);
       const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
-      const pathInfluence = this.getPathInfluence(x, z);
+      const roadInfluence = this.getRoadInfluence(x, z);
       const surface = this.getSurfaceAt(x, z);
 
       if (surface === 'sand') {
@@ -396,17 +543,23 @@ export class Terrain {
       } else if (surface === 'snow') {
         color.copy(snow)
           .lerp(skyTint, (1 - detail) * 0.12 + slope * 0.06)
-          .lerp(sunsetTint, pathInfluence * 0.04 + detail * 0.03);
+          .lerp(sunsetTint, roadInfluence * 0.04 + detail * 0.03);
       } else {
         color.copy(dirt).lerp(dirtDark, (1 - detail) * 0.24);
         color.lerp(sand, THREE.MathUtils.clamp((0.3 - moisture) * 0.2, 0, 0.12));
         color.lerp(grass, THREE.MathUtils.clamp((moisture - 0.48) * 0.24, 0, 0.13));
       }
 
+      if (roadInfluence > 0.08 && surface !== 'rock') {
+        color
+          .lerp(dirtDark, roadInfluence * 0.34)
+          .lerp(sand, roadInfluence * 0.06);
+      }
+
       if (snowCoverage > 0.02 && surface !== 'rock') {
         const snowDust = surface === 'snow'
           ? 1
-          : snowCoverage * THREE.MathUtils.lerp(0.78, 0.42, pathInfluence);
+          : snowCoverage * THREE.MathUtils.lerp(0.78, 0.16, roadInfluence);
         color.lerp(snow, THREE.MathUtils.clamp(snowDust, 0, 0.94));
       }
 

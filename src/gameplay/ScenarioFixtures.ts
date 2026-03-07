@@ -7,6 +7,7 @@ export type ScenarioFixtureId =
   | 'sand'
   | 'outpost'
   | 'objective'
+  | 'slope'
   | 'drift'
   | 'drop'
   | 'water';
@@ -48,6 +49,7 @@ export class ScenarioFixtures {
       { id: 'sand', label: 'Soft Sand' },
       { id: 'outpost', label: 'Near Outpost' },
       { id: 'water', label: 'Water Crossing' },
+      { id: 'slope', label: 'Slope Roll' },
       { id: 'drift', label: 'Drift Test' },
       { id: 'drop', label: 'Crest Drop' },
       { id: 'objective', label: 'Final Relay' },
@@ -64,6 +66,8 @@ export class ScenarioFixtures {
         return this.#buildOutpostFixture();
       case 'objective':
         return this.#buildObjectiveFixture();
+      case 'slope':
+        return this.#buildSlopeFixture();
       case 'drift':
         return this.#buildDriftFixture();
       case 'drop':
@@ -131,6 +135,61 @@ export class ScenarioFixtures {
       label: 'Drift Test',
       position: start,
       heading: this.#headingToward(start, nextPathPoint),
+    };
+  }
+
+  #buildSlopeFixture(): ScenarioFixture {
+    let bestPoint: THREE.Vector3 | null = null;
+    let bestHeading = 0;
+    let bestScore = -Infinity;
+    const downhill = new THREE.Vector3();
+    const crossSlope = new THREE.Vector3();
+
+    for (let z = 52; z <= 196; z += 6) {
+      const centerX = this.#terrain.getPathCenterX(z);
+      for (let offset = -30; offset <= 30; offset += 4) {
+        const x = centerX + offset;
+        if (!this.#terrain.isWithinBounds(x, z)) continue;
+
+        const waterHeight = this.#water.getWaterHeightAt(x, z);
+        const groundHeight = this.#terrain.getHeightAt(x, z);
+        if (waterHeight !== null && waterHeight > groundHeight + 0.1) continue;
+
+        const surface = this.#terrain.getSurfaceAt(x, z);
+        if (surface === 'sand') continue;
+
+        const normal = this.#terrain.getNormalAt(x, z);
+        const slopeDegrees = THREE.MathUtils.radToDeg(
+          Math.acos(THREE.MathUtils.clamp(normal.y, -1, 1)),
+        );
+        if (slopeDegrees < 14 || slopeDegrees > 34) continue;
+
+        downhill.set(-normal.x, 0, -normal.z);
+        if (downhill.lengthSq() < 0.0001) continue;
+        downhill.normalize();
+        crossSlope.set(-downhill.z, 0, downhill.x).normalize();
+
+        const score = slopeDegrees + Math.abs(offset) * 0.12;
+        if (score <= bestScore) continue;
+
+        bestScore = score;
+        bestPoint = this.#snapToGround(new THREE.Vector3(x, 0, z));
+        bestHeading = this.#headingToward(
+          bestPoint,
+          bestPoint.clone().addScaledVector(downhill, 12),
+        );
+      }
+    }
+
+    if (!bestPoint) {
+      return this.#buildOutpostFixture();
+    }
+
+    return {
+      id: 'slope',
+      label: 'Slope Roll',
+      position: bestPoint,
+      heading: bestHeading,
     };
   }
 

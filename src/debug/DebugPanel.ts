@@ -70,7 +70,7 @@ export class DebugPanel {
           <div><span>Speed</span><strong data-debug-value="speed">0 km/h</strong></div>
           <div><span>Surface</span><strong data-debug-value="surface">dirt</strong></div>
           <div><span>Map coverage</span><strong data-debug-value="map">0% mapped</strong></div>
-          <div><span>Weather</span><strong data-debug-value="weather">light rain</strong></div>
+          <div><span>Weather</span><strong data-debug-value="weather">Cloudy</strong></div>
           <div><span>World activity</span><strong data-debug-value="streaming">route 1.00</strong></div>
           <div><span>Render view</span><strong data-debug-value="render">Final Grade</strong></div>
         </div>

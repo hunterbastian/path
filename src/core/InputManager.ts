@@ -33,6 +33,7 @@ export class InputManager {
     'ArrowLeft',
     'ArrowRight',
     'Enter',
+    'Escape',
     'Space',
     'KeyF',
     'KeyM',
@@ -149,6 +150,10 @@ export class InputManager {
 
   consumeReset(): boolean {
     return this.#consumePressed('KeyR');
+  }
+
+  consumePauseToggle(): boolean {
+    return this.#consumePressed('Escape') || this.#consumePressed('GamepadPause');
   }
 
   consumeFullscreenToggle(): boolean {
@@ -273,7 +278,14 @@ export class InputManager {
     const brake = triggerLeft > 0.22 || handbrakeButton;
     const boost = boostButton;
 
-    this.#registerGamepadPress('GamepadStart', this.#buttonPressed(gamepad.buttons[9]) || this.#buttonPressed(gamepad.buttons[0]));
+    this.#registerGamepadPress(
+      'GamepadStart',
+      this.#buttonPressed(gamepad.buttons[9]) || this.#buttonPressed(gamepad.buttons[0]),
+    );
+    this.#registerGamepadPress(
+      'GamepadPause',
+      this.#buttonPressed(gamepad.buttons[9]),
+    );
     this.#registerGamepadPress('KeyM', this.#buttonPressed(gamepad.buttons[3]));
     this.#registerGamepadPress('KeyR', this.#buttonPressed(gamepad.buttons[2]));
 

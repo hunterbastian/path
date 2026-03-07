@@ -17,6 +17,9 @@ All notable changes to this project are documented here.
 - Added deterministic browser hooks for `startPathGame`, `jumpPathToObjective`, `jumpPathToSand`, `advanceTime`, `render_game_to_text`, and `getPathAudioDebug`.
 - Added ambient route outposts and a summit relay objective.
 - Added a light rain weather layer.
+- Added a rotating three-condition weather cycle that steps through cloudy, rainy, and sunny conditions every 90 seconds.
+- Added weather gameplay modifiers so cloudy, rainy, and sunny conditions now affect grip, drag, puddle depth, ambient audio emphasis, and AI traffic pace/caution instead of changing only visuals.
+- Added collision-aware ambient traffic that yields near the player, produces near-miss states, and applies light contact impulses when the truck is forced into an overlap.
 - Added a shared live-tuning/config layer with a toggleable in-game debug panel.
 - Added deterministic scenario fixtures for spawn, sand, outpost, water, drift, and final relay jumps.
 - Added fading tire tracks that stamp from wheel contact points and clear themselves after 10 seconds.
@@ -27,6 +30,16 @@ All notable changes to this project are documented here.
 - Added standard-mapped gamepad support with analog steering/throttle, start/restart actions, boost/brake bindings, and live input-source reporting.
 - Added checkpointed relay progression with split tracking across the outpost route.
 - Added ambient AI service trucks that patrol short loops around the basin and relay line.
+- Added an in-run ESC field menu with resume and restart actions so driving can be paused without dropping back to the title screen.
+- Added slope-roll behavior on steep hills plus a deterministic `Slope Roll` fixture for validating natural downhill drift without throttle.
+- Added tire tracks for ambient AI traffic so service trucks leave the same short-lived marks in snow, dirt, sand, and grass as the player.
+- Added a dedicated mountain-side city-center landmark with a brutalist aircraft-hangar silhouette, annex blocks, floodlights, mast beacon, and apron slab near Tower Mountain.
+- Added a deterministic `jumpPathToCityCenter` hook so the new mountain hub can be validated without a full drive from spawn.
+- Added dirt service-road branches that connect the basin line to outposts, the mountain hangar, and the summit approach instead of leaving those landmarks as disconnected terrain.
+- Added reactive roadside/world props including barriers, poles, signs, crates, and floodlights that can wobble, topple, or get shoved when the truck clips them.
+- Added a deterministic `jumpPathToProps` hook for focused prop-impact validation.
+- Added a visible title-screen audio state so the shell now tells the player when Web Audio still needs a real gesture to unlock.
+- Added animated atmosphere drift to the sky mist bands so the basin haze now slides and lifts subtly instead of staying perfectly static.
 
 ### Changed
 
@@ -50,6 +63,16 @@ All notable changes to this project are documented here.
 - Improved the driving camera with suspension-aware heave, steering/drift offset, body roll, surface roughness shake, and a mild look bias toward the next checkpoint.
 - Improved the driving camera again with terrain-aware chase clearance, velocity-led framing, dynamic speed/airborne/impact FOV, landing kick response, and occlusion pull-in so steep drops keep the truck in view.
 - Improved mouse-drag camera feel with damped orbit targets, softer release glide, and reduced-motion-aware fallback behavior instead of raw pointer-delta snapping.
+- Improved the manual look camera so dragged views now hold after release and only ease back to the chase angle after a short delay.
+- Improved the driving shell flow with a small pause overlay, softer HUD treatment while paused, and title-copy that now teaches the ESC menu explicitly.
+- Improved grounded vehicle motion so steep cross-slopes now feed a real downhill pull instead of feeling magnetized to the hill surface.
+- Improved ambient traffic from decorative patrols into light physical obstacles that can brake, yield, block a route, and trigger `Traffic Impact` feedback in the HUD.
+- Improved the Tower Mountain approach by placing a more intentional secondary landmark near the massif instead of leaving that area as open terrain.
+- Improved the handheld map and HUD with a more authored icon pass: custom mountain, hangar, outpost, summit-relay, truck, and weather glyphs replace the earlier generic marker shapes.
+- Improved the procedural audio layer so browser gestures unlock Web Audio reliably, and the idle / wind / relay bed now reads clearly even when the truck is barely moving.
+- Improved hill gravity so parked trucks now release and roll backward on steeper slopes when you come fully off the pedals instead of feeling pinned in place.
+- Improved the world atmosphere with gently drifting mist plus more organic relay and hangar light shimmer instead of perfectly synchronized pulses.
+- Improved the manual orbit camera so it now behaves more like `Dredge`: drag to a view and it stays there until you explicitly re-center it.
 
 ### Improved
 
@@ -71,6 +94,8 @@ All notable changes to this project are documented here.
 - UI resilience through safer touch/focus states, safe-area-aware layout spacing, reduced-motion fallbacks, and more balanced text wrapping on title/arrival screens.
 - Shell validation through a state-aware polish audit that captures desktop/mobile title and map states plus a browser-confirmed arrival overlay.
 - UX clarity through simpler verbs, more specific relay/map wording, less internal jargon in HUD states, and clearer debug-panel controls.
+- Weather readability through live HUD/title condition labels and a simple rotating forecast that now makes the active sky state explicit.
+- Weather readability and feel through explicit gameplay-state telemetry, deeper puddles in rain, drier basins in sun, and slower/more cautious traffic when visibility drops.
 
 ### Fixed
 
@@ -78,6 +103,9 @@ All notable changes to this project are documented here.
 - Fixed title/map shell focus and visibility issues.
 - Fixed sand-start teleport fallback so the debug hook lands on a real sand basin.
 - Prevented gameplay keys from triggering default browser scrolling behavior.
+- Fixed the apparent “no sound” startup issue by moving audio activation onto real browser gesture paths and surfacing the lock / unlock state in the title UI.
+- Fixed the `Slope Roll` fixture so it now faces uphill, which makes the rollback validation reflect the intended backward-slide behavior.
+- Fixed the old drag camera annoyance where the orbit would automatically drift back to chase view after a delay instead of respecting the player’s chosen viewing angle.
 
 ### Tooling
 
@@ -97,4 +125,13 @@ All notable changes to this project are documented here.
 - The camera polish pass is preserved in `output/web-game/camera-smoke/` and `output/web-game/camera-browser/`, including `shot-turning.png`, `state-turning.json`, `shot-airborne.png`, `state-airborne.json`, `shot-impact.png`, and `state-impact.json`.
 - The drag-camera interaction pass is preserved in `output/web-game/drag-camera-smoke/` and `output/web-game/drag-camera-browser/`, including `shot-dragging.png`, `state-dragging.json`, `shot-release.png`, `state-release.json`, `shot-settle.png`, and `state-settle.json`.
 - The ambient-traffic pass is preserved in `output/web-game/ambient-traffic-smoke/` and `output/web-game/ambient-traffic-browser/`, including `shot-0.png`, `state-0.json`, `shot-outpost-start.png`, `state-outpost-start.json`, `shot-outpost-after.png`, `state-outpost-after.json`, and `movement.json`.
+- The ESC menu pass is preserved in `output/web-game/esc-menu-smoke/` and `output/web-game/esc-menu-browser/`, including `shot-0.png`, `state-0.json`, `shot-menu-open.png`, `state-menu-open.json`, `state-menu-hold.json`, `shot-menu-closed.png`, `state-menu-closed.json`, `shot-after-restart.png`, and `state-after-restart.json`.
+- The slope-roll / AI-track pass is preserved in `output/web-game/gravity-tracks-smoke/` and `output/web-game/slope-roll-ai-tracks-browser/`, including `shot-0.png`, `state-0.json`, `shot-slope-roll.png`, `state-slope-start.json`, `state-slope-roll.json`, `shot-ai-tracks.png`, `state-ai-start.json`, and `state-ai-tracks.json`.
+- The rotating-weather / delayed-camera-return pass is preserved in `output/web-game/weather-camera-smoke/` and `output/web-game/weather-camera-browser/`, including `shot-title.png`, `state-title.json`, `shot-cloudy.png`, `state-cloudy.json`, `shot-rainy.png`, `state-rainy.json`, `shot-sunny.png`, `state-sunny.json`, `shot-camera-dragged.png`, `state-camera-dragged.json`, `shot-camera-held.png`, `state-camera-held.json`, `shot-camera-returning.png`, `state-camera-returning.json`, and `summary.json`.
+- The weather-physics / traffic-contact pass is preserved in `output/web-game/weather-traffic-smoke/` and `output/web-game/weather-traffic-browser/`, including `shot-0.png`, `state-0.json`, `shot-cloudy.png`, `state-cloudy.json`, `shot-rainy.png`, `state-rainy.json`, `shot-sunny.png`, `state-sunny.json`, `shot-traffic-start.png`, `state-traffic-start.json`, `shot-traffic-contact.png`, `state-traffic-contact.json`, `shot-traffic-recovery.png`, `state-traffic-recovery.json`, `weather-summary.json`, and `summary.json`.
+- The mountain-hub landmark pass is preserved in `output/web-game/mountain-hub-smoke/` and `output/web-game/mountain-hub-browser/`, including `shot-0.png`, `state-0.json`, `shot-city-side.png`, `state-city-side.json`, `shot-city-drive.png`, `state-city-drive.json`, and `summary.json`.
+- The dirt-path / icon / reactive-prop pass is preserved in `output/web-game/props-icons-paths-smoke-clean/` and `output/web-game/props-icons-paths-browser/`, including `shot-0.png`, `state-0.json`, `shot-map-icons.png`, `state-map-icons.json`, `shot-props-before.png`, `state-props-before.json`, `shot-props-impact.png`, `state-props-impact.json`, `shot-props-after.png`, `state-props-after.json`, and `summary.json`.
+- The audio unlock pass is preserved in `output/web-game/audio-layer-smoke/` and `output/web-game/audio-layer-browser/`, including `shot-0.png`, `state-0.json`, `shot-title-audio.png`, `shot-driving-audio.png`, `audio-driving.json`, `state-driving.json`, and `summary.json`.
+- The hill-gravity / atmosphere pass is preserved in `output/web-game/slope-atmosphere-browser/`, including `shot-slope-start.png`, `state-slope-start.json`, `shot-slope-after.png`, `state-slope-after.json`, `shot-atmosphere.png`, `state-atmosphere.json`, and `summary.json`.
+- The persistent-camera pass is preserved in `output/web-game/persistent-camera-browser/`, including `shot-dragging.png`, `state-dragging.json`, `shot-release.png`, `state-release.json`, `shot-held.png`, `state-held.json`, `shot-recentered.png`, `state-recentered.json`, and `summary.json`.
 - The bundled Playwright client still has intermittent issues clicking the title-screen start button, so keyboard-driven smoke runs and direct browser checks remain part of the workflow.

@@ -8,6 +8,9 @@ declare global {
     startPathGame?: () => void;
     jumpPathToObjective?: () => void;
     jumpPathToSand?: () => void;
+    jumpPathToTraffic?: () => void;
+    jumpPathToCityCenter?: () => void;
+    jumpPathToProps?: () => void;
     jumpPathToFixture?: (fixtureId: string) => void;
     togglePathDebug?: () => boolean;
     getPathTuningDebug?: () => ReturnType<PathGame['getTuningDebug']>;
@@ -35,6 +38,18 @@ window.jumpPathToObjective = () => {
 
 window.jumpPathToSand = () => {
   game.jumpToSand();
+};
+
+window.jumpPathToTraffic = () => {
+  game.jumpToTraffic();
+};
+
+window.jumpPathToCityCenter = () => {
+  game.jumpToCityCenter();
+};
+
+window.jumpPathToProps = () => {
+  game.jumpToProps();
 };
 
 window.jumpPathToFixture = (fixtureId: string) => {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { DriveSurface } from '../vehicle/DrivingState';
-import { VehicleController } from '../vehicle/VehicleController';
+import type { DrivingState } from '../vehicle/DrivingState';
 import { Terrain } from '../world/Terrain';
 
 interface TrackSurfaceConfig {
@@ -18,6 +18,18 @@ interface TrackSegment {
   age: number;
   lifetime: number;
   baseOpacity: number;
+}
+
+interface TrackEmitterState {
+  anchors: THREE.Vector3[];
+  hasAnchor: boolean[];
+  emitTimers: number[];
+}
+
+export interface TireTrackSource {
+  id: string;
+  state: DrivingState;
+  wheelWorldPositions: readonly THREE.Vector3[];
 }
 
 const TRACK_LIFETIME_SECONDS = 10;
@@ -64,9 +76,7 @@ export class TireTrackSystem {
   readonly #terrain: Terrain;
   readonly #group = new THREE.Group();
   readonly #segments: TrackSegment[] = [];
-  readonly #anchors = Array.from({ length: 4 }, () => new THREE.Vector3());
-  readonly #hasAnchor = [false, false, false, false];
-  readonly #emitTimers = [0, 0, 0, 0];
+  readonly #emitters = new Map<string, TrackEmitterState>();
   readonly #basis = new THREE.Matrix4();
   readonly #midpoint = new THREE.Vector3();
   readonly #tangent = new THREE.Vector3();
@@ -125,10 +135,10 @@ export class TireTrackSystem {
       segment.mesh.visible = false;
     }
     this.#segmentCursor = 0;
-    this.#resetAnchors();
+    this.#emitters.clear();
   }
 
-  update(dt: number, vehicle: VehicleController): void {
+  update(dt: number): void {
     for (const segment of this.#segments) {
       if (!segment.mesh.visible) continue;
       segment.age += dt;
@@ -141,41 +151,44 @@ export class TireTrackSystem {
       const life = 1 - segment.age / segment.lifetime;
       segment.material.opacity = segment.baseOpacity * Math.pow(life, 1.1);
     }
+  }
 
-    const state = vehicle.state;
+  updateSource(source: TireTrackSource, dt: number): void {
+    const state = source.state;
     const config = TRACK_SURFACE_CONFIG[state.surface];
     if (!state.isGrounded || !config || state.surface === 'water' || state.surface === 'rock') {
-      this.#resetAnchors();
+      this.#resetEmitter(source.id);
       return;
     }
 
+    const emitter = this.#getEmitter(source.id);
     for (let wheelIndex = 0; wheelIndex < 4; wheelIndex += 1) {
       if (!state.wheelContact[wheelIndex]) {
-        this.#hasAnchor[wheelIndex] = false;
-        this.#emitTimers[wheelIndex] = 0;
+        emitter.hasAnchor[wheelIndex] = false;
+        emitter.emitTimers[wheelIndex] = 0;
         continue;
       }
 
-      const wheel = vehicle.wheelWorldPositions[wheelIndex];
+      const wheel = source.wheelWorldPositions[wheelIndex];
       if (!wheel) continue;
 
-      const nextTimer = (this.#emitTimers[wheelIndex] ?? 0) + dt;
-      this.#emitTimers[wheelIndex] = nextTimer;
+      const nextTimer = (emitter.emitTimers[wheelIndex] ?? 0) + dt;
+      emitter.emitTimers[wheelIndex] = nextTimer;
       const groundPoint = this.#projectWheelToGround(wheel);
-      const anchor = this.#anchors[wheelIndex];
+      const anchor = emitter.anchors[wheelIndex];
       if (!anchor) continue;
 
-      if (!this.#hasAnchor[wheelIndex]) {
+      if (!emitter.hasAnchor[wheelIndex]) {
         anchor.copy(groundPoint);
-        this.#hasAnchor[wheelIndex] = true;
-        this.#emitTimers[wheelIndex] = 0;
+        emitter.hasAnchor[wheelIndex] = true;
+        emitter.emitTimers[wheelIndex] = 0;
         continue;
       }
 
       const distance = anchor.distanceTo(groundPoint);
       if (distance > RESET_DISTANCE) {
         anchor.copy(groundPoint);
-        this.#emitTimers[wheelIndex] = 0;
+        emitter.emitTimers[wheelIndex] = 0;
         continue;
       }
 
@@ -195,7 +208,7 @@ export class TireTrackSystem {
           : 1;
       this.#spawnSegment(anchor, groundPoint, config, opacityBoost);
       anchor.copy(groundPoint);
-      this.#emitTimers[wheelIndex] = 0;
+      emitter.emitTimers[wheelIndex] = 0;
     }
   }
 
@@ -253,10 +266,28 @@ export class TireTrackSystem {
     return new THREE.Vector3(wheel.x, y, wheel.z);
   }
 
-  #resetAnchors(): void {
-    for (let index = 0; index < this.#anchors.length; index += 1) {
-      this.#hasAnchor[index] = false;
-      this.#emitTimers[index] = 0;
+  #getEmitter(id: string): TrackEmitterState {
+    let emitter = this.#emitters.get(id);
+    if (emitter) {
+      return emitter;
+    }
+
+    emitter = {
+      anchors: Array.from({ length: 4 }, () => new THREE.Vector3()),
+      hasAnchor: [false, false, false, false],
+      emitTimers: [0, 0, 0, 0],
+    };
+    this.#emitters.set(id, emitter);
+    return emitter;
+  }
+
+  #resetEmitter(id: string): void {
+    const emitter = this.#emitters.get(id);
+    if (!emitter) return;
+
+    for (let index = 0; index < emitter.anchors.length; index += 1) {
+      emitter.hasAnchor[index] = false;
+      emitter.emitTimers[index] = 0;
     }
   }
 }

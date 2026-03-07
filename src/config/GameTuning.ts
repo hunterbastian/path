@@ -16,6 +16,12 @@ export interface VehicleTuning {
   baseAcceleration: number;
   reverseAcceleration: number;
   gravity: number;
+  slopeRollStrength: number;
+  slopeRollStart: number;
+  slopeBrakeHold: number;
+  slopeIdleSlideBoost: number;
+  slopeIdleDragScale: number;
+  slopeIdleSpeedWindow: number;
   suspensionTravel: number;
   suspensionSpring: number;
   suspensionDamping: number;
@@ -65,6 +71,29 @@ export interface CameraDriveTuning {
   fovAirborneGain: number;
   fovImpactGain: number;
   landingKick: number;
+  orbitReturnDelay: number;
+  orbitReturnYawResponse: number;
+  orbitReturnPitchResponse: number;
+}
+
+export type WeatherCondition = 'cloudy' | 'rainy' | 'sunny';
+
+export interface WeatherProfile {
+  condition: WeatherCondition;
+  label: string;
+  rainDensity: number;
+  fogNear: number;
+  fogFar: number;
+  mistStrength: number;
+  visibilityScale: number;
+  gripMultiplier: number;
+  dragMultiplier: number;
+  waterLevelOffset: number;
+  waterActivityMultiplier: number;
+  trafficSpeedMultiplier: number;
+  trafficCautionMultiplier: number;
+  windAudioMultiplier: number;
+  relayAudioMultiplier: number;
 }
 
 export interface CameraOrbitTuning {
@@ -89,12 +118,10 @@ export interface CameraTuning {
 }
 
 export interface WeatherTuning {
-  label: string;
+  cycleDurationSeconds: number;
   rainDensity: number;
-  fogNear: number;
-  fogFar: number;
   fogDistanceMultiplier: number;
-  mistStrength: number;
+  profiles: WeatherProfile[];
 }
 
 export interface WorldStreamingTuning {
@@ -134,6 +161,12 @@ export const DEFAULT_GAME_TUNING: GameTuning = {
     baseAcceleration: 20.6,
     reverseAcceleration: 11.4,
     gravity: 20,
+    slopeRollStrength: 0.72,
+    slopeRollStart: 0.12,
+    slopeBrakeHold: 0.26,
+    slopeIdleSlideBoost: 1.72,
+    slopeIdleDragScale: 0.56,
+    slopeIdleSpeedWindow: 5.8,
     suspensionTravel: 0.39,
     suspensionSpring: 88,
     suspensionDamping: 15.5,
@@ -250,6 +283,9 @@ export const DEFAULT_GAME_TUNING: GameTuning = {
       fovAirborneGain: 2.4,
       fovImpactGain: 4.6,
       landingKick: 0.48,
+      orbitReturnDelay: 3,
+      orbitReturnYawResponse: 0.95,
+      orbitReturnPitchResponse: 1.15,
     },
     title: {
       radius: 34,
@@ -270,12 +306,62 @@ export const DEFAULT_GAME_TUNING: GameTuning = {
     },
   },
   weather: {
-    label: 'light rain',
+    cycleDurationSeconds: 90,
     rainDensity: 1,
-    fogNear: 46,
-    fogFar: 430,
     fogDistanceMultiplier: 1,
-    mistStrength: 1,
+    profiles: [
+      {
+        condition: 'cloudy',
+        label: 'Cloudy',
+        rainDensity: 0,
+        fogNear: 42,
+        fogFar: 390,
+        mistStrength: 0.86,
+        visibilityScale: 0.84,
+        gripMultiplier: 0.97,
+        dragMultiplier: 1.02,
+        waterLevelOffset: 0.04,
+        waterActivityMultiplier: 1.04,
+        trafficSpeedMultiplier: 0.94,
+        trafficCautionMultiplier: 1.05,
+        windAudioMultiplier: 0.92,
+        relayAudioMultiplier: 0.96,
+      },
+      {
+        condition: 'rainy',
+        label: 'Rainy',
+        rainDensity: 1,
+        fogNear: 34,
+        fogFar: 310,
+        mistStrength: 1.18,
+        visibilityScale: 0.68,
+        gripMultiplier: 0.84,
+        dragMultiplier: 1.14,
+        waterLevelOffset: 0.18,
+        waterActivityMultiplier: 1.28,
+        trafficSpeedMultiplier: 0.76,
+        trafficCautionMultiplier: 1.22,
+        windAudioMultiplier: 0.86,
+        relayAudioMultiplier: 0.9,
+      },
+      {
+        condition: 'sunny',
+        label: 'Sunny',
+        rainDensity: 0,
+        fogNear: 56,
+        fogFar: 520,
+        mistStrength: 0.48,
+        visibilityScale: 1,
+        gripMultiplier: 1.05,
+        dragMultiplier: 0.96,
+        waterLevelOffset: -0.08,
+        waterActivityMultiplier: 0.84,
+        trafficSpeedMultiplier: 1.08,
+        trafficCautionMultiplier: 0.92,
+        windAudioMultiplier: 0.78,
+        relayAudioMultiplier: 1.08,
+      },
+    ],
   },
   streaming: {
     routeNearDistance: 18,

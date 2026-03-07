@@ -66,6 +66,8 @@ export class Water {
   readonly #material: THREE.ShaderMaterial;
   readonly #mesh: THREE.Mesh | null;
   #activity = 1;
+  #weatherActivityMultiplier = 1;
+  #levelOffset = 0;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.pools = this.#createPools(terrain);
@@ -80,7 +82,18 @@ export class Water {
   setActivity(activity: number): void {
     this.#activity = THREE.MathUtils.clamp(activity, 0, 1);
     if (this.#mesh) {
-      this.#mesh.visible = this.#activity > 0.04;
+      this.#mesh.visible =
+        this.#activity * this.#weatherActivityMultiplier > 0.04;
+    }
+  }
+
+  setWeatherState(levelOffset: number, activityMultiplier: number): void {
+    this.#levelOffset = levelOffset;
+    this.#weatherActivityMultiplier = Math.max(0.2, activityMultiplier);
+    if (this.#mesh) {
+      this.#mesh.position.y = this.#levelOffset;
+      this.#mesh.visible =
+        this.#activity * this.#weatherActivityMultiplier > 0.04;
     }
   }
 
@@ -90,9 +103,18 @@ export class Water {
       uCameraPos: { value: THREE.Vector3 };
       uOpacity: { value: number };
     };
-    uniforms.uTime.value += dt * THREE.MathUtils.lerp(0.4, 1, this.#activity);
+    const effectiveActivity = THREE.MathUtils.clamp(
+      this.#activity * this.#weatherActivityMultiplier,
+      0,
+      1.4,
+    );
+    uniforms.uTime.value += dt * THREE.MathUtils.lerp(0.4, 1, effectiveActivity);
     uniforms.uCameraPos.value.copy(cameraPosition);
-    uniforms.uOpacity.value = THREE.MathUtils.lerp(0.3, 1, this.#activity);
+    uniforms.uOpacity.value = THREE.MathUtils.lerp(0.22, 1, effectiveActivity);
+  }
+
+  get levelOffset(): number {
+    return this.#levelOffset;
   }
 
   getWaterHeightAt(x: number, z: number): number | null {
@@ -105,7 +127,7 @@ export class Water {
       }
 
       if (this.#isPointInsideOutline(localX, localZ, pool.outline)) {
-        return pool.surfaceHeight;
+        return pool.surfaceHeight + this.#levelOffset;
       }
     }
     return null;

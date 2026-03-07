@@ -5,6 +5,8 @@ export interface AmbientAudioState {
   rainDensity: number;
   routeActivity: number;
   windExposure: number;
+  weatherWindMix: number;
+  weatherRelayMix: number;
   relayProximity: number;
   summitProximity: number;
   arrivalPulse: number;
@@ -13,7 +15,10 @@ export interface AmbientAudioState {
 interface EngineAudioDebug {
   active: boolean;
   contextState: string;
+  unlocked: boolean;
   masterGain: number;
+  engineGain: number;
+  idleGain: number;
   rpm: number;
   surface: DriveSurface;
   speedKmh: number;
@@ -68,7 +73,10 @@ export class EngineAudio {
   #debug: EngineAudioDebug = {
     active: false,
     contextState: 'uninitialized',
+    unlocked: false,
     masterGain: 0,
+    engineGain: 0,
+    idleGain: 0,
     rpm: 0,
     surface: 'dirt',
     speedKmh: 0,
@@ -82,9 +90,9 @@ export class EngineAudio {
   };
   #arrivalCueEndsAt = 0;
 
-  async activate(): Promise<void> {
+  async activate(): Promise<boolean> {
     this.#ensureGraph();
-    if (!this.#context) return;
+    if (!this.#context) return false;
 
     try {
       if (this.#context.state !== 'running') {
@@ -95,6 +103,8 @@ export class EngineAudio {
     }
 
     this.#debug.contextState = this.#context.state;
+    this.#debug.unlocked = this.#context.state === 'running';
+    return this.#debug.unlocked;
   }
 
   update(state: DrivingState, mode: ShellMode, ambient: AmbientAudioState): void {
@@ -141,30 +151,34 @@ export class EngineAudio {
     const arrivalIdle = mode === 'arrived' ? 0.75 : 0;
     const driveMix = mode === 'driving' ? 1 : arrivalIdle;
     const worldMix = mode === 'arrived' ? 0.86 : mode === 'driving' ? 1 : 0.44;
-    const masterTarget = active ? 0.25 : 0;
-    const engineTarget = driveMix * (0.02 + load * 0.095);
-    const idleTarget = active ? 0.028 + (mode === 'arrived' ? 0.02 : 0) : 0;
-    const harmonicTarget = driveMix * (0.008 + load * 0.045);
+    const masterTarget = active ? 0.34 : 0;
+    const engineTarget = driveMix * (0.028 + load * 0.11);
+    const idleTarget = active ? 0.045 + (mode === 'arrived' ? 0.024 : 0) : 0;
+    const harmonicTarget = driveMix * (0.012 + load * 0.052);
     const surfaceProfile = SURFACE_NOISE[state.surface];
     const tractionNoise = driveMix
       * surfaceProfile.gain
       * Math.min(speedNorm * 1.2 + (state.isDrifting ? 0.3 : 0) + (state.isBraking ? 0.18 : 0), 1.4);
-    const boostTarget = mode === 'driving' && state.isBoosting ? 0.02 + speedNorm * 0.03 : 0;
+    const boostTarget = mode === 'driving' && state.isBoosting ? 0.024 + speedNorm * 0.034 : 0;
 
     const windTarget = worldMix
-      * (0.008
-        + ambient.routeActivity * 0.01
-        + ambient.windExposure * 0.038
-        + Math.min(speedNorm, 1.2) * 0.012);
+      * (0.014
+        + ambient.routeActivity * 0.012
+        + ambient.windExposure * 0.044
+        + Math.min(speedNorm, 1.2) * 0.014)
+      * ambient.weatherWindMix;
     const rainTarget = worldMix
       * ambient.rainDensity
-      * (0.01 + Math.min(speedNorm, 1.1) * 0.012 + (mode === 'arrived' ? 0.004 : 0));
+      * (0.016 + Math.min(speedNorm, 1.1) * 0.014 + (mode === 'arrived' ? 0.006 : 0));
     const relayTarget = worldMix
-      * (0.003 + ambient.relayProximity * 0.02 + ambient.summitProximity * 0.04);
+      * (0.005 + ambient.relayProximity * 0.022 + ambient.summitProximity * 0.046)
+      * ambient.weatherRelayMix;
     const buzzTarget = worldMix
-      * (ambient.relayProximity * 0.009
-        + ambient.summitProximity * 0.017
-        + ambient.arrivalPulse * 0.02);
+      * (0.0015
+        + ambient.relayProximity * 0.01
+        + ambient.summitProximity * 0.018
+        + ambient.arrivalPulse * 0.022)
+      * ambient.weatherRelayMix;
 
     this.#masterGain.gain.setTargetAtTime(masterTarget, now, 0.12);
     this.#engineGain.gain.setTargetAtTime(engineTarget, now, 0.08);
@@ -222,9 +236,12 @@ export class EngineAudio {
     );
 
     this.#debug = {
-      active,
+      active: active && this.#context.state === 'running',
       contextState: this.#context.state,
+      unlocked: this.#context.state === 'running',
       masterGain: masterTarget,
+      engineGain: engineTarget,
+      idleGain: idleTarget,
       rpm,
       surface: state.surface,
       speedKmh: Math.round(state.speed * 3.6),
@@ -304,6 +321,7 @@ export class EngineAudio {
     this.#windNoise = null;
     this.#rainNoise = null;
     this.#debug.contextState = 'disposed';
+    this.#debug.unlocked = false;
     this.#debug.active = false;
     this.#arrivalCueEndsAt = 0;
 
@@ -518,6 +536,7 @@ export class EngineAudio {
     this.#windNoise = windNoise;
     this.#rainNoise = rainNoise;
     this.#debug.contextState = context.state;
+    this.#debug.unlocked = context.state === 'running';
   }
 
   #createNoiseBuffer(context: AudioContext): AudioBuffer {
