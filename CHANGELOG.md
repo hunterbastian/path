@@ -40,6 +40,7 @@ All notable changes to this project are documented here.
 - Added a deterministic `jumpPathToProps` hook for focused prop-impact validation.
 - Added a visible title-screen audio state so the shell now tells the player when Web Audio still needs a real gesture to unlock.
 - Added animated atmosphere drift to the sky mist bands so the basin haze now slides and lifts subtly instead of staying perfectly static.
+- Added a lightweight wind-reactive grass field that places stylized tufts around grassy basin edges, dirt shoulders, outposts, and the mountain hangar approach.
 
 ### Changed
 
@@ -73,6 +74,7 @@ All notable changes to this project are documented here.
 - Improved hill gravity so parked trucks now release and roll backward on steeper slopes when you come fully off the pedals instead of feeling pinned in place.
 - Improved the world atmosphere with gently drifting mist plus more organic relay and hangar light shimmer instead of perfectly synchronized pulses.
 - Improved the manual orbit camera so it now behaves more like `Dredge`: drag to a view and it stays there until you explicitly re-center it.
+- Improved ground detail with denser, shorter grass tufts that now sway with weather-driven wind instead of reading as static terrain color.
 
 ### Improved
 
@@ -134,4 +136,5 @@ All notable changes to this project are documented here.
 - The audio unlock pass is preserved in `output/web-game/audio-layer-smoke/` and `output/web-game/audio-layer-browser/`, including `shot-0.png`, `state-0.json`, `shot-title-audio.png`, `shot-driving-audio.png`, `audio-driving.json`, `state-driving.json`, and `summary.json`.
 - The hill-gravity / atmosphere pass is preserved in `output/web-game/slope-atmosphere-browser/`, including `shot-slope-start.png`, `state-slope-start.json`, `shot-slope-after.png`, `state-slope-after.json`, `shot-atmosphere.png`, `state-atmosphere.json`, and `summary.json`.
 - The persistent-camera pass is preserved in `output/web-game/persistent-camera-browser/`, including `shot-dragging.png`, `state-dragging.json`, `shot-release.png`, `state-release.json`, `shot-held.png`, `state-held.json`, `shot-recentered.png`, `state-recentered.json`, and `summary.json`.
+- The grass pass is preserved in `output/web-game/grass-smoke/` and `output/web-game/grass-browser/`, including `shot-0.png`, `state-0.json`, `shot-city-center.png`, `state-city-center.json`, `shot-driving-grass.png`, `state-driving-grass.json`, and `summary.json`.
 - The bundled Playwright client still has intermittent issues clicking the title-screen start button, so keyboard-driven smoke runs and direct browser checks remain part of the workflow.

@@ -47,6 +47,7 @@ import {
   type ReactivePropInteraction,
 } from '../world/ReactiveWorldPropsSystem';
 import { Sky } from '../world/Sky';
+import { GrassField } from '../world/GrassField';
 import { Terrain } from '../world/Terrain';
 import { Water } from '../world/Water';
 import { WorldStreamer, type WorldStreamSnapshot } from '../world/WorldStreamer';
@@ -93,6 +94,7 @@ export class PathGame {
   readonly #ambientTraffic: AmbientTrafficSystem;
   readonly #reactiveProps: ReactiveWorldPropsSystem;
   readonly #sky: Sky;
+  readonly #grassField: GrassField;
   readonly #mapDiscovery: MapDiscoverySystem;
   readonly #runSession: RunSession;
   readonly #scenarioFixtures: ScenarioFixtures;
@@ -138,6 +140,7 @@ export class PathGame {
     this.#sky = new Sky(this.#engine.scene);
     this.#terrain = new Terrain(this.#engine.scene);
     this.#water = new Water(this.#engine.scene, this.#terrain);
+    this.#grassField = new GrassField(this.#engine.scene, this.#terrain);
     this.#spawnPosition = this.#terrain.getSpawnPosition();
     this.#outpostPositions = this.#terrain.getOutpostPositions();
     this.#objectivePosition =
@@ -251,8 +254,9 @@ export class PathGame {
 
     this.#loop = new FixedStepLoop({
       stepSeconds: PHYSICS_STEP_SECONDS,
+      maxSubSteps: 4,
       onStep: (dt) => this.#step(dt),
-      onRender: () => this.#render(),
+      onRender: (frameSeconds) => this.#render(frameSeconds),
     });
   }
 
@@ -286,6 +290,7 @@ export class PathGame {
     this.#engineAudio.dispose();
     this.#rainSystem.dispose();
     this.#tireTrackSystem.dispose();
+    this.#grassField.dispose();
     this.#engine.dispose();
   }
 
@@ -552,6 +557,7 @@ export class PathGame {
           collision: this.#lastPropInteraction.collision,
           sourceId: this.#lastPropInteraction.sourceId,
         },
+        grass: this.#grassField.getDebugState(),
       },
       run: {
         elapsedSeconds: Number(runSnapshot.elapsedSeconds.toFixed(1)),
@@ -755,6 +761,13 @@ export class PathGame {
     this.#windSystem.update(dt, this.#engine.camera.position);
     this.#rainSystem.update(dt, this.#engine.camera.position);
     this.#water.update(dt, this.#engine.camera.position);
+    this.#grassField.update(
+      dt,
+      this.#engine.camera.position,
+      this.#lastWorldStreamSnapshot.windDensity,
+      this.#lastWeatherSnapshot.rainDensity,
+      this.#lastWeatherSnapshot.condition,
+    );
     this.#engineAudio.update(
       this.#controller.state,
       this.#runSession.mode,
@@ -763,8 +776,8 @@ export class PathGame {
     this.#syncShell();
   }
 
-  #render(): void {
-    this.#engine.render();
+  #render(frameSeconds: number): void {
+    this.#engine.render(frameSeconds);
   }
 
   async #toggleFullscreen(): Promise<void> {

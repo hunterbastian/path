@@ -19,6 +19,18 @@ export class ThirdPersonCamera {
   #lastPointerTime = 0;
   #currentPosition = new THREE.Vector3();
   #currentLookTarget = new THREE.Vector3();
+  #worldUp = new THREE.Vector3(0, 1, 0);
+  #pitchAxis = new THREE.Vector3(1, 0, 0);
+  #localOffset = new THREE.Vector3();
+  #desiredPosition = new THREE.Vector3();
+  #resolvedPosition = new THREE.Vector3();
+  #forward = new THREE.Vector3();
+  #right = new THREE.Vector3();
+  #velocityLead = new THREE.Vector3();
+  #lookTarget = new THREE.Vector3();
+  #focusPoint = new THREE.Vector3();
+  #samplePoint = new THREE.Vector3();
+  #checkpointFocus = new THREE.Vector3();
   #initialized = false;
   #lookInitialized = false;
   #titleAngle = Math.PI * 0.15;
@@ -190,7 +202,7 @@ export class ThirdPersonCamera {
       driveTuning.driftLook,
     );
 
-    const localOffset = new THREE.Vector3(
+    const localOffset = this.#localOffset.set(
       lateralOffset + Math.sin(this.#driveMotionTime * 1.8) * shakeAmount * 0.24,
       chaseHeight
         + this.#driveHeave
@@ -203,11 +215,11 @@ export class ThirdPersonCamera {
         - Math.min(state.airborneTime * 1.8, 0.9)
         + Math.cos(this.#driveMotionTime * 2.2) * shakeAmount * 0.34,
     );
-    localOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), -this.#pitchOrbit);
-    localOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.#yawOrbit);
+    localOffset.applyAxisAngle(this.#pitchAxis, -this.#pitchOrbit);
+    localOffset.applyAxisAngle(this.#worldUp, this.#yawOrbit);
 
-    const desiredPosition = vehiclePosition
-      .clone()
+    const desiredPosition = this.#desiredPosition
+      .copy(vehiclePosition)
       .add(localOffset.applyQuaternion(vehicleQuaternion));
     const terrainClearance =
       driveTuning.terrainClearance
@@ -234,29 +246,29 @@ export class ThirdPersonCamera {
     );
     camera.position.copy(this.#currentPosition);
 
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(vehicleQuaternion);
-    const right = new THREE.Vector3(1, 0, 0)
+    const forward = this.#forward.set(0, 0, 1).applyQuaternion(vehicleQuaternion);
+    const right = this.#right.set(1, 0, 0)
       .applyQuaternion(vehicleQuaternion)
-      .projectOnPlane(new THREE.Vector3(0, 1, 0))
+      .projectOnPlane(this.#worldUp)
       .normalize();
-    const velocityLead = forward
-      .clone()
+    const velocityLead = this.#velocityLead
+      .copy(forward)
       .multiplyScalar(Math.max(state.forwardSpeed, 0) * driveTuning.velocityLead)
       .addScaledVector(
         right,
         state.lateralSpeed * driveTuning.velocityLead * 0.9,
       );
-    const lookTarget = vehiclePosition
-      .clone()
-      .add(forward.multiplyScalar(driveTuning.lookAhead + speedBlend * 1.2))
-      .add(right.multiplyScalar(lateralOffset * 0.32));
+    const lookTarget = this.#lookTarget
+      .copy(vehiclePosition)
+      .addScaledVector(forward, driveTuning.lookAhead + speedBlend * 1.2)
+      .addScaledVector(right, lateralOffset * 0.32);
     lookTarget.add(velocityLead);
     lookTarget.y +=
       driveTuning.lookHeight
       + this.#driveHeave * 0.42
       + Math.min(state.airborneTime * 0.7, 0.65);
     if (nextCheckpointPoint && !this.#isDragging) {
-      const checkpointFocus = nextCheckpointPoint.clone();
+      const checkpointFocus = this.#checkpointFocus.copy(nextCheckpointPoint);
       checkpointFocus.y += 3.2;
       lookTarget.lerp(
         checkpointFocus,
@@ -278,7 +290,7 @@ export class ThirdPersonCamera {
       + Math.min(state.airborneTime * driveTuning.fovAirborneGain, driveTuning.fovAirborneGain)
       + this.#driveImpact * driveTuning.fovImpactGain;
     this.#updateCameraFov(camera, targetFov, dt, 5.4);
-    camera.up.set(0, 1, 0);
+    camera.up.copy(this.#worldUp);
     camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll);
     camera.lookAt(this.#currentLookTarget);
   }
@@ -293,7 +305,7 @@ export class ThirdPersonCamera {
 
     const titleTuning = this.#tuning.camera.title;
     const radius = titleTuning.radius;
-    const desiredPosition = new THREE.Vector3(
+    const desiredPosition = this.#desiredPosition.set(
       focusPoint.x + Math.cos(this.#titleAngle) * radius,
       focusPoint.y +
         titleTuning.height +
@@ -310,9 +322,9 @@ export class ThirdPersonCamera {
     camera.position.copy(this.#currentPosition);
     this.#updateCameraFov(camera, this.#tuning.camera.drive.fovBase, dt, 2.8);
 
-    const lookTarget = focusPoint.clone().lerp(landmarkPoint, 0.32);
+    const lookTarget = this.#lookTarget.copy(focusPoint).lerp(landmarkPoint, 0.32);
     lookTarget.y += 8;
-    camera.up.set(0, 1, 0);
+    camera.up.copy(this.#worldUp);
     camera.lookAt(lookTarget);
   }
 
@@ -325,7 +337,7 @@ export class ThirdPersonCamera {
   ): void {
     this.#arrivalElapsed += dt;
 
-    const focusPoint = vehiclePosition.clone().lerp(objectivePoint, 0.45);
+    const focusPoint = this.#focusPoint.copy(vehiclePosition).lerp(objectivePoint, 0.45);
     const arrivalTuning = this.#tuning.camera.arrival;
     const holdProgress = THREE.MathUtils.clamp(
       this.#arrivalElapsed / arrivalTuning.holdSeconds,
@@ -356,7 +368,7 @@ export class ThirdPersonCamera {
       arrivalTuning.horizontalDepth,
       orbitProgress,
     );
-    const desiredPosition = new THREE.Vector3(
+    const desiredPosition = this.#desiredPosition.set(
       focusPoint.x + Math.cos(angle) * radius,
       focusPoint.y +
         height +
@@ -376,7 +388,7 @@ export class ThirdPersonCamera {
     camera.position.copy(this.#currentPosition);
     this.#updateCameraFov(camera, this.#tuning.camera.drive.fovBase + 2.4, dt, 2.4);
 
-    const lookTarget = objectivePoint.clone().lerp(
+    const lookTarget = this.#lookTarget.copy(objectivePoint).lerp(
       landmarkPoint,
       THREE.MathUtils.lerp(0.08, 0.22, orbitProgress),
     );
@@ -385,7 +397,7 @@ export class ThirdPersonCamera {
       6.1,
       orbitProgress,
     );
-    camera.up.set(0, 1, 0);
+    camera.up.copy(this.#worldUp);
     camera.lookAt(lookTarget);
   }
 
@@ -413,17 +425,17 @@ export class ThirdPersonCamera {
     desiredPosition: THREE.Vector3,
     terrainClearance: number,
   ): THREE.Vector3 {
-    const focusPoint = vehiclePosition.clone();
+    const focusPoint = this.#focusPoint.copy(vehiclePosition);
     focusPoint.y += this.#tuning.camera.drive.lookHeight + 0.6;
 
-    const resolvedPosition = desiredPosition.clone();
+    const resolvedPosition = this.#resolvedPosition.copy(desiredPosition);
     resolvedPosition.y = Math.max(
       resolvedPosition.y,
       this.#getTerrainFloor(resolvedPosition) + terrainClearance,
     );
 
     let visibleT = 1;
-    const samplePoint = new THREE.Vector3();
+    const samplePoint = this.#samplePoint;
     for (let index = 1; index <= 7; index += 1) {
       const t = index / 7;
       samplePoint.lerpVectors(focusPoint, resolvedPosition, t);

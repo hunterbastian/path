@@ -1196,14 +1196,14 @@ body.pause-menu-open .hud {
   --accent-soft: rgba(199, 169, 106, 0.16);
   --accent-bright: #e8c57d;
   --shadow: rgba(0, 0, 0, 0.58);
-  --text-2xs: 10px;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
+  --text-2xs: 9px;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-md: 12px;
 }
 
 html {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 body,
@@ -1348,9 +1348,9 @@ body::after {
 }
 
 .loading-card {
-  gap: 8px;
-  padding: 16px 18px;
-  min-width: min(420px, 92vw);
+  gap: 6px;
+  padding: 14px 16px;
+  min-width: min(380px, 90vw);
 }
 
 .loading-title,
@@ -1439,14 +1439,14 @@ body::after {
 
 .title-card,
 .arrival-card {
-  width: min(94vw, 780px);
-  padding: 18px;
+  width: min(92vw, 720px);
+  padding: 16px;
 }
 
 .pause-card {
-  width: min(92vw, 420px);
-  padding: 18px;
-  gap: 12px;
+  width: min(90vw, 380px);
+  padding: 16px;
+  gap: 10px;
 }
 
 .title-card {
@@ -1469,7 +1469,7 @@ body::after {
 }
 
 .title-topline {
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(199, 169, 106, 0.12);
 }
 
@@ -1497,8 +1497,8 @@ body::after {
 }
 
 .title-region {
-  margin-top: 12px;
-  padding: 7px 10px;
+  margin-top: 10px;
+  padding: 6px 8px;
   border: 1px solid rgba(199, 169, 106, 0.14);
   background: rgba(199, 169, 106, 0.06);
   color: rgba(232, 220, 178, 0.72);
@@ -1507,8 +1507,8 @@ body::after {
 .title-name,
 .arrival-name,
 .pause-title {
-  margin-top: 12px;
-  padding: 8px 10px;
+  margin-top: 10px;
+  padding: 7px 9px;
   border: 1px solid rgba(232, 197, 125, 0.24);
   background:
     linear-gradient(180deg, rgba(59, 55, 37, 0.36), rgba(18, 19, 14, 0.56)),
@@ -1519,7 +1519,7 @@ body::after {
 
 .title-rule {
   height: 1px;
-  margin: 14px 0;
+  margin: 12px 0;
   background:
     linear-gradient(90deg, transparent, rgba(199, 169, 106, 0.68), transparent),
     rgba(199, 169, 106, 0.22);
@@ -1536,7 +1536,7 @@ body::after {
 .title-facts,
 .arrival-grid,
 .hud-grid {
-  gap: 8px;
+  gap: 6px;
 }
 
 .title-fact,
@@ -1554,7 +1554,7 @@ body::after {
 .arrival-stat,
 .hud-stack {
   gap: 5px;
-  padding: 10px;
+  padding: 8px;
 }
 
 .title-fact-value,
@@ -1578,20 +1578,20 @@ body::after {
 
 .title-actions,
 .title-controls {
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 14px;
+  padding-top: 10px;
   border-top: 1px solid rgba(199, 169, 106, 0.12);
 }
 
 .title-actions {
-  gap: 12px;
+  gap: 10px;
 }
 
 .start-button,
 .debug-panel__actions button,
 .debug-panel__scenarios button,
 .debug-panel__render-views button {
-  min-height: 36px;
+  min-height: 32px;
   border-radius: 2px;
   border: 1px solid rgba(199, 169, 106, 0.28);
   background:
@@ -1635,17 +1635,17 @@ body::after {
 }
 
 .title-controls {
-  gap: 12px;
+  gap: 10px;
   color: rgba(214, 206, 175, 0.8);
 }
 
 .title-controls-grid {
-  gap: 8px 12px;
+  gap: 6px 10px;
 }
 
 .title-control-item {
   gap: 5px;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid rgba(199, 169, 106, 0.1);
 }
 
@@ -1662,11 +1662,11 @@ body::after {
 }
 
 .arrival-eyebrow {
-  gap: 12px;
+  gap: 10px;
 }
 
 .arrival-badge {
-  padding: 7px 10px 6px;
+  padding: 6px 8px 5px;
   border-radius: 2px;
   border: 1px solid rgba(232, 197, 125, 0.22);
   background: rgba(199, 169, 106, 0.08);
@@ -1699,14 +1699,14 @@ body::after {
 }
 
 .map-shell {
-  width: min(332px, calc(100vw - 28px));
-  padding: 14px;
+  width: min(304px, calc(100vw - 24px));
+  padding: 12px;
   border-radius: 2px;
   color: var(--paper);
 }
 
 .map-topline {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: rgba(208, 199, 160, 0.68);
 }
 
@@ -1719,7 +1719,7 @@ body::after {
 }
 
 .map-screen-wrap {
-  padding: 10px;
+  padding: 8px;
   border-radius: 2px;
   border: 1px solid rgba(199, 169, 106, 0.16);
   background:
@@ -1736,7 +1736,7 @@ body::after {
 }
 
 .map-footer {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .map-status {
@@ -1744,7 +1744,7 @@ body::after {
 }
 
 .map-controls {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .map-dpad span {
@@ -1753,8 +1753,8 @@ body::after {
 }
 
 .map-buttons span {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 2px;
   background:
     linear-gradient(180deg, rgba(84, 61, 38, 0.98), rgba(37, 27, 18, 0.98)),
@@ -1763,24 +1763,24 @@ body::after {
 }
 
 .hud {
-  gap: 12px;
+  gap: 10px;
 }
 
 .hud-panel {
-  min-width: min(360px, calc(100vw - 32px));
-  max-width: min(520px, calc(100vw - 32px));
-  gap: 10px;
-  padding: 14px;
+  min-width: min(320px, calc(100vw - 28px));
+  max-width: min(460px, calc(100vw - 28px));
+  gap: 8px;
+  padding: 12px;
 }
 
 .hud-main {
-  gap: 10px;
+  gap: 8px;
 }
 
 .speed-readout {
-  min-width: min(190px, 100%);
+  min-width: min(170px, 100%);
   gap: 4px;
-  padding: 10px;
+  padding: 8px;
 }
 
 .speed-value {
@@ -1867,8 +1867,8 @@ body::after {
 }
 
 .debug-panel__card {
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .debug-panel__title {
@@ -1878,12 +1878,12 @@ body::after {
 
 .debug-panel__telemetry,
 .debug-panel__controls {
-  gap: 8px;
+  gap: 6px;
 }
 
 .debug-panel__telemetry div {
   gap: 5px;
-  padding: 8px 9px;
+  padding: 7px 8px;
 }
 
 .debug-panel__range {
@@ -1900,6 +1900,183 @@ body::after {
     linear-gradient(180deg, rgba(68, 76, 49, 0.86), rgba(22, 30, 18, 0.94)),
     rgba(18, 24, 14, 0.94);
   color: #eef0c7;
+}
+
+.screen {
+  padding:
+    calc(clamp(12px, 2vw, 18px) + var(--safe-top))
+    calc(clamp(12px, 2vw, 18px) + var(--safe-right))
+    calc(clamp(12px, 2vw, 18px) + var(--safe-bottom))
+    calc(clamp(12px, 2vw, 18px) + var(--safe-left));
+}
+
+.loading-card {
+  gap: 5px;
+  padding: 12px 14px;
+  min-width: min(340px, 88vw);
+}
+
+.title-card,
+.arrival-card {
+  width: min(90vw, 660px);
+  padding: 14px;
+}
+
+.pause-card {
+  width: min(88vw, 340px);
+  padding: 14px;
+  gap: 8px;
+}
+
+.title-topline {
+  padding-bottom: 6px;
+}
+
+.title-region {
+  margin-top: 8px;
+  padding: 5px 7px;
+}
+
+.title-name,
+.arrival-name,
+.pause-title {
+  margin-top: 8px;
+  padding: 6px 8px;
+}
+
+.title-rule {
+  margin: 10px 0;
+}
+
+.title-copy,
+.arrival-card .title-copy,
+.pause-copy {
+  max-width: 54ch;
+  line-height: 1.45;
+}
+
+.title-facts,
+.arrival-grid,
+.hud-grid,
+.title-controls-grid,
+.debug-panel__telemetry,
+.debug-panel__controls {
+  gap: 5px;
+}
+
+.title-fact,
+.arrival-stat,
+.hud-stack,
+.speed-readout,
+.debug-panel__telemetry div {
+  padding: 7px;
+}
+
+.title-actions,
+.title-controls {
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+.title-actions,
+.title-controls,
+.arrival-eyebrow,
+.hud,
+.hud-main {
+  gap: 8px;
+}
+
+.title-control-item {
+  padding-top: 5px;
+}
+
+.start-button,
+.debug-panel__actions button,
+.debug-panel__scenarios button,
+.debug-panel__render-views button {
+  min-height: 28px;
+  padding: 7px 10px;
+  letter-spacing: 0.14em;
+}
+
+.arrival-badge {
+  padding: 5px 7px 4px;
+}
+
+.map-device {
+  right: calc(clamp(10px, 1.5vw, 16px) + var(--safe-right));
+  top: calc(clamp(10px, 2vw, 16px) + var(--safe-top));
+}
+
+.map-shell {
+  width: min(280px, calc(100vw - 20px));
+  padding: 10px;
+}
+
+.map-topline {
+  margin-bottom: 6px;
+}
+
+.map-screen-wrap {
+  padding: 6px;
+}
+
+.map-footer {
+  margin-top: 6px;
+}
+
+.map-controls {
+  margin-top: 8px;
+}
+
+.map-buttons {
+  gap: 12px;
+}
+
+.map-buttons span {
+  width: 24px;
+  height: 24px;
+}
+
+.hud {
+  left: calc(clamp(10px, 1.5vw, 16px) + var(--safe-left));
+  right: calc(clamp(10px, 1.5vw, 16px) + var(--safe-right));
+  bottom: calc(clamp(10px, 1.5vw, 16px) + var(--safe-bottom));
+}
+
+.hud-panel {
+  min-width: min(292px, calc(100vw - 22px));
+  max-width: min(408px, calc(100vw - 22px));
+  gap: 6px;
+  padding: 10px;
+}
+
+.speed-readout {
+  min-width: min(148px, 100%);
+}
+
+.hud-route-label {
+  max-width: 18ch;
+}
+
+.status-label--icon {
+  gap: 4px;
+}
+
+.error-banner {
+  top: calc(12px + var(--safe-top));
+  padding: 7px 10px;
+}
+
+.debug-panel {
+  left: clamp(10px, 1.5vw, 16px);
+  bottom: clamp(10px, 1.5vw, 16px);
+  width: min(310px, calc(100vw - 20px));
+}
+
+.debug-panel__card {
+  gap: 8px;
+  padding: 10px;
 }
 
 @media (max-width: 860px) {
