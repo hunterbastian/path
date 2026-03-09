@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { SeededRandom } from '../core/SeededRandom';
+import { applyProceduralParallax } from '../render/applyProceduralParallax';
 import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
 
 export type SurfaceType = 'sand' | 'dirt' | 'grass' | 'rock' | 'snow';
@@ -509,6 +510,8 @@ export class Terrain {
     geometry.computeVertexNormals();
     const normals = geometry.attributes.normal as THREE.BufferAttribute;
     const colors = new Float32Array(positions.count * 3);
+    const roadMasks = new Float32Array(positions.count);
+    const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
 
     const sand = new THREE.Color(0xe2c27a);
@@ -533,6 +536,18 @@ export class Terrain {
       const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
       const roadInfluence = this.getRoadInfluence(x, z);
       const surface = this.getSurfaceAt(x, z);
+      const parallaxRoadMask = THREE.MathUtils.clamp(
+        surface === 'rock' ? 0 : roadInfluence,
+        0,
+        1,
+      );
+      const parallaxSnowMask = THREE.MathUtils.clamp(
+        surface === 'snow'
+          ? 1
+          : snowCoverage * THREE.MathUtils.lerp(0.92, 0.26, roadInfluence),
+        0,
+        1,
+      );
 
       if (surface === 'sand') {
         color.copy(sand).lerp(sandLight, detail * 0.6);
@@ -568,21 +583,31 @@ export class Terrain {
         surface === 'snow' ? 0.015 : 0.03,
         (detail - 0.5) * 0.055 - height * 0.00045 + (surface === 'snow' ? 0.004 : 0.015),
       );
+      roadMasks[index] = parallaxRoadMask;
+      snowMasks[index] = parallaxSnowMask;
       colors[index * 3] = color.r;
       colors[index * 3 + 1] = color.g;
       colors[index * 3 + 2] = color.b;
     }
 
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('roadMask', new THREE.BufferAttribute(roadMasks, 1));
+    geometry.setAttribute('snowMask', new THREE.BufferAttribute(snowMasks, 1));
 
-    return new THREE.Mesh(
-      geometry,
-      new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.94,
-        metalness: 0,
-        flatShading: true,
-      }),
-    );
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.94,
+      metalness: 0,
+      flatShading: true,
+    });
+    applyProceduralParallax(material, {
+      kind: 'terrain',
+      useTerrainMasks: true,
+      strength: 0.16,
+      scale: 0.11,
+      secondaryScale: 2.8,
+    });
+
+    return new THREE.Mesh(geometry, material);
   }
 }

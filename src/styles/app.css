@@ -1,8 +1,24 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700;800&display=swap");
+
+@font-face {
+  font-family: "Handscript Path";
+  src: url("/fonts/Handscriptregular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Handscript Path";
+  src: url("/fonts/HandscriptBold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
-  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -1180,7 +1196,7 @@ body.pause-menu-open .hud {
 }
 
 :root {
-  font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", monospace;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
   --paper: #d0c7a0;
   --sand: #8b815e;
   --ink: #090a07;
@@ -1211,7 +1227,7 @@ button,
 input,
 textarea,
 select {
-  font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", monospace;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
 }
 
 body {
@@ -2309,4 +2325,442 @@ body::after {
   .debug-panel__render-views button:focus-visible {
     transform: none !important;
   }
+}
+
+:root {
+  color-scheme: light;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
+  --paper: #f7f4eb;
+  --paper-cool: #eef1f7;
+  --sand: #d3cab7;
+  --ink: #0f1626;
+  --pine: #5e6a5a;
+  --moss: #849079;
+  --clay: #8e7158;
+  --line: rgba(86, 98, 123, 0.42);
+  --line-strong: rgba(37, 79, 172, 0.72);
+  --panel: rgba(247, 244, 235, 0.88);
+  --panel-strong: rgba(246, 243, 236, 0.95);
+  --accent: #2751aa;
+  --accent-soft: rgba(39, 81, 170, 0.1);
+  --accent-bright: #163b89;
+  --shadow: rgba(15, 22, 38, 0.16);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
+}
+
+body {
+  background:
+    radial-gradient(circle at 16% 14%, rgba(39, 81, 170, 0.08), transparent 26%),
+    radial-gradient(circle at 84% 18%, rgba(124, 140, 173, 0.1), transparent 28%),
+    linear-gradient(180deg, #d6dbe4 0%, #c5ccd8 44%, #a8b2c0 100%);
+  color: var(--ink);
+}
+
+body::before {
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(32, 54, 104, 0.025) 0,
+      rgba(32, 54, 104, 0.025) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.26), transparent 10%, transparent 90%, rgba(32, 54, 104, 0.08));
+  opacity: 0.46;
+  mix-blend-mode: multiply;
+}
+
+body::after {
+  background:
+    radial-gradient(circle at center, transparent 58%, rgba(14, 20, 32, 0.18) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(15, 22, 38, 0.06));
+}
+
+.loading-screen,
+.title-screen,
+.arrival-screen,
+.pause-screen {
+  background:
+    linear-gradient(180deg, rgba(14, 20, 32, 0.12), rgba(14, 20, 32, 0.4)),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.26), transparent 42%);
+}
+
+.loading-card,
+.title-card,
+.arrival-card,
+.pause-card,
+.hud-panel,
+.map-shell,
+.debug-panel__card {
+  border-radius: 0;
+  border: 1px solid rgba(86, 98, 123, 0.5);
+  background:
+    linear-gradient(180deg, rgba(251, 249, 243, 0.95), rgba(235, 239, 246, 0.92)),
+    rgba(246, 243, 236, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(132, 144, 166, 0.16),
+    4px 4px 0 rgba(15, 22, 38, 0.16);
+  backdrop-filter: blur(4px);
+  color: var(--ink);
+}
+
+.loading-card::before,
+.title-card::before,
+.arrival-card::before,
+.pause-card::before,
+.hud-panel::before,
+.map-shell::before,
+.debug-panel__card::before {
+  inset: 7px;
+  border-color: rgba(129, 143, 171, 0.26);
+}
+
+.loading-card::after,
+.title-card::after,
+.arrival-card::after,
+.pause-card::after,
+.hud-panel::after,
+.map-shell::after,
+.debug-panel__card::after {
+  left: 0;
+  right: 0;
+  top: 30px;
+  background: linear-gradient(90deg, rgba(185, 197, 223, 0.2), rgba(109, 132, 188, 0.88), rgba(185, 197, 223, 0.2));
+}
+
+.loading-title,
+.arrival-name,
+.pause-title,
+.speed-value,
+.arrival-stat--emphasis .status-value,
+.debug-panel__title {
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
+  color: var(--accent-bright);
+  text-shadow: none;
+}
+
+.title-screen .title-name {
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: "Handscript Path", "Brush Script MT", cursive;
+  font-size: clamp(4.2rem, 13vw, 7.4rem);
+  font-weight: 700;
+  line-height: 0.82;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: #17336c;
+  text-shadow: none;
+}
+
+.title-topline {
+  padding-bottom: 8px;
+  border-bottom: 1px dotted rgba(101, 114, 144, 0.72);
+}
+
+.title-kicker,
+.title-edition,
+.status-label,
+.hud-subtitle,
+.pause-eyebrow,
+.pause-meta,
+.debug-panel__kicker,
+.debug-panel__hint,
+.debug-panel__telemetry span,
+.debug-panel__section-label,
+.map-topline,
+.map-footer,
+.title-controls-heading,
+.title-fact-label,
+.title-control-item span,
+.title-meta,
+.arrival-badge,
+.arrival-weather,
+.arrival-route,
+.arrival-route-copy {
+  color: #64728d;
+}
+
+.title-region {
+  margin-top: 9px;
+  padding: 4px 7px;
+  border: 1px solid rgba(104, 117, 145, 0.5);
+  background: rgba(255, 255, 255, 0.64);
+  color: #23417d;
+}
+
+.title-rule {
+  margin: 12px 0;
+  background: linear-gradient(90deg, transparent, rgba(37, 79, 172, 0.6), transparent);
+}
+
+.title-copy,
+.arrival-card .title-copy,
+.pause-copy,
+.title-fact-value,
+.title-control-item strong,
+.hud .status-value,
+.map-status,
+.map-meta,
+.debug-panel__telemetry strong,
+.debug-panel__range-topline strong,
+.error-banner {
+  color: #172238;
+}
+
+.title-copy,
+.arrival-card .title-copy,
+.pause-copy {
+  max-width: 49ch;
+}
+
+.title-hero {
+  gap: 10px;
+}
+
+.title-fact,
+.arrival-stat,
+.hud-stack,
+.speed-readout,
+.debug-panel__telemetry div,
+.title-preview-shell {
+  border: 1px solid rgba(119, 132, 161, 0.46);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(237, 241, 247, 0.9)),
+    rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.title-fact--objective,
+.arrival-stat--emphasis,
+.hud-stack-objective {
+  border-color: rgba(37, 79, 172, 0.52);
+  background:
+    linear-gradient(180deg, rgba(222, 232, 255, 0.92), rgba(236, 240, 247, 0.94)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.title-actions,
+.title-controls {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dotted rgba(101, 114, 144, 0.66);
+}
+
+.start-button,
+.debug-panel__actions button,
+.debug-panel__scenarios button,
+.debug-panel__render-views button {
+  border-radius: 0;
+  border: 1px solid rgba(100, 111, 137, 0.82);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(220, 228, 241, 0.96)),
+    rgba(240, 244, 250, 0.95);
+  color: #173a81;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(142, 151, 170, 0.5);
+}
+
+.start-button:hover,
+.start-button:focus-visible,
+.debug-panel__actions button:hover,
+.debug-panel__actions button:focus-visible,
+.debug-panel__scenarios button:hover,
+.debug-panel__scenarios button:focus-visible,
+.debug-panel__render-views button:hover,
+.debug-panel__render-views button:focus-visible {
+  border-color: rgba(37, 79, 172, 0.82);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(228, 236, 250, 0.98)),
+    rgba(244, 247, 252, 0.98);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(132, 144, 166, 0.44),
+    2px 2px 0 rgba(39, 81, 170, 0.14);
+}
+
+.start-button--secondary {
+  color: #34435f;
+  background:
+    linear-gradient(180deg, rgba(250, 250, 248, 0.96), rgba(229, 231, 236, 0.96)),
+    rgba(241, 242, 245, 0.96);
+}
+
+.title-preview-shell {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.title-preview-topline {
+  padding: 7px 9px;
+  background: linear-gradient(180deg, rgba(236, 242, 253, 0.98), rgba(215, 226, 246, 0.98));
+  border-bottom: 1px solid rgba(118, 132, 160, 0.56);
+  color: #213f7b;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
+}
+
+.title-preview-kicker {
+  color: #23478d;
+}
+
+.title-preview-meta {
+  color: #687899;
+}
+
+.title-preview-frame {
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(204, 214, 230, 0.94), rgba(185, 197, 219, 0.94)),
+    #cad3e5;
+  box-shadow:
+    inset 0 0 0 1px rgba(99, 113, 141, 0.5),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.58);
+}
+
+.title-preview-notes {
+  padding: 8px;
+  border-top: 1px solid rgba(118, 132, 160, 0.56);
+}
+
+.title-preview-notes span {
+  border: 1px solid rgba(118, 132, 160, 0.56);
+  background: rgba(250, 251, 253, 0.96);
+  color: #23467f;
+  font-family: "Geist Mono", "SFMono-Regular", "Consolas", monospace;
+}
+
+.hud-panel {
+  gap: 8px;
+  min-width: min(298px, calc(100vw - 22px));
+  max-width: min(396px, calc(100vw - 22px));
+  background:
+    linear-gradient(180deg, rgba(250, 248, 242, 0.88), rgba(231, 236, 245, 0.84)),
+    rgba(245, 243, 237, 0.84);
+}
+
+.hud-main {
+  gap: 10px;
+}
+
+.speed-value {
+  color: #143a83;
+}
+
+.hud-route-label {
+  color: #596780;
+}
+
+.hud .status-value {
+  color: #0f1930;
+}
+
+.hud-glyph--relay::before {
+  background: linear-gradient(180deg, rgba(53, 86, 164, 0.94), rgba(130, 156, 219, 0.3));
+}
+
+.hud-glyph--relay::after {
+  background: rgba(239, 245, 255, 0.98);
+}
+
+.map-shell {
+  padding: 0;
+  overflow: hidden;
+  transform: none;
+}
+
+.map-topline {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, rgba(236, 242, 253, 0.98), rgba(216, 226, 245, 0.98));
+  border-bottom: 1px solid rgba(118, 132, 160, 0.56);
+}
+
+.map-led {
+  width: 8px;
+  height: 8px;
+  background: #2d8a3f;
+  box-shadow: 0 0 0 1px rgba(34, 59, 16, 0.22);
+}
+
+.map-brand {
+  color: #23478c;
+}
+
+.map-screen-wrap {
+  margin-top: 0;
+  padding: 10px;
+  background: rgba(231, 237, 246, 0.82);
+  border-bottom: 1px solid rgba(118, 132, 160, 0.56);
+}
+
+.map-screen {
+  border: 1px inset rgba(105, 115, 134, 0.92);
+  box-shadow: none;
+}
+
+.map-footer {
+  margin-top: 0;
+  padding: 8px 10px;
+  background: rgba(247, 248, 251, 0.88);
+  border-top: 1px solid rgba(118, 132, 160, 0.42);
+}
+
+.map-controls {
+  margin-top: 0;
+  padding: 10px;
+  background: rgba(233, 237, 244, 0.92);
+  border-top: 1px solid rgba(118, 132, 160, 0.56);
+}
+
+.map-buttons span {
+  border-radius: 999px;
+  border: 1px solid rgba(98, 110, 136, 0.82);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(220, 228, 241, 0.96)),
+    rgba(241, 244, 249, 0.96);
+  color: #17397f;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.94),
+    inset -1px -1px 0 rgba(142, 151, 170, 0.42);
+}
+
+.pause-card,
+.arrival-card {
+  background:
+    linear-gradient(180deg, rgba(250, 248, 242, 0.95), rgba(233, 238, 246, 0.94)),
+    rgba(246, 243, 236, 0.94);
+}
+
+.arrival-badge {
+  border: 1px solid rgba(37, 79, 172, 0.42);
+  background: rgba(223, 232, 255, 0.86);
+  color: #23467f;
+}
+
+.error-banner {
+  border-radius: 0;
+  border-color: rgba(155, 102, 82, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 246, 242, 0.94), rgba(242, 225, 217, 0.94)),
+    rgba(247, 236, 231, 0.94);
+  color: #6b2a18;
+}
+
+.debug-panel__render-views button.is-active {
+  border-color: rgba(37, 79, 172, 0.78);
+  background:
+    linear-gradient(180deg, rgba(224, 234, 255, 0.98), rgba(200, 214, 245, 0.98)),
+    rgba(221, 231, 255, 0.98);
+  color: #163b89;
 }

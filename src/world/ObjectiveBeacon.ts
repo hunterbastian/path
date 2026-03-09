@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyProceduralParallax } from '../render/applyProceduralParallax';
 
 interface ObjectiveBeaconOptions {
   objective?: boolean;
@@ -84,6 +85,36 @@ export class ObjectiveBeacon {
       color: 0x171b1e,
       roughness: 0.5,
       metalness: 0.36,
+    });
+    applyProceduralParallax(concreteMaterial, {
+      kind: 'concrete',
+      strength: 0.085,
+      scale: 0.34,
+      secondaryScale: 3.1,
+    });
+    applyProceduralParallax(heavyConcreteMaterial, {
+      kind: 'concrete',
+      strength: 0.11,
+      scale: 0.42,
+      secondaryScale: 3.4,
+    });
+    applyProceduralParallax(steelMaterial, {
+      kind: 'steel',
+      strength: 0.05,
+      scale: 0.38,
+      secondaryScale: 2.2,
+    });
+    applyProceduralParallax(weatheredSteelMaterial, {
+      kind: 'steel',
+      strength: 0.06,
+      scale: 0.44,
+      secondaryScale: 2.5,
+    });
+    applyProceduralParallax(darkPanelMaterial, {
+      kind: 'steel',
+      strength: 0.045,
+      scale: 0.48,
+      secondaryScale: 2.2,
     });
     this.#windowMaterial = new THREE.MeshStandardMaterial({
       color: 0xffefcf,

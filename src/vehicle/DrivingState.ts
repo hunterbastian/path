@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { SurfaceType } from '../world/Terrain';
 
 export type DriveSurface = SurfaceType | 'water';
@@ -22,6 +23,10 @@ export interface DrivingState {
   surfaceBuildup: number;
   wheelCompression: [number, number, number, number];
   wheelContact: [boolean, boolean, boolean, boolean];
+  /** Peak impact magnitude this physics step (landing or collision). */
+  impactMagnitude: number;
+  /** World-space direction of the impact (normalized). Zero vector if no impact. */
+  impactDirection: THREE.Vector3;
 }
 
 export function createDefaultDrivingState(): DrivingState {
@@ -45,5 +50,7 @@ export function createDefaultDrivingState(): DrivingState {
     surfaceBuildup: 0,
     wheelCompression: [0, 0, 0, 0],
     wheelContact: [true, true, true, true],
+    impactMagnitude: 0,
+    impactDirection: new THREE.Vector3(),
   };
 }

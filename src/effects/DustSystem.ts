@@ -11,19 +11,32 @@ export interface DustConfig {
   jitter: number;
 }
 
+interface DustSystemOptions {
+  capacity?: number;
+  color?: THREE.ColorRepresentation;
+  opacity?: number;
+  gravity?: number;
+  drag?: number;
+  fade?: (lifeFraction: number) => number;
+}
+
 export class DustSystem {
   readonly #field: SpriteParticleField;
   readonly #random = new SeededRandom(0x44555354);
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, options: DustSystemOptions = {}) {
     this.#field = new SpriteParticleField(scene, {
-      capacity: 360,
-      color: 0xd7c0a0,
-      opacity: 0.34,
-      gravity: -2.8,
-      drag: 0.94,
-      fade: (lifeFraction) => Math.pow(1 - lifeFraction, 1.8),
+      capacity: options.capacity ?? 360,
+      color: options.color ?? 0xd7c0a0,
+      opacity: options.opacity ?? 0.34,
+      gravity: options.gravity ?? -2.8,
+      drag: options.drag ?? 0.94,
+      fade: options.fade ?? ((lifeFraction) => Math.pow(1 - lifeFraction, 1.8)),
     });
+  }
+
+  get activeCount(): number {
+    return this.#field.activeCount;
   }
 
   emit(
@@ -53,5 +66,9 @@ export class DustSystem {
 
   update(dt: number): void {
     this.#field.update(dt);
+  }
+
+  dispose(): void {
+    this.#field.dispose();
   }
 }

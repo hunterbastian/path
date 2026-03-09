@@ -10,6 +10,7 @@ interface TrackSurfaceConfig {
   minSpeed: number;
   emitInterval: number;
   minDistance: number;
+  darkensWhenWet?: boolean;
 }
 
 interface TrackSegment {
@@ -53,6 +54,7 @@ const TRACK_SURFACE_CONFIG: Partial<Record<DriveSurface, TrackSurfaceConfig>> = 
     minSpeed: 1,
     emitInterval: 0.16,
     minDistance: 0.66,
+    darkensWhenWet: true,
   },
   dirt: {
     color: 0x5e4a35,
@@ -61,6 +63,7 @@ const TRACK_SURFACE_CONFIG: Partial<Record<DriveSurface, TrackSurfaceConfig>> = 
     minSpeed: 1.4,
     emitInterval: 0.18,
     minDistance: 0.78,
+    darkensWhenWet: true,
   },
   grass: {
     color: 0x465140,
@@ -69,6 +72,7 @@ const TRACK_SURFACE_CONFIG: Partial<Record<DriveSurface, TrackSurfaceConfig>> = 
     minSpeed: 1.8,
     emitInterval: 0.18,
     minDistance: 0.82,
+    darkensWhenWet: true,
   },
 };
 
@@ -82,7 +86,10 @@ export class TireTrackSystem {
   readonly #tangent = new THREE.Vector3();
   readonly #side = new THREE.Vector3();
   readonly #normal = new THREE.Vector3();
+  readonly #trackColor = new THREE.Color();
+  readonly #wetTrackColor = new THREE.Color(0x2a241d);
   #segmentCursor = 0;
+  #wetness = 0;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.#terrain = terrain;
@@ -136,6 +143,10 @@ export class TireTrackSystem {
     }
     this.#segmentCursor = 0;
     this.#emitters.clear();
+  }
+
+  setWetness(wetness: number): void {
+    this.#wetness = THREE.MathUtils.clamp(wetness, 0, 1);
   }
 
   update(dt: number): void {
@@ -253,8 +264,16 @@ export class TireTrackSystem {
     segment.mesh.position.copy(this.#midpoint);
     segment.mesh.setRotationFromMatrix(this.#basis);
     segment.mesh.scale.set(config.width, 1, length);
-    segment.material.color.setHex(config.color);
-    segment.baseOpacity = config.baseOpacity * opacityBoost;
+    this.#trackColor.setHex(config.color);
+    const wetSurface = this.#wetness > 0.05 && config.darkensWhenWet === true;
+    if (wetSurface) {
+      this.#trackColor.lerp(this.#wetTrackColor, this.#wetness * 0.62);
+    }
+    segment.material.color.copy(this.#trackColor);
+    segment.baseOpacity =
+      config.baseOpacity
+      * opacityBoost
+      * (wetSurface ? 1 + this.#wetness * 0.55 : 1);
     segment.material.opacity = segment.baseOpacity;
     segment.age = 0;
     segment.lifetime = TRACK_LIFETIME_SECONDS;

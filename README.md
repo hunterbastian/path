@@ -64,6 +64,22 @@ npm run build
 npm run preview
 ```
 
+### Alpha preview reel
+
+The title screen now includes a Remotion-powered early alpha reel that loops
+inside the start screen.
+
+For standalone Remotion work:
+
+```bash
+npm run alpha:studio
+npm run alpha:render
+```
+
+`alpha:render` outputs `output/path-alpha-preview.mp4`.
+On a fresh machine, the first render may download Remotion's Chrome Headless
+Shell before exporting.
+
 ## Debug Hooks
 
 The game intentionally exposes a small set of browser globals for deterministic testing and quick iteration:

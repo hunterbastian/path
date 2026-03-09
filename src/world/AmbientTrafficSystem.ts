@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { TireTrackSource } from '../effects/TireTrackSystem';
+import { expLerp } from '../core/math';
 import type { WeatherSnapshot } from '../gameplay/WeatherState';
 import {
   createDefaultDrivingState,
@@ -58,6 +59,7 @@ export interface AmbientTrafficPlayerInteraction {
   blocking: boolean;
   collision: boolean;
   sourceId: string | null;
+  sourcePosition: THREE.Vector3 | null;
   correction: THREE.Vector3;
   impulse: THREE.Vector3;
 }
@@ -72,6 +74,7 @@ export class AmbientTrafficSystem {
   readonly #right = new THREE.Vector3(1, 0, 0);
   readonly #forward = new THREE.Vector3(0, 0, 1);
   readonly #correctedForward = new THREE.Vector3(0, 0, 1);
+  readonly #poseQuaternion = new THREE.Quaternion();
   readonly #playerToAgent = new THREE.Vector3();
   readonly #playerInteractionCorrection = new THREE.Vector3();
   readonly #playerInteractionImpulse = new THREE.Vector3();
@@ -81,9 +84,12 @@ export class AmbientTrafficSystem {
     blocking: false,
     collision: false,
     sourceId: null,
+    sourcePosition: null,
     correction: new THREE.Vector3(),
     impulse: new THREE.Vector3(),
   };
+  #encounterLockAgentId: string | null = null;
+  #encounterLockTimer = 0;
 
   constructor(
     scene: THREE.Scene,
@@ -105,6 +111,13 @@ export class AmbientTrafficSystem {
       'trafficSpeedMultiplier' | 'trafficCautionMultiplier' | 'visibilityScale'
     >,
   ): void {
+    if (this.#encounterLockTimer > 0) {
+      this.#encounterLockTimer = Math.max(0, this.#encounterLockTimer - dt);
+      if (this.#encounterLockTimer === 0) {
+        this.#encounterLockAgentId = null;
+      }
+    }
+
     for (const agent of this.#agents) {
       this.#updateAgent(agent, dt, playerPosition, weather);
     }
@@ -137,6 +150,7 @@ export class AmbientTrafficSystem {
       blocking: this.#playerInteraction.blocking,
       collision: this.#playerInteraction.collision,
       sourceId: this.#playerInteraction.sourceId,
+      sourcePosition: this.#playerInteraction.sourcePosition?.clone() ?? null,
       correction: this.#playerInteraction.correction.clone(),
       impulse: this.#playerInteraction.impulse.clone(),
     };
@@ -159,12 +173,14 @@ export class AmbientTrafficSystem {
     if (!agent) return null;
 
     const encounterOffset = new THREE.Vector3(
-      Math.sin(agent.heading) * 5.8,
+      Math.sin(agent.heading) * 2.2,
       0,
-      Math.cos(agent.heading) * 5.8,
+      Math.cos(agent.heading) * 2.2,
     );
     const position = agent.position.clone().add(encounterOffset);
     position.y = this.#terrain.getHeightAt(position.x, position.z) + VEHICLE_CLEARANCE;
+    this.#encounterLockAgentId = agent.id;
+    this.#encounterLockTimer = 2.8;
     return {
       position,
       heading: agent.heading + Math.PI,
@@ -238,6 +254,8 @@ export class AmbientTrafficSystem {
       playerPosition.x - agent.position.x,
       playerPosition.z - agent.position.z,
     );
+    const encounterLocked =
+      agent.id === this.#encounterLockAgentId && this.#encounterLockTimer > 0;
     const cautionDistance =
       THREE.MathUtils.lerp(10.5, 16.5, 1 - weather.visibilityScale)
       * weather.trafficCautionMultiplier;
@@ -247,17 +265,21 @@ export class AmbientTrafficSystem {
       .sub(agent.position)
       .setY(0);
     const playerSide = Math.sign(this.#playerToAgent.dot(this.#right)) || 1;
-    const avoidanceProgress = THREE.MathUtils.clamp(
-      1 - playerDistance / Math.max(cautionDistance, 0.01),
-      0,
-      1,
-    );
+    const avoidanceProgress = encounterLocked
+      ? 0
+      : THREE.MathUtils.clamp(
+          1 - playerDistance / Math.max(cautionDistance, 0.01),
+          0,
+          1,
+        );
     const avoidanceHeading = -playerSide * avoidanceProgress * 0.72;
-    const playerSlowdown = THREE.MathUtils.clamp(
-      (playerDistance - cautionDistance * 0.32) / (cautionDistance * 0.92),
-      0.18,
-      1,
-    );
+    const playerSlowdown = encounterLocked
+      ? 1
+      : THREE.MathUtils.clamp(
+          (playerDistance - cautionDistance * 0.32) / (cautionDistance * 0.92),
+          0.18,
+          1,
+        );
 
     const desiredHeading = targetHeading + avoidanceHeading;
     const turnRate = THREE.MathUtils.lerp(0.9, 2.2, cornering);
@@ -272,7 +294,7 @@ export class AmbientTrafficSystem {
       * weather.trafficSpeedMultiplier
       * THREE.MathUtils.lerp(1, 0.52, cornering)
       * playerSlowdown;
-    agent.speed += (targetSpeed - agent.speed) * (1 - Math.exp(-2.8 * dt));
+    agent.speed = expLerp(agent.speed, targetSpeed, 2.8, dt);
 
     agent.position.x += Math.sin(agent.heading) * agent.speed * dt;
     agent.position.z += Math.cos(agent.heading) * agent.speed * dt;
@@ -310,7 +332,7 @@ export class AmbientTrafficSystem {
     agent.behavior =
       playerDistance < agent.collisionRadius + PLAYER_COLLISION_RADIUS
         ? 'contact'
-        : avoidanceProgress > 0.22 || playerSlowdown < 0.94
+        : !encounterLocked && (avoidanceProgress > 0.22 || playerSlowdown < 0.94)
           ? 'yielding'
           : 'cruising';
 
@@ -326,6 +348,7 @@ export class AmbientTrafficSystem {
     let blocking = false;
     let collision = false;
     let sourceId: string | null = null;
+    let sourcePosition: THREE.Vector3 | null = null;
     this.#playerInteractionCorrection.set(0, 0, 0);
     this.#playerInteractionImpulse.set(0, 0, 0);
 
@@ -350,6 +373,7 @@ export class AmbientTrafficSystem {
 
       collision = true;
       sourceId ??= agent.id;
+      sourcePosition ??= agent.position.clone();
       if (distance < 0.001) {
         this.#playerToAgent.set(
           Math.sin(agent.heading + Math.PI * 0.5),
@@ -388,6 +412,7 @@ export class AmbientTrafficSystem {
       blocking,
       collision,
       sourceId,
+      sourcePosition,
       correction: this.#playerInteractionCorrection.clone(),
       impulse: this.#playerInteractionImpulse.clone(),
     };
@@ -413,10 +438,8 @@ export class AmbientTrafficSystem {
       this.#groundNormal,
       this.#correctedForward,
     );
-    const quaternion = new THREE.Quaternion().setFromRotationMatrix(
-      this.#basisMatrix,
-    );
-    agent.vehicle.setPose(agent.position, quaternion);
+    this.#poseQuaternion.setFromRotationMatrix(this.#basisMatrix);
+    agent.vehicle.setPose(agent.position, this.#poseQuaternion);
     agent.vehicle.updateVisuals(dt, agent.state);
 
     for (let index = 0; index < VEHICLE_WHEEL_OFFSETS.length; index += 1) {

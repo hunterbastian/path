@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GameTuning } from '../config/GameTuning';
+import { expDecay, expLerp } from '../core/math';
 import { InputManager } from '../core/InputManager';
 import type { WeatherSnapshot } from '../gameplay/WeatherState';
 import type { AmbientTrafficPlayerInteraction } from '../world/AmbientTrafficSystem';
@@ -33,16 +34,17 @@ export class VehicleController {
   readonly #worldUp = new THREE.Vector3(0, 1, 0);
   readonly #downhill = new THREE.Vector3();
   readonly #surfaceNormal = new THREE.Vector3(0, 1, 0);
+  readonly #roadPull = new THREE.Vector3();
   readonly #forward = new THREE.Vector3(0, 0, 1);
   readonly #right = new THREE.Vector3(1, 0, 0);
   readonly #correctedForward = new THREE.Vector3(0, 0, 1);
   readonly #landingBounceBySurface: Record<DriveSurface, number> = {
-    dirt: 0.24,
-    sand: 0.06,
-    grass: 0.16,
-    rock: 0.28,
-    snow: 0.22,
-    water: 0.04,
+    dirt: 0.14,
+    sand: 0.03,
+    grass: 0.10,
+    rock: 0.18,
+    snow: 0.12,
+    water: 0.02,
   };
   #heading = 0;
   #steering = 0;
@@ -52,9 +54,18 @@ export class VehicleController {
   #surfaceBuildup = 0;
   #airborneTime = 0;
   #time = 0;
+  #roadInfluence = 0;
+  #rutPullStrength = 0;
 
   get heading(): number {
     return this.#heading;
+  }
+
+  get surfaceFeedback(): { roadInfluence: number; rutPullStrength: number } {
+    return {
+      roadInfluence: this.#roadInfluence,
+      rutPullStrength: this.#rutPullStrength,
+    };
   }
 
   constructor(
@@ -81,6 +92,8 @@ export class VehicleController {
     this.#sinkDepth = 0;
     this.#surfaceBuildup = 0;
     this.#airborneTime = 0;
+    this.#roadInfluence = 0;
+    this.#rutPullStrength = 0;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeOrientation();
     this.#updateWheelData();
@@ -102,6 +115,8 @@ export class VehicleController {
     this.#sinkDepth = 0;
     this.#surfaceBuildup = 0;
     this.#airborneTime = 0;
+    this.#roadInfluence = 0;
+    this.#rutPullStrength = 0;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeOrientation();
     this.#updateWheelData();
@@ -118,6 +133,8 @@ export class VehicleController {
     this.#sinkDepth = 0;
     this.#surfaceBuildup = 0;
     this.#airborneTime = 0;
+    this.#roadInfluence = 0;
+    this.#rutPullStrength = 0;
     this.state.speed = 0;
     this.state.forwardSpeed = 0;
     this.state.lateralSpeed = 0;
@@ -145,6 +162,16 @@ export class VehicleController {
     interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
   ): void {
     if (!interaction.collision) return;
+
+    const collisionMagnitude = interaction.impulse.length();
+    if (collisionMagnitude > this.state.impactMagnitude) {
+      this.state.impactMagnitude = collisionMagnitude;
+      if (collisionMagnitude > 0.001) {
+        this.state.impactDirection
+          .copy(interaction.impulse)
+          .normalize();
+      }
+    }
 
     this.position.add(interaction.correction);
     const halfSize = this.#terrain.size * 0.5 - 2;
@@ -178,10 +205,12 @@ export class VehicleController {
     dt: number,
     input: InputManager,
     controlsEnabled: boolean,
-    weather: Pick<WeatherSnapshot, 'gripMultiplier' | 'dragMultiplier'>,
+    weather: Pick<WeatherSnapshot, 'gripMultiplier' | 'dragMultiplier' | 'rainDensity'>,
   ): void {
     this.#time += dt;
     const previousGrounded = this.state.isGrounded;
+    this.state.impactMagnitude = 0;
+    this.state.impactDirection.set(0, 0, 0);
 
     const throttleIntent = controlsEnabled ? input.throttle : 0;
 
@@ -209,6 +238,8 @@ export class VehicleController {
     const bogFactor = currentSurface === 'sand'
       ? 1 - THREE.MathUtils.clamp(this.#sinkDepth / maxSandSinkDepth, 0, 1) * 0.42
       : 1;
+    this.#roadInfluence = this.#terrain.getRoadInfluence(this.position.x, this.position.z);
+    this.#rutPullStrength = 0;
     this.#surfaceNormal.copy(
       previousGrounded
         ? this.#terrain.getNormalAt(this.position.x, this.position.z)
@@ -250,9 +281,7 @@ export class VehicleController {
       tuning.steerResponse
       * (Math.abs(steerInput) < 0.01 ? 1.35 : 1)
       * (planarSpeed < 8 ? 1.16 : 1);
-    this.#steering +=
-      (steerInput - this.#steering) *
-      (1 - Math.exp(-steeringResponse * dt));
+    this.#steering = expLerp(this.#steering, steerInput, steeringResponse, dt);
 
     if (driveThrottle !== 0) {
       const acceleration = driveThrottle > 0
@@ -371,6 +400,28 @@ export class VehicleController {
       }
     }
 
+    if (previousGrounded && currentSurface === 'dirt' && this.#roadInfluence > 0.16) {
+      const sampleDistance = 2.8;
+      const roadGradientX =
+        this.#terrain.getRoadInfluence(this.position.x + sampleDistance, this.position.z)
+        - this.#terrain.getRoadInfluence(this.position.x - sampleDistance, this.position.z);
+      const roadGradientZ =
+        this.#terrain.getRoadInfluence(this.position.x, this.position.z + sampleDistance)
+        - this.#terrain.getRoadInfluence(this.position.x, this.position.z - sampleDistance);
+      this.#roadPull.set(roadGradientX, 0, roadGradientZ);
+      const roadGradientStrength = this.#roadPull.length();
+      if (roadGradientStrength > 0.0001) {
+        this.#roadPull.multiplyScalar(1 / roadGradientStrength);
+        const rutStrength =
+          THREE.MathUtils.lerp(0, 3.6, this.#roadInfluence)
+          * THREE.MathUtils.lerp(1, 1.3, weather.rainDensity)
+          * THREE.MathUtils.lerp(0.7, 1.15, THREE.MathUtils.clamp(planarSpeed / 12, 0, 1));
+        this.#rutPullStrength = rutStrength;
+        this.velocity.x += this.#roadPull.x * rutStrength * dt;
+        this.velocity.z += this.#roadPull.z * rutStrength * dt;
+      }
+    }
+
     const sinkDrag = currentSurface === 'sand'
       ? THREE.MathUtils.clamp(this.#sinkDepth * 4.5, 0, 1.2)
       : 0;
@@ -441,9 +492,9 @@ export class VehicleController {
       + (counterSteering ? tuning.counterSteer * 1.6 : 0)
       + (braking ? 1.25 : 0)
       + (Math.abs(this.#steering) < 0.05 ? 1.2 : 0.2);
-    this.#yawVelocity *= Math.exp(-yawDamping * dt);
+    this.#yawVelocity = expDecay(this.#yawVelocity, yawDamping, dt);
     if (planarSpeed < 1.4) {
-      this.#yawVelocity *= Math.exp(-10 * dt);
+      this.#yawVelocity = expDecay(this.#yawVelocity, 10, dt);
     }
     this.#heading += this.#yawVelocity * dt;
 
@@ -520,11 +571,11 @@ export class VehicleController {
         0,
         1,
       );
-      this.#sinkDepth += (sinkTarget - this.#sinkDepth) * (1 - Math.exp(-4.4 * dt));
-      this.#surfaceBuildup += (buildupTarget - this.#surfaceBuildup) * (1 - Math.exp(-3.6 * dt));
+      this.#sinkDepth = expLerp(this.#sinkDepth, sinkTarget, 4.4, dt);
+      this.#surfaceBuildup = expLerp(this.#surfaceBuildup, buildupTarget, 3.6, dt);
     } else {
-      this.#sinkDepth += (0 - this.#sinkDepth) * (1 - Math.exp(-5.8 * dt));
-      this.#surfaceBuildup += (0 - this.#surfaceBuildup) * (1 - Math.exp(-4.5 * dt));
+      this.#sinkDepth = expLerp(this.#sinkDepth, 0, 5.8, dt);
+      this.#surfaceBuildup = expLerp(this.#surfaceBuildup, 0, 4.5, dt);
     }
 
     const finalSurfaceSample = this.#sampleSurfaceAt(
@@ -559,9 +610,14 @@ export class VehicleController {
     }
     landedThisFrame = !previousGrounded && isGrounded && impactVelocity < -0.9;
     if (landedThisFrame) {
+      const landingImpact = Math.abs(impactVelocity);
+      if (landingImpact > this.state.impactMagnitude) {
+        this.state.impactMagnitude = landingImpact;
+        this.state.impactDirection.set(0, -1, 0);
+      }
       const landingBounceScale = this.#landingBounceBySurface[resolvedSurface];
       const reboundVelocity = Math.min(
-        Math.abs(impactVelocity) * landingBounceScale + 0.14,
+        landingImpact * landingBounceScale + 0.14,
         1.55,
       );
       if (reboundVelocity > 0.08) {

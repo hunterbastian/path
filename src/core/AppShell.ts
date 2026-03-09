@@ -54,6 +54,7 @@ interface AppShellElements {
   restartButton: HTMLButtonElement;
   pause: HTMLDivElement;
   pauseResumeButton: HTMLButtonElement;
+  pauseGodModeButton: HTMLButtonElement;
   pauseRestartButton: HTMLButtonElement;
   titleWeather: HTMLSpanElement;
   titleAudio: HTMLSpanElement;
@@ -90,8 +91,8 @@ export class AppShell {
 
         <div id="loading" class="screen loading-screen" aria-live="polite">
           <div class="loading-card">
-            <div class="loading-title">PATH</div>
-            <div class="loading-copy">loading route, weather, and terrain</div>
+            <div class="loading-title">Path</div>
+            <div class="loading-copy">loading terrain / weather / relay feed</div>
           </div>
         </div>
 
@@ -102,30 +103,29 @@ export class AppShell {
         >
           <div class="title-card">
             <div class="title-topline">
-              <div class="title-kicker">Relay Basin Survey</div>
-              <div class="title-edition">Field Notes 01</div>
+              <div class="title-kicker">Path</div>
             </div>
             <div class="title-hero">
               <div class="title-copy-block">
-                <div class="title-region">Tower Basin route, wet season</div>
+                <div class="title-region">tower basin / live weather cycle</div>
                 <div class="title-name">Path</div>
                 <div class="title-rule"></div>
                 <p class="title-copy">
-                  Drive through rain, snow, sand, and meltwater to reach the summit
-                  relay on the last marked route below the mountain.
+                  Drive the last dirt line below Tower Mountain and bring the
+                  summit relay back online.
                 </p>
               </div>
-              <div class="title-preview-shell" aria-label="Early alpha preview reel">
+              <div class="title-preview-shell" aria-label="Embedded alpha preview">
                 <div class="title-preview-topline">
-                  <span class="title-preview-kicker">Alpha reel</span>
-                  <span class="title-preview-meta">Remotion loop / 00:08</span>
+                  <span class="title-preview-kicker">Embedded preview</span>
+                  <span class="title-preview-meta">loop / 00:08</span>
                 </div>
                 <div class="title-preview-frame">
                   <div id="title-alpha-preview" class="title-alpha-preview"></div>
                 </div>
                 <div class="title-preview-notes">
-                  <span>Seeded terrain</span>
-                  <span>Weather shifts</span>
+                  <span>Dirt paths</span>
+                  <span>Weather cycle</span>
                   <span>Relay route</span>
                 </div>
               </div>
@@ -141,40 +141,40 @@ export class AppShell {
               </div>
               <div class="title-fact title-fact--objective">
                 <span class="title-fact-label">Objective</span>
-                <span class="title-fact-value">Reach the summit relay</span>
+                <span class="title-fact-value">Bring the summit relay online</span>
               </div>
               <div class="title-fact title-fact--terrain">
                 <span class="title-fact-label">Terrain</span>
-                <span class="title-fact-value">Basin tracks and melt seams</span>
+                <span class="title-fact-value">Dirt paths, snow, meltwater</span>
               </div>
             </div>
             <div class="title-actions">
               <button id="start-button" class="start-button" type="button">
-                Start Drive
+                Enter Route
               </button>
-              <div class="title-meta">Press Enter, Start, or A to start</div>
+              <div class="title-meta">Press Enter, Start, or A</div>
             </div>
             <div class="title-controls">
-              <div class="title-controls-heading">Controls</div>
+              <div class="title-controls-heading">Quick keys</div>
               <div class="title-controls-grid">
                 <div class="title-control-item">
-                  <span>Accelerate / steer</span>
+                  <span>Drive</span>
                   <strong>WASD or arrow keys</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Brake / reverse / boost</span>
-                  <strong>S or Down brakes first, Shift slide-brakes, Space boosts</strong>
+                  <span>Brake / boost</span>
+                  <strong>S brakes first, Shift slide-brakes, Space boosts</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Navigation</span>
-                  <strong>Press M to open the map</strong>
+                  <span>Map / menu</span>
+                  <strong>M map, Esc menu, R reset</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Reset / view</span>
-                  <strong>Press Esc for the menu, R to reset, drag to orbit, double-click to center</strong>
+                  <span>View</span>
+                  <strong>Drag to orbit, double-click to center, god mode free-flies</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Controller</span>
+                  <span>Gamepad</span>
                   <strong>Left stick steers, RT drives, LT brakes, A boosts</strong>
                 </div>
               </div>
@@ -249,6 +249,13 @@ export class AppShell {
                 Resume Drive
               </button>
               <button
+                id="pause-god-mode-button"
+                class="start-button start-button--secondary"
+                type="button"
+              >
+                Enter God Mode
+              </button>
+              <button
                 id="pause-restart-button"
                 class="start-button start-button--secondary"
                 type="button"
@@ -256,7 +263,7 @@ export class AppShell {
                 Restart Run
               </button>
             </div>
-            <div class="pause-meta">Press Esc or Start to close</div>
+            <div class="pause-meta">Press Esc or Start to close. Esc in god mode returns to drive.</div>
           </div>
         </section>
 
@@ -302,8 +309,7 @@ export class AppShell {
           <div class="map-shell">
             <div class="map-topline">
               <div class="map-led"></div>
-              <div class="map-brand">Path Field Nav</div>
-              <div class="map-brand map-brand-right">DMG-TRK</div>
+              <div class="map-brand">Path</div>
             </div>
             <div class="map-screen-wrap">
               <canvas
@@ -315,7 +321,7 @@ export class AppShell {
             </div>
             <div class="map-footer">
               <span id="map-status" class="map-status">Summit relay 0 m away</span>
-              <span class="map-meta">Press M or Y to close</span>
+              <span class="map-meta">M or Y closes</span>
             </div>
             <div class="map-controls">
               <div class="map-dpad">
@@ -343,6 +349,7 @@ export class AppShell {
       restartButton: this.#query(root, '#restart-button'),
       pause: this.#query(root, '#pause-screen'),
       pauseResumeButton: this.#query(root, '#pause-resume-button'),
+      pauseGodModeButton: this.#query(root, '#pause-god-mode-button'),
       pauseRestartButton: this.#query(root, '#pause-restart-button'),
       titleWeather: this.#query(root, '#title-weather'),
       titleAudio: this.#query(root, '#title-audio'),
@@ -435,6 +442,10 @@ export class AppShell {
 
   bindPauseResume(handler: () => void): void {
     this.elements.pauseResumeButton.addEventListener('click', handler);
+  }
+
+  bindPauseGodMode(handler: () => void): void {
+    this.elements.pauseGodModeButton.addEventListener('click', handler);
   }
 
   bindPauseRestart(handler: () => void): void {

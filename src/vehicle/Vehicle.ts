@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { expLerp } from '../core/math';
 import { DrivingState } from './DrivingState';
+import { VehicleDamage } from './VehicleDamage';
 import { VEHICLE_WHEEL_OFFSETS } from './vehicleShared';
 
 export interface VehicleOptions {
@@ -9,23 +11,31 @@ export interface VehicleOptions {
   trimColor?: THREE.ColorRepresentation;
   markerColor?: THREE.ColorRepresentation;
   boostColor?: THREE.ColorRepresentation;
+  headlightColor?: THREE.ColorRepresentation;
 }
 
 export class Vehicle {
   readonly mesh = new THREE.Group();
+  readonly damage: VehicleDamage;
   readonly #bodyVisual = new THREE.Group();
   readonly #wheelMounts: THREE.Group[] = [];
   readonly #wheelMeshes: THREE.Mesh[] = [];
   readonly #boostStripMaterial: THREE.MeshStandardMaterial;
   readonly #sandBermMaterial: THREE.MeshStandardMaterial;
   readonly #sandBerms: THREE.Mesh[] = [];
+  readonly #headlightMaterials: THREE.MeshStandardMaterial[] = [];
+  readonly #headlights: Array<{
+    light: THREE.SpotLight;
+    baseIntensity: number;
+  }> = [];
   #bodyRoll = 0;
   #bodyPitch = 0;
   #bodySink = 0;
   #bodyHeave = 0;
   #bodyHeaveVelocity = 0;
 
-  constructor(scene: THREE.Scene, options: VehicleOptions = {}) {
+  constructor(scene: THREE.Scene, options: VehicleOptions = {}, damage?: VehicleDamage) {
+    this.damage = damage ?? new VehicleDamage(scene);
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: options.bodyColor ?? 0x586859,
       roughness: 0.82,
@@ -67,6 +77,8 @@ export class Vehicle {
       roughness: 0.34,
       metalness: 0.28,
     });
+    const headlightColor = options.headlightColor ?? 0xf8f2df;
+    const lightScale = options.scale ?? 1;
     this.#boostStripMaterial = new THREE.MeshStandardMaterial({
       color: options.boostColor ?? 0x954c33,
       emissive: options.boostColor ?? 0xff8f48,
@@ -104,6 +116,8 @@ export class Vehicle {
     this.#bodyVisual.add(this.#box(this.#boostStripMaterial, [0.92, 0.12, 0.12], [0, 0.34, -2.34]));
     this.#bodyVisual.add(this.#box(markerMaterial, [0.2, 0.1, 0.08], [-0.64, 0.35, 2.34]));
     this.#bodyVisual.add(this.#box(markerMaterial, [0.2, 0.1, 0.08], [0.64, 0.35, 2.34]));
+    this.#addHeadlight([-0.56, 0.1, 2.33], headlightColor, lightScale);
+    this.#addHeadlight([0.56, 0.1, 2.33], headlightColor, lightScale);
 
     const brushGuard = new THREE.Group();
     brushGuard.position.set(0, 0.04, 2.4);
@@ -124,18 +138,86 @@ export class Vehicle {
     rack.add(this.#cylinder(trimMaterial, 0.11, 0.62, [0.52, 0.12, -0.44], [0, 0, Math.PI / 2]));
     this.#bodyVisual.add(rack);
 
-    const sliderLeft = this.#box(metalMaterial, [0.14, 0.14, 2.84], [-1.08, -0.12, -0.08]);
-    const sliderRight = this.#box(metalMaterial, [0.14, 0.14, 2.84], [1.08, -0.12, -0.08]);
-    this.#bodyVisual.add(sliderLeft, sliderRight);
+    const sliderLeftGroup = new THREE.Group();
+    sliderLeftGroup.add(this.#box(metalMaterial, [0.14, 0.14, 2.84], [-1.08, -0.12, -0.08]));
+    this.#bodyVisual.add(sliderLeftGroup);
 
-    const spare = this.#wheel(metalMaterial);
-    spare.scale.setScalar(0.82);
-    spare.position.set(0, 0.7, -2.38);
-    spare.rotation.y = Math.PI / 2;
-    this.#bodyVisual.add(spare);
+    const sliderRightGroup = new THREE.Group();
+    sliderRightGroup.add(this.#box(metalMaterial, [0.14, 0.14, 2.84], [1.08, -0.12, -0.08]));
+    this.#bodyVisual.add(sliderRightGroup);
 
-    const antenna = this.#cylinder(metalMaterial, 0.02, 0.94, [-0.72, 1.42, -1.18], [0.06, 0, 0]);
-    this.#bodyVisual.add(antenna);
+    const spareGroup = new THREE.Group();
+    spareGroup.position.set(0, 0.7, -2.38);
+    const spareWheel = this.#wheel(metalMaterial);
+    spareWheel.scale.setScalar(0.82);
+    spareWheel.rotation.y = Math.PI / 2;
+    spareGroup.add(spareWheel);
+    this.#bodyVisual.add(spareGroup);
+
+    const antennaGroup = new THREE.Group();
+    antennaGroup.add(this.#cylinder(metalMaterial, 0.02, 0.94, [-0.72, 1.42, -1.18], [0.06, 0, 0]));
+    this.#bodyVisual.add(antennaGroup);
+
+    this.damage.registerPart({
+      name: 'brushGuard',
+      group: brushGuard,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.18,
+      detachThreshold: 4,
+      directionalBias: new THREE.Vector3(0, 0, 1),
+      directionalWeight: 0.7,
+    });
+    this.damage.registerPart({
+      name: 'roofRack',
+      group: rack,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.12,
+      detachThreshold: 6,
+      directionalBias: new THREE.Vector3(0, -1, 0),
+      directionalWeight: 0.5,
+    });
+    this.damage.registerPart({
+      name: 'spareTire',
+      group: spareGroup,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.15,
+      detachThreshold: 5,
+      directionalBias: new THREE.Vector3(0, 0, -1),
+      directionalWeight: 0.6,
+    });
+    this.damage.registerPart({
+      name: 'antenna',
+      group: antennaGroup,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.35,
+      detachThreshold: 2.5,
+      directionalBias: new THREE.Vector3(0, 0, 0),
+      directionalWeight: 0,
+    });
+    this.damage.registerPart({
+      name: 'sliderLeft',
+      group: sliderLeftGroup,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.14,
+      detachThreshold: 5,
+      directionalBias: new THREE.Vector3(-1, 0, 0),
+      directionalWeight: 0.65,
+    });
+    this.damage.registerPart({
+      name: 'sliderRight',
+      group: sliderRightGroup,
+      parent: this.#bodyVisual,
+      health: 1,
+      fragility: 0.14,
+      detachThreshold: 5,
+      directionalBias: new THREE.Vector3(1, 0, 0),
+      directionalWeight: 0.65,
+    });
 
     const bermGeometry = new THREE.SphereGeometry(0.52, 14, 10);
     const bermConfigs = [
@@ -242,14 +324,21 @@ export class Vehicle {
       this.#bodyHeave = 0;
       this.#bodyHeaveVelocity = 0;
     }
-    this.#bodyRoll += (targetRoll - this.#bodyRoll) * (1 - Math.exp(-8 * dt));
-    this.#bodyPitch += (targetPitch - this.#bodyPitch) * (1 - Math.exp(-8 * dt));
-    this.#bodySink += (targetSink - this.#bodySink) * (1 - Math.exp(-9 * dt));
+    this.#bodyRoll = expLerp(this.#bodyRoll, targetRoll, 8, dt);
+    this.#bodyPitch = expLerp(this.#bodyPitch, targetPitch, 8, dt);
+    this.#bodySink = expLerp(this.#bodySink, targetSink, 9, dt);
     this.#bodyVisual.position.y = -(this.#bodySink + this.#bodyHeave);
     this.#bodyVisual.rotation.z = this.#bodyRoll;
     this.#bodyVisual.rotation.x = this.#bodyPitch;
 
     this.#boostStripMaterial.emissiveIntensity = state.isBoosting ? 1.8 : 0.7;
+    for (const material of this.#headlightMaterials) {
+      material.emissiveIntensity = state.isGrounded ? 1.85 : 1.55;
+    }
+    for (const headlight of this.#headlights) {
+      headlight.light.intensity =
+        headlight.baseIntensity * (state.isGrounded ? 1 : 0.9);
+    }
     this.#sandBermMaterial.opacity =
       state.surface === 'sand'
         ? THREE.MathUtils.clamp(0.08 + state.surfaceBuildup * 0.26 + state.sinkDepth * 0.6, 0, 0.42)
@@ -316,6 +405,44 @@ export class Vehicle {
     tire.add(hub);
 
     return tire;
+  }
+
+  #addHeadlight(
+    position: [number, number, number],
+    color: THREE.ColorRepresentation,
+    scale: number,
+  ): void {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 1.85,
+      roughness: 0.18,
+      metalness: 0.04,
+    });
+    const housing = this.#box(material, [0.22, 0.11, 0.08], position);
+    this.#headlightMaterials.push(material);
+    this.#bodyVisual.add(housing);
+
+    const light = new THREE.SpotLight(
+      color,
+      6.4 * scale,
+      34 * scale,
+      Math.PI / 8.5,
+      0.5,
+      1.4,
+    );
+    light.position.set(position[0], position[1] - 0.01, position[2] - 0.05);
+    light.castShadow = false;
+    light.decay = 1.35;
+    const target = new THREE.Object3D();
+    target.position.set(position[0] * 0.35, position[1] - 0.24, 22 * scale);
+    this.mesh.add(light);
+    this.mesh.add(target);
+    light.target = target;
+    this.#headlights.push({
+      light,
+      baseIntensity: 6.4 * scale,
+    });
   }
 
   #box(

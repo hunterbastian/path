@@ -29,6 +29,7 @@ export class WeatherState {
   readonly #rainSystem: RainSystem;
   #elapsedSeconds = 0;
   #activeProfileIndex = -1;
+  #forcedCondition: WeatherCondition | null = null;
   #snapshot: WeatherSnapshot;
 
   constructor(tuning: GameTuning, sky: Sky, rainSystem: RainSystem) {
@@ -62,14 +63,34 @@ export class WeatherState {
     return this.#snapshot;
   }
 
+  forceCondition(condition: WeatherCondition | null): WeatherSnapshot {
+    this.#forcedCondition = condition;
+    return this.update(0, 1);
+  }
+
   update(dt: number, routeActivity: number): WeatherSnapshot {
     const weatherTuning = this.#tuning.weather;
     const profileCount = Math.max(weatherTuning.profiles.length, 1);
     const cycleDuration = Math.max(1, weatherTuning.cycleDurationSeconds);
-    this.#elapsedSeconds += dt;
-    const cycleTime = this.#elapsedSeconds % (cycleDuration * profileCount);
-    const cycleIndex = Math.floor(cycleTime / cycleDuration) % profileCount;
-    const activeProfile = this.#getProfile(cycleIndex);
+    let cycleIndex = 0;
+    let cycleTime = 0;
+    let activeProfile: WeatherProfile;
+
+    if (this.#forcedCondition) {
+      cycleIndex = Math.max(
+        0,
+        weatherTuning.profiles.findIndex(
+          (profile) => profile.condition === this.#forcedCondition,
+        ),
+      );
+      cycleTime = cycleIndex * cycleDuration;
+      activeProfile = this.#getProfile(cycleIndex);
+    } else {
+      this.#elapsedSeconds += dt;
+      cycleTime = this.#elapsedSeconds % (cycleDuration * profileCount);
+      cycleIndex = Math.floor(cycleTime / cycleDuration) % profileCount;
+      activeProfile = this.#getProfile(cycleIndex);
+    }
 
     if (cycleIndex !== this.#activeProfileIndex) {
       this.#activeProfileIndex = cycleIndex;
@@ -84,9 +105,9 @@ export class WeatherState {
     const fogNear = activeProfile.fogNear * fogDistanceMultiplier;
     const fogFar = activeProfile.fogFar * fogDistanceMultiplier;
     const mistStrength = activeProfile.mistStrength * THREE.MathUtils.lerp(0.72, 1, routeActivity);
-    const secondsUntilChange = Number(
-      (cycleDuration - (cycleTime % cycleDuration)).toFixed(1),
-    );
+    const secondsUntilChange = this.#forcedCondition
+      ? cycleDuration
+      : Number((cycleDuration - (cycleTime % cycleDuration)).toFixed(1));
 
     this.#rainSystem.setDensityScale(density);
     this.#sky.setAtmosphere(fogNear, fogFar, mistStrength);

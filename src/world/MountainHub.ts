@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyProceduralParallax } from '../render/applyProceduralParallax';
 
 function createBeam(
   start: THREE.Vector3,
@@ -80,6 +81,30 @@ export class MountainHub {
       roughness: 0.2,
       metalness: 0.04,
     });
+    applyProceduralParallax(concrete, {
+      kind: 'concrete',
+      strength: 0.085,
+      scale: 0.34,
+      secondaryScale: 3.0,
+    });
+    applyProceduralParallax(heavyConcrete, {
+      kind: 'concrete',
+      strength: 0.11,
+      scale: 0.4,
+      secondaryScale: 3.3,
+    });
+    applyProceduralParallax(steel, {
+      kind: 'steel',
+      strength: 0.05,
+      scale: 0.38,
+      secondaryScale: 2.1,
+    });
+    applyProceduralParallax(darkSteel, {
+      kind: 'steel',
+      strength: 0.06,
+      scale: 0.44,
+      secondaryScale: 2.4,
+    });
 
     const box = (
       width: number,
@@ -160,10 +185,17 @@ export class MountainHub {
     }
 
     const apron = box(18, 0.24, 12, darkSteel, 0, 0.12, 20.6);
-    apron.material = new THREE.MeshStandardMaterial({
+    const apronMaterial = new THREE.MeshStandardMaterial({
       color: 0x2d3133,
       roughness: 0.9,
       metalness: 0.06,
+    });
+    apron.material = apronMaterial;
+    applyProceduralParallax(apronMaterial, {
+      kind: 'steel',
+      strength: 0.045,
+      scale: 0.34,
+      secondaryScale: 2.1,
     });
     box(10.8, 0.16, 0.2, this.#windowMaterial, 0, 0.22, 24.6, undefined, false);
 

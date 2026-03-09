@@ -11,6 +11,15 @@ export interface SplashConfig {
   jitter: number;
 }
 
+interface SplashSystemOptions {
+  capacity?: number;
+  color?: THREE.ColorRepresentation;
+  opacity?: number;
+  gravity?: number;
+  drag?: number;
+  fade?: (lifeFraction: number) => number;
+}
+
 export const SHALLOW_SPLASH: SplashConfig = {
   size: 0.85,
   growth: 1.0,
@@ -33,16 +42,21 @@ export class SplashSystem {
   readonly #field: SpriteParticleField;
   readonly #random = new SeededRandom(0x53504c53);
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, options: SplashSystemOptions = {}) {
     this.#field = new SpriteParticleField(scene, {
-      capacity: 220,
-      color: 0x8fd0dc,
-      opacity: 0.42,
-      gravity: -8.2,
-      drag: 0.92,
-      fade: (lifeFraction) =>
-        lifeFraction < 0.55 ? 1 : 1 - (lifeFraction - 0.55) / 0.45,
+      capacity: options.capacity ?? 220,
+      color: options.color ?? 0x8fd0dc,
+      opacity: options.opacity ?? 0.42,
+      gravity: options.gravity ?? -8.2,
+      drag: options.drag ?? 0.92,
+      fade: options.fade
+        ?? ((lifeFraction) =>
+          lifeFraction < 0.55 ? 1 : 1 - (lifeFraction - 0.55) / 0.45),
     });
+  }
+
+  get activeCount(): number {
+    return this.#field.activeCount;
   }
 
   emit(
@@ -72,5 +86,9 @@ export class SplashSystem {
 
   update(dt: number): void {
     this.#field.update(dt);
+  }
+
+  dispose(): void {
+    this.#field.dispose();
   }
 }

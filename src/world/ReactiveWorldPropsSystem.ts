@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { expDecay } from '../core/math';
 import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
 import type { Terrain } from './Terrain';
 
@@ -39,6 +40,8 @@ export interface ReactivePropDebugState {
 }
 
 const PLAYER_COLLISION_RADIUS = 1.45;
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _offset = new THREE.Vector3();
 
 export class ReactiveWorldPropsSystem {
   readonly #terrain: Terrain;
@@ -127,7 +130,7 @@ export class ReactiveWorldPropsSystem {
         prop.position.addScaledVector(prop.velocity, dt);
         prop.position.y =
           this.#terrain.getHeightAt(prop.position.x, prop.position.z) + prop.baseHeight;
-        prop.velocity.multiplyScalar(Math.exp(-3.8 * dt));
+        prop.velocity.multiplyScalar(expDecay(1, 3.8, dt));
       } else {
         prop.position.y =
           this.#terrain.getHeightAt(prop.position.x, prop.position.z) + prop.baseHeight;
@@ -137,7 +140,7 @@ export class ReactiveWorldPropsSystem {
       const spring = prop.toppled ? 5.4 : 16;
       const damping = prop.toppled ? 6.2 : 8.8;
       prop.leanVelocity += (targetLean - prop.leanAngle) * spring * dt;
-      prop.leanVelocity *= Math.exp(-damping * dt);
+      prop.leanVelocity = expDecay(prop.leanVelocity, damping, dt);
       prop.leanAngle += prop.leanVelocity * dt;
       if (!prop.toppled && Math.abs(prop.leanAngle) < 0.002 && Math.abs(prop.leanVelocity) < 0.01) {
         prop.leanAngle = 0;
@@ -151,9 +154,9 @@ export class ReactiveWorldPropsSystem {
         prop.pivot.quaternion.identity();
       }
 
-      const offset = playerPosition.clone().sub(prop.position);
-      offset.y = 0;
-      let distance = offset.length();
+      _offset.copy(playerPosition).sub(prop.position);
+      _offset.y = 0;
+      let distance = _offset.length();
       const clearance = distance - (PLAYER_COLLISION_RADIUS + prop.collisionRadius);
       nearestDistanceMeters = Math.min(nearestDistanceMeters, clearance);
       if (clearance >= 0 || prop.hitCooldown > 0 || playerPlanarSpeed < 1.6) {
@@ -166,18 +169,18 @@ export class ReactiveWorldPropsSystem {
       collision = true;
       sourceId ??= prop.id;
       if (distance < 0.001) {
-        offset.set(1, 0, 0);
+        _offset.set(1, 0, 0);
         distance = 1;
       } else {
-        offset.multiplyScalar(1 / distance);
+        _offset.multiplyScalar(1 / distance);
       }
       const overlap = -clearance;
       this.#interactionCorrection.addScaledVector(
-        offset,
+        _offset,
         prop.shoveable ? overlap * 0.42 + 0.04 : overlap * 0.58 + 0.06,
       );
       this.#interactionImpulse.addScaledVector(
-        offset,
+        _offset,
         prop.shoveable
           ? 0.18 + playerPlanarSpeed * 0.12
           : 0.26 + playerPlanarSpeed * 0.14,
@@ -185,13 +188,13 @@ export class ReactiveWorldPropsSystem {
 
       if (prop.type === 'barrier' || prop.type === 'crate') {
         prop.velocity.addScaledVector(
-          offset,
+          _offset,
           prop.type === 'crate'
             ? 1.2 + playerPlanarSpeed * 0.2
             : 0.7 + playerPlanarSpeed * 0.12,
         );
-        prop.leanAxis.set(offset.z, 0, -offset.x).applyAxisAngle(
-          new THREE.Vector3(0, 1, 0),
+        prop.leanAxis.set(_offset.z, 0, -_offset.x).applyAxisAngle(
+          _yAxis,
           -prop.yaw,
         ).normalize();
         prop.leanVelocity += 0.6 + playerPlanarSpeed * 0.14;
@@ -200,8 +203,8 @@ export class ReactiveWorldPropsSystem {
           prop.snapTarget = Math.min(0.62, 0.24 + playerPlanarSpeed * 0.03);
         }
       } else {
-        prop.leanAxis.set(offset.z, 0, -offset.x).applyAxisAngle(
-          new THREE.Vector3(0, 1, 0),
+        prop.leanAxis.set(_offset.z, 0, -_offset.x).applyAxisAngle(
+          _yAxis,
           -prop.yaw,
         ).normalize();
         prop.leanVelocity += 1.2 + playerPlanarSpeed * 0.24;

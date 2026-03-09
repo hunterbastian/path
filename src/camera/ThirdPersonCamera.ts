@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { GameTuning } from '../config/GameTuning';
+import type { InputManager } from '../core/InputManager';
+import { expDecay, expLerp } from '../core/math';
 import type { DrivingState } from '../vehicle/DrivingState';
 import type { Terrain } from '../world/Terrain';
 
@@ -41,6 +43,18 @@ export class ThirdPersonCamera {
   #driveImpact = 0;
   #driveFov = 60;
   #driveOcclusionPull = 0;
+  #godModeActive = false;
+  #godPosition = new THREE.Vector3();
+  #godDirection = new THREE.Vector3();
+  #godForward = new THREE.Vector3();
+  #godRight = new THREE.Vector3();
+  #godMove = new THREE.Vector3();
+  #godYaw = 0;
+  #godYawTarget = 0;
+  #godYawMomentum = 0;
+  #godPitch = 0;
+  #godPitchTarget = 0;
+  #godPitchMomentum = 0;
 
   constructor(tuning: GameTuning, terrain: Terrain, canvas: HTMLCanvasElement) {
     this.#tuning = tuning;
@@ -87,7 +101,57 @@ export class ThirdPersonCamera {
     this.#lookInitialized = false;
   }
 
+  enterGodMode(camera: THREE.PerspectiveCamera): void {
+    const godTuning = this.#tuning.camera.god;
+    this.#releasePointerCapture();
+    this.#godModeActive = true;
+    this.#godPosition.copy(camera.position);
+    camera.getWorldDirection(this.#godDirection);
+    this.#godYaw = Math.atan2(this.#godDirection.x, this.#godDirection.z);
+    this.#godPitch = THREE.MathUtils.clamp(
+      Math.asin(THREE.MathUtils.clamp(this.#godDirection.y, -0.98, 0.98)),
+      godTuning.pitchMin,
+      godTuning.pitchMax,
+    );
+    this.#godYawTarget = this.#godYaw;
+    this.#godPitchTarget = this.#godPitch;
+    this.#godYawMomentum = 0;
+    this.#godPitchMomentum = 0;
+    this.#currentPosition.copy(camera.position);
+    this.#currentLookTarget
+      .copy(camera.position)
+      .addScaledVector(this.#godDirection, 10);
+    this.#initialized = true;
+    this.#lookInitialized = true;
+  }
+
+  exitGodMode(): void {
+    this.#releasePointerCapture();
+    this.#godModeActive = false;
+  }
+
+  snapToDrive(
+    camera: THREE.PerspectiveCamera,
+    vehiclePosition: THREE.Vector3,
+    vehicleQuaternion: THREE.Quaternion,
+    state: DrivingState,
+    nextCheckpointPoint: THREE.Vector3 | null,
+  ): void {
+    this.#godModeActive = false;
+    this.#initialized = false;
+    this.#lookInitialized = false;
+    this.updateDrive(
+      1 / 60,
+      camera,
+      vehiclePosition,
+      vehicleQuaternion,
+      state,
+      nextCheckpointPoint,
+    );
+  }
+
   getDriveDebugState(): {
+    mode: 'drive' | 'god';
     heave: number;
     rollDegrees: number;
     motionTime: number;
@@ -101,8 +165,16 @@ export class ThirdPersonCamera {
     pitchTargetDegrees: number;
     returnDelayRemainingSeconds: number;
     returningToChase: boolean;
+    godPosition: { x: number; y: number; z: number } | null;
   } {
+    const yaw = this.#godModeActive ? this.#godYaw : this.#yawOrbit;
+    const yawTarget = this.#godModeActive ? this.#godYawTarget : this.#yawOrbitTarget;
+    const pitch = this.#godModeActive ? this.#godPitch : this.#pitchOrbit;
+    const pitchTarget = this.#godModeActive
+      ? this.#godPitchTarget
+      : this.#pitchOrbitTarget;
     return {
+      mode: this.#godModeActive ? 'god' : 'drive',
       heave: Number(this.#driveHeave.toFixed(3)),
       rollDegrees: Number(THREE.MathUtils.radToDeg(this.#driveRoll).toFixed(2)),
       motionTime: Number(this.#driveMotionTime.toFixed(2)),
@@ -110,18 +182,21 @@ export class ThirdPersonCamera {
       fov: Number(this.#driveFov.toFixed(2)),
       occlusionPull: Number(this.#driveOcclusionPull.toFixed(2)),
       dragging: this.#isDragging,
-      yawDegrees: Number(THREE.MathUtils.radToDeg(this.#yawOrbit).toFixed(2)),
-      yawTargetDegrees: Number(
-        THREE.MathUtils.radToDeg(this.#yawOrbitTarget).toFixed(2),
-      ),
-      pitchDegrees: Number(
-        THREE.MathUtils.radToDeg(this.#pitchOrbit).toFixed(2),
-      ),
+      yawDegrees: Number(THREE.MathUtils.radToDeg(yaw).toFixed(2)),
+      yawTargetDegrees: Number(THREE.MathUtils.radToDeg(yawTarget).toFixed(2)),
+      pitchDegrees: Number(THREE.MathUtils.radToDeg(pitch).toFixed(2)),
       pitchTargetDegrees: Number(
-        THREE.MathUtils.radToDeg(this.#pitchOrbitTarget).toFixed(2),
+        THREE.MathUtils.radToDeg(pitchTarget).toFixed(2),
       ),
       returnDelayRemainingSeconds: 0,
       returningToChase: false,
+      godPosition: this.#godModeActive
+        ? {
+            x: Number(this.#godPosition.x.toFixed(2)),
+            y: Number(this.#godPosition.y.toFixed(2)),
+            z: Number(this.#godPosition.z.toFixed(2)),
+          }
+        : null,
     };
   }
 
@@ -174,16 +249,14 @@ export class ThirdPersonCamera {
       0,
       0.34,
     );
-    this.#driveHeave +=
-      (targetHeave - this.#driveHeave) * (1 - Math.exp(-6.8 * dt));
+    this.#driveHeave = expLerp(this.#driveHeave, targetHeave, 6.8, dt);
     const targetRoll = THREE.MathUtils.clamp(
       -state.steering * driveTuning.rollStrength
         - state.lateralSpeed * 0.012,
       -0.12,
       0.12,
     );
-    this.#driveRoll +=
-      (targetRoll - this.#driveRoll) * (1 - Math.exp(-5.5 * dt));
+    this.#driveRoll = expLerp(this.#driveRoll, targetRoll, 5.5, dt);
     const shakeAmount = driveTuning.roughnessShake
       * roughness
       * THREE.MathUtils.clamp(speed / 24, 0, 1.2);
@@ -191,10 +264,7 @@ export class ThirdPersonCamera {
       ? driveTuning.landingKick
         + THREE.MathUtils.clamp(Math.abs(state.verticalSpeed) * 0.08, 0, 0.16)
       : 0;
-    this.#driveImpact = Math.max(
-      this.#driveImpact * Math.exp(-5.6 * dt),
-      landingKick,
-    );
+    this.#driveImpact = Math.max(expDecay(this.#driveImpact, 5.6, dt), landingKick);
     const lateralOffset = THREE.MathUtils.clamp(
       state.steering * driveTuning.steeringOffset
         + state.lateralSpeed * 0.05,
@@ -236,10 +306,7 @@ export class ThirdPersonCamera {
       this.#initialized = true;
     }
 
-    this.#currentPosition.lerp(
-      resolvedDesiredPosition,
-      1 - Math.exp(-5.4 * dt),
-    );
+    this.#currentPosition.lerp(resolvedDesiredPosition, 1 - Math.exp(-5.4 * dt));
     this.#currentPosition.y = Math.max(
       this.#currentPosition.y,
       this.#getTerrainFloor(this.#currentPosition) + terrainClearance * 0.92,
@@ -279,10 +346,7 @@ export class ThirdPersonCamera {
       this.#currentLookTarget.copy(lookTarget);
       this.#lookInitialized = true;
     }
-    this.#currentLookTarget.lerp(
-      lookTarget,
-      1 - Math.exp(-driveTuning.lookSmoothing * dt),
-    );
+    this.#currentLookTarget.lerp(lookTarget, 1 - Math.exp(-driveTuning.lookSmoothing * dt));
     const targetFov =
       driveTuning.fovBase
       + speedBlend * driveTuning.fovSpeedGain
@@ -401,14 +465,70 @@ export class ThirdPersonCamera {
     camera.lookAt(lookTarget);
   }
 
+  updateGodMode(
+    dt: number,
+    camera: THREE.PerspectiveCamera,
+    input: InputManager,
+  ): void {
+    const godTuning = this.#tuning.camera.god;
+    this.#updateGodLook(dt);
+
+    const forward = this.#godForward.set(
+      Math.sin(this.#godYaw),
+      0,
+      Math.cos(this.#godYaw),
+    );
+    const right = this.#godRight.set(
+      Math.cos(this.#godYaw),
+      0,
+      -Math.sin(this.#godYaw),
+    );
+    const vertical =
+      (input.boost ? 1 : 0)
+      - (input.brake ? 1 : 0)
+      + (input.isDown('KeyE') ? 1 : 0)
+      - (input.isDown('KeyQ') ? 1 : 0);
+    const move = this.#godMove
+      .set(0, 0, 0)
+      .addScaledVector(forward, input.throttle)
+      .addScaledVector(right, input.steering);
+    if (move.lengthSq() > 1) {
+      move.normalize();
+    }
+
+    this.#godPosition.addScaledVector(move, godTuning.moveSpeed * dt);
+    this.#godPosition.y += vertical * godTuning.verticalSpeed * dt;
+    this.#godPosition.y = Math.max(
+      this.#godPosition.y,
+      this.#getTerrainFloor(this.#godPosition) + godTuning.terrainClearance,
+    );
+
+    this.#currentPosition.copy(this.#godPosition);
+    camera.position.copy(this.#currentPosition);
+
+    const horizontalLength = Math.cos(this.#godPitch);
+    const direction = this.#godDirection
+      .set(
+        Math.sin(this.#godYaw) * horizontalLength,
+        Math.sin(this.#godPitch),
+        Math.cos(this.#godYaw) * horizontalLength,
+      )
+      .normalize();
+    this.#currentLookTarget
+      .copy(this.#godPosition)
+      .addScaledVector(direction, 14);
+    this.#updateCameraFov(camera, this.#tuning.camera.drive.fovBase, dt, 6.2);
+    camera.up.copy(this.#worldUp);
+    camera.lookAt(this.#currentLookTarget);
+  }
+
   #updateCameraFov(
     camera: THREE.PerspectiveCamera,
     targetFov: number,
     dt: number,
     response: number,
   ): void {
-    const blend = 1 - Math.exp(-response * dt);
-    camera.fov += (targetFov - camera.fov) * blend;
+    camera.fov = expLerp(camera.fov, targetFov, response, dt);
     this.#driveFov = camera.fov;
     camera.updateProjectionMatrix();
   }
@@ -465,10 +585,17 @@ export class ThirdPersonCamera {
     if (event.button !== 0) return;
     this.#isDragging = true;
     this.#pointerId = event.pointerId;
-    this.#yawOrbitTarget = this.#yawOrbit;
-    this.#pitchOrbitTarget = this.#pitchOrbit;
-    this.#yawOrbitMomentum = 0;
-    this.#pitchOrbitMomentum = 0;
+    if (this.#godModeActive) {
+      this.#godYawTarget = this.#godYaw;
+      this.#godPitchTarget = this.#godPitch;
+      this.#godYawMomentum = 0;
+      this.#godPitchMomentum = 0;
+    } else {
+      this.#yawOrbitTarget = this.#yawOrbit;
+      this.#pitchOrbitTarget = this.#pitchOrbit;
+      this.#yawOrbitMomentum = 0;
+      this.#pitchOrbitMomentum = 0;
+    }
     this.#lastPointerTime = event.timeStamp;
     this.#canvas.setPointerCapture(event.pointerId);
   };
@@ -493,15 +620,40 @@ export class ThirdPersonCamera {
     this.#lastPointerTime = event.timeStamp;
     const deltaYaw = -event.movementX * 0.0034;
     const deltaPitch = event.movementY * 0.003;
+    const seconds = elapsedMs / 1000;
+    const yawVelocity = THREE.MathUtils.clamp(deltaYaw / seconds, -6.4, 6.4);
+    const pitchVelocity = THREE.MathUtils.clamp(deltaPitch / seconds, -4.2, 4.2);
+    if (this.#godModeActive) {
+      const godTuning = this.#tuning.camera.god;
+      this.#godYawTarget += deltaYaw;
+      this.#godPitchTarget = THREE.MathUtils.clamp(
+        this.#godPitchTarget + deltaPitch,
+        godTuning.pitchMin,
+        godTuning.pitchMax,
+      );
+      if (this.#prefersReducedMotion) {
+        this.#godYawMomentum = 0;
+        this.#godPitchMomentum = 0;
+        return;
+      }
+      this.#godYawMomentum = THREE.MathUtils.lerp(
+        this.#godYawMomentum,
+        yawVelocity,
+        0.42,
+      );
+      this.#godPitchMomentum = THREE.MathUtils.lerp(
+        this.#godPitchMomentum,
+        pitchVelocity,
+        0.42,
+      );
+      return;
+    }
     this.#yawOrbitTarget += deltaYaw;
     this.#pitchOrbitTarget = THREE.MathUtils.clamp(
       this.#pitchOrbitTarget + deltaPitch,
       -0.12,
       0.8,
     );
-    const seconds = elapsedMs / 1000;
-    const yawVelocity = THREE.MathUtils.clamp(deltaYaw / seconds, -6.4, 6.4);
-    const pitchVelocity = THREE.MathUtils.clamp(deltaPitch / seconds, -4.2, 4.2);
     if (this.#prefersReducedMotion) {
       this.#yawOrbitMomentum = 0;
       this.#pitchOrbitMomentum = 0;
@@ -524,6 +676,7 @@ export class ThirdPersonCamera {
   };
 
   #handleDoubleClick = (): void => {
+    if (this.#godModeActive) return;
     this.#yawOrbitTarget = 0;
     this.#pitchOrbitTarget = 0.16;
     this.#yawOrbitMomentum = 0;
@@ -543,9 +696,8 @@ export class ThirdPersonCamera {
           -0.12,
           0.8,
         );
-        const momentumDamping = Math.exp(-9.5 * dt);
-        this.#yawOrbitMomentum *= momentumDamping;
-        this.#pitchOrbitMomentum *= momentumDamping;
+        this.#yawOrbitMomentum = expDecay(this.#yawOrbitMomentum, 9.5, dt);
+        this.#pitchOrbitMomentum = expDecay(this.#pitchOrbitMomentum, 9.5, dt);
       }
     }
 
@@ -556,8 +708,38 @@ export class ThirdPersonCamera {
       : this.#isDragging
         ? 16
         : 8.5;
-    const blend = 1 - Math.exp(-response * dt);
-    this.#yawOrbit += (this.#yawOrbitTarget - this.#yawOrbit) * blend;
-    this.#pitchOrbit += (this.#pitchOrbitTarget - this.#pitchOrbit) * blend;
+    this.#yawOrbit = expLerp(this.#yawOrbit, this.#yawOrbitTarget, response, dt);
+    this.#pitchOrbit = expLerp(this.#pitchOrbit, this.#pitchOrbitTarget, response, dt);
+  }
+
+  #updateGodLook(dt: number): void {
+    const godTuning = this.#tuning.camera.god;
+    if (!this.#isDragging && !this.#prefersReducedMotion) {
+      this.#godYawTarget += this.#godYawMomentum * dt * 0.22;
+      this.#godPitchTarget = THREE.MathUtils.clamp(
+        this.#godPitchTarget + this.#godPitchMomentum * dt * 0.16,
+        godTuning.pitchMin,
+        godTuning.pitchMax,
+      );
+      this.#godYawMomentum = expDecay(this.#godYawMomentum, godTuning.momentumDamping, dt);
+      this.#godPitchMomentum = expDecay(this.#godPitchMomentum, godTuning.momentumDamping, dt);
+    }
+
+    const response = this.#prefersReducedMotion
+      ? Math.max(godTuning.lookResponse, godTuning.dragResponse)
+      : this.#isDragging
+        ? godTuning.dragResponse
+        : godTuning.lookResponse;
+    this.#godYaw = expLerp(this.#godYaw, this.#godYawTarget, response, dt);
+    this.#godPitch = expLerp(this.#godPitch, this.#godPitchTarget, response, dt);
+  }
+
+  #releasePointerCapture(): void {
+    if (this.#pointerId !== -1 && this.#canvas.hasPointerCapture(this.#pointerId)) {
+      this.#canvas.releasePointerCapture(this.#pointerId);
+    }
+    this.#isDragging = false;
+    this.#pointerId = -1;
+    this.#lastPointerTime = 0;
   }
 }

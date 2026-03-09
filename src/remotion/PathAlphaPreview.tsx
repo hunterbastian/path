@@ -253,7 +253,7 @@ export const PathAlphaPreview = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                 fontSize: 16,
                 letterSpacing: '0.18em',
                 textTransform: 'uppercase',
@@ -290,7 +290,7 @@ export const PathAlphaPreview = ({
               style={{
                 maxWidth: 520,
                 marginTop: 18,
-                fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                 fontSize: 18,
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',
@@ -342,7 +342,7 @@ export const PathAlphaPreview = ({
                       border: '1px solid rgba(233, 221, 196, 0.12)',
                       background:
                         'linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(18, 15, 11, 0.34)), rgba(19, 15, 11, 0.42)',
-                      fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                      fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                       fontSize: 15,
                       letterSpacing: '0.14em',
                       textTransform: 'uppercase',
@@ -391,7 +391,7 @@ export const PathAlphaPreview = ({
                 >
                   <div
                     style={{
-                      fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                      fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                       fontSize: 14,
                       letterSpacing: '0.16em',
                       textTransform: 'uppercase',
@@ -443,7 +443,7 @@ export const PathAlphaPreview = ({
                 justifyContent: 'space-between',
                 padding: '18px 20px 16px',
                 borderBottom: '1px solid rgba(233, 221, 196, 0.08)',
-                fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                 fontSize: 14,
                 letterSpacing: '0.16em',
                 textTransform: 'uppercase',
@@ -553,7 +553,7 @@ export const PathAlphaPreview = ({
                 >
                   <div
                     style={{
-                      fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                      fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                       fontSize: 13,
                       letterSpacing: '0.16em',
                       textTransform: 'uppercase',
@@ -580,7 +580,7 @@ export const PathAlphaPreview = ({
                 >
                   <div
                     style={{
-                      fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                      fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                       fontSize: 13,
                       letterSpacing: '0.16em',
                       textTransform: 'uppercase',
@@ -607,7 +607,7 @@ export const PathAlphaPreview = ({
                 >
                   <div
                     style={{
-                      fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                      fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                       fontSize: 13,
                       letterSpacing: '0.16em',
                       textTransform: 'uppercase',
@@ -664,7 +664,7 @@ export const PathAlphaPreview = ({
                   >
                     <div
                       style={{
-                        fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+                        fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
                         fontSize: 14,
                         letterSpacing: '0.16em',
                         textTransform: 'uppercase',
@@ -718,7 +718,7 @@ export const PathAlphaPreview = ({
           border: '1px solid rgba(233, 221, 196, 0.12)',
           background:
             'linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(15, 11, 9, 0.22)), rgba(15, 11, 9, 0.5)',
-          fontFamily: '"JetBrains Mono", "SFMono-Regular", monospace',
+          fontFamily: '"Geist Mono", "SFMono-Regular", monospace',
           fontSize: 14,
           letterSpacing: '0.16em',
           textTransform: 'uppercase',

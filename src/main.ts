@@ -12,6 +12,7 @@ declare global {
     jumpPathToCityCenter?: () => void;
     jumpPathToProps?: () => void;
     jumpPathToFixture?: (fixtureId: string) => void;
+    forcePathWeather?: (condition: 'cloudy' | 'rainy' | 'sunny' | null) => void;
     togglePathDebug?: () => boolean;
     getPathTuningDebug?: () => ReturnType<PathGame['getTuningDebug']>;
     getPathAudioDebug?: () => ReturnType<PathGame['getAudioDebug']>;
@@ -54,6 +55,10 @@ window.jumpPathToProps = () => {
 
 window.jumpPathToFixture = (fixtureId: string) => {
   game.jumpToFixture(fixtureId);
+};
+
+window.forcePathWeather = (condition) => {
+  game.forceWeather(condition);
 };
 
 window.advanceTime = (milliseconds: number) => {
