@@ -56,6 +56,35 @@ export class ThirdPersonCamera {
   #godPitchTarget = 0;
   #godPitchMomentum = 0;
 
+  // --- Camera juice state ---
+  // Impact shake (translational + rotational, decaying)
+  #shakeAmplitude = 0;
+  #shakeOffsetX = 0;
+  #shakeOffsetY = 0;
+  #shakeOffsetZ = 0;
+  #shakeRollOffset = 0;
+  #shakePitchOffset = 0;
+  #shakePhase = 0;
+  #shakeDirectionX = 0;
+  #shakeDirectionZ = 0;
+
+  // Speed pull-back
+  #speedPullBack = 0;
+  #speedLiftUp = 0;
+
+  // Drift follow (lateral offset to outside of turn)
+  #driftOffset = 0;
+
+  // Tumble camera (extra distance + detached rotation)
+  #tumbleDistExtra = 0;
+  #tumbleHeightExtra = 0;
+
+  // Boost zoom
+  #boostPullBack = 0;
+
+  // Landing compression
+  #landingCompression = 0;
+
   constructor(tuning: GameTuning, terrain: Terrain, canvas: HTMLCanvasElement) {
     this.#tuning = tuning;
     this.#terrain = terrain;
@@ -99,6 +128,23 @@ export class ThirdPersonCamera {
     this.#yawOrbitMomentum = 0;
     this.#pitchOrbitMomentum = 0;
     this.#lookInitialized = false;
+    // Reset camera juice state
+    this.#shakeAmplitude = 0;
+    this.#shakeOffsetX = 0;
+    this.#shakeOffsetY = 0;
+    this.#shakeOffsetZ = 0;
+    this.#shakeRollOffset = 0;
+    this.#shakePitchOffset = 0;
+    this.#shakePhase = 0;
+    this.#shakeDirectionX = 0;
+    this.#shakeDirectionZ = 0;
+    this.#speedPullBack = 0;
+    this.#speedLiftUp = 0;
+    this.#driftOffset = 0;
+    this.#tumbleDistExtra = 0;
+    this.#tumbleHeightExtra = 0;
+    this.#boostPullBack = 0;
+    this.#landingCompression = 0;
   }
 
   enterGodMode(camera: THREE.PerspectiveCamera): void {
@@ -272,18 +318,101 @@ export class ThirdPersonCamera {
       driveTuning.driftLook,
     );
 
+    // --- Camera juice: update all effects ---
+
+    // 1. Impact shake — trigger on landing or collision
+    if (state.wasAirborne || state.impactMagnitude > 0) {
+      const impactStrength = Math.max(
+        state.wasAirborne
+          ? THREE.MathUtils.clamp(Math.abs(state.verticalSpeed) * 0.12 + 0.3, 0.3, 1.4)
+          : 0,
+        THREE.MathUtils.clamp(state.impactMagnitude * 0.06, 0, 1.2),
+      );
+      if (impactStrength > this.#shakeAmplitude) {
+        this.#shakeAmplitude = impactStrength;
+        this.#shakePhase = 0;
+        // Landing = mostly vertical; collision = directional
+        if (state.impactMagnitude > 0) {
+          this.#shakeDirectionX = state.impactDirection.x;
+          this.#shakeDirectionZ = state.impactDirection.z;
+        } else {
+          this.#shakeDirectionX = 0;
+          this.#shakeDirectionZ = 0;
+        }
+      }
+    }
+    this.#shakePhase += dt * 38; // high frequency oscillation
+    this.#shakeAmplitude = expDecay(this.#shakeAmplitude, 7.2, dt); // ~0.35s decay
+    const shakeWave = Math.sin(this.#shakePhase);
+    const shakeWave2 = Math.cos(this.#shakePhase * 1.3 + 1.0);
+    // Translational shake
+    this.#shakeOffsetX = this.#shakeAmplitude * (shakeWave * 0.18 + this.#shakeDirectionX * 0.3);
+    this.#shakeOffsetY = this.#shakeAmplitude * shakeWave2 * 0.25;
+    this.#shakeOffsetZ = this.#shakeAmplitude * (shakeWave2 * 0.12 + this.#shakeDirectionZ * 0.25);
+    // Angular shake
+    this.#shakeRollOffset = this.#shakeAmplitude * shakeWave * 0.018;
+    this.#shakePitchOffset = this.#shakeAmplitude * shakeWave2 * 0.012;
+
+    // 2. Speed pull-back — camera retreats as speed increases
+    const maxSpeed = 34;
+    const speedFraction = THREE.MathUtils.clamp(speed / maxSpeed, 0, 1);
+    const targetPullBack = speedFraction * chaseDistance * 0.18; // 18% further at max
+    const targetLiftUp = speedFraction * chaseHeight * 0.08;    // slight lift
+    this.#speedPullBack = expLerp(this.#speedPullBack, targetPullBack, 3.5, dt);
+    this.#speedLiftUp = expLerp(this.#speedLiftUp, targetLiftUp, 3.5, dt);
+
+    // 3. Drift follow — offset camera to outside of turn when drifting
+    const targetDriftOffset = state.isDrifting
+      ? THREE.MathUtils.clamp(-state.steering * 1.6, -1.8, 1.8)
+      : 0;
+    this.#driftOffset = expLerp(this.#driftOffset, targetDriftOffset, 4.0, dt);
+
+    // 4. Tumble camera — pull back and raise when tumbling
+    const targetTumbleDist = state.isTumbling ? chaseDistance * 0.45 : 0;
+    const targetTumbleHeight = state.isTumbling ? 2.4 : 0;
+    this.#tumbleDistExtra = expLerp(this.#tumbleDistExtra, targetTumbleDist, 3.0, dt);
+    this.#tumbleHeightExtra = expLerp(this.#tumbleHeightExtra, targetTumbleHeight, 3.0, dt);
+
+    // 5. Boost zoom — subtle pull-back when boosting
+    const targetBoostPull = state.isBoosting ? 0.6 : 0;
+    this.#boostPullBack = expLerp(this.#boostPullBack, targetBoostPull, 5.0, dt);
+
+    // 6. Landing compression — briefly compress camera closer on landing, then spring back
+    if (state.wasAirborne) {
+      const compressionStrength = THREE.MathUtils.clamp(
+        Math.abs(state.verticalSpeed) * 0.08 + 0.2,
+        0.2,
+        0.8,
+      );
+      this.#landingCompression = Math.max(this.#landingCompression, compressionStrength);
+    }
+    this.#landingCompression = expDecay(this.#landingCompression, 5.5, dt); // spring back ~0.4s
+
+    // --- End camera juice calculations ---
+
     const localOffset = this.#localOffset.set(
-      lateralOffset + Math.sin(this.#driveMotionTime * 1.8) * shakeAmount * 0.24,
+      lateralOffset
+        + Math.sin(this.#driveMotionTime * 1.8) * shakeAmount * 0.24
+        + this.#driftOffset
+        + this.#shakeOffsetX,
       chaseHeight
         + this.#driveHeave
         + Math.min(state.airborneTime * 0.42, 0.34)
         - this.#driveImpact * 0.24
-        + Math.sin(this.#driveMotionTime * 3.4) * shakeAmount,
+        + Math.sin(this.#driveMotionTime * 3.4) * shakeAmount
+        + this.#speedLiftUp
+        + this.#tumbleHeightExtra
+        + this.#shakeOffsetY,
       -chaseDistance
         - this.#driveImpact * 0.52
         - (state.isBoosting ? 0.36 : 0)
         - Math.min(state.airborneTime * 1.8, 0.9)
-        + Math.cos(this.#driveMotionTime * 2.2) * shakeAmount * 0.34,
+        + Math.cos(this.#driveMotionTime * 2.2) * shakeAmount * 0.34
+        - this.#speedPullBack
+        - this.#tumbleDistExtra
+        - this.#boostPullBack
+        + this.#landingCompression
+        + this.#shakeOffsetZ,
     );
     localOffset.applyAxisAngle(this.#pitchAxis, -this.#pitchOrbit);
     localOffset.applyAxisAngle(this.#worldUp, this.#yawOrbit);
@@ -354,8 +483,15 @@ export class ThirdPersonCamera {
       + Math.min(state.airborneTime * driveTuning.fovAirborneGain, driveTuning.fovAirborneGain)
       + this.#driveImpact * driveTuning.fovImpactGain;
     this.#updateCameraFov(camera, targetFov, dt, 5.4);
+    // Tumble camera: raise the look target when tumbling so we see the vehicle from above
+    if (this.#tumbleHeightExtra > 0.01) {
+      this.#currentLookTarget.y += this.#tumbleHeightExtra * 0.3;
+    }
+
     camera.up.copy(this.#worldUp);
-    camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll);
+    camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll + this.#shakeRollOffset);
+    // Apply shake pitch offset to the look target (subtle vertical jitter)
+    this.#currentLookTarget.y += this.#shakePitchOffset;
     camera.lookAt(this.#currentLookTarget);
   }
 

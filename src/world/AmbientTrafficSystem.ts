@@ -39,6 +39,26 @@ interface AmbientTrafficAgent {
   wheelWorldPositions: THREE.Vector3[];
   collisionRadius: number;
   behavior: 'cruising' | 'yielding' | 'contact';
+  /** Vertical velocity for gravity when airborne. */
+  verticalVelocity: number;
+  /** Whether agent is currently off the ground. */
+  airborne: boolean;
+  /** Airborne time accumulator. */
+  airborneTime: number;
+  /** Tumble pitch angular velocity (rad/s). */
+  tumblePitch: number;
+  /** Tumble roll angular velocity (rad/s). */
+  tumbleRoll: number;
+  /** Accumulated tumble rotation quaternion. */
+  tumbleQuat: THREE.Quaternion;
+  /** Post-collision spin velocity (rad/s), decays over time. */
+  spinVelocity: number;
+  /** Whether the agent is currently spinning out. */
+  spinning: boolean;
+  /** Recovery timer (seconds) after landing from airborne or finishing spin. */
+  recoveryTimer: number;
+  /** Whether this agent is honking (flag for audio). */
+  honking: boolean;
 }
 
 export interface AmbientTrafficDebugSnapshot {
@@ -65,6 +85,10 @@ export interface AmbientTrafficPlayerInteraction {
 }
 
 const PLAYER_COLLISION_RADIUS = 1.65;
+const _tumbleIncrement = new THREE.Quaternion();
+const _agentForward = new THREE.Vector3();
+const _playerVelNorm = new THREE.Vector3();
+const WHEEL_NAMES = ['wheelFL', 'wheelFR', 'wheelRL', 'wheelRR'] as const;
 
 export class AmbientTrafficSystem {
   readonly #terrain: Terrain;
@@ -119,7 +143,7 @@ export class AmbientTrafficSystem {
     }
 
     for (const agent of this.#agents) {
-      this.#updateAgent(agent, dt, playerPosition, weather);
+      this.#updateAgent(agent, dt, playerPosition, playerVelocity, weather);
     }
     this.#playerInteraction = this.#buildPlayerInteraction(playerPosition, playerVelocity);
   }
@@ -154,6 +178,20 @@ export class AmbientTrafficSystem {
       correction: this.#playerInteraction.correction.clone(),
       impulse: this.#playerInteraction.impulse.clone(),
     };
+  }
+
+  /** Returns the distance to the nearest honking agent, or -1 if none are honking. */
+  getNearestHonkDistance(playerPosition: THREE.Vector3): number {
+    let nearest = -1;
+    for (const agent of this.#agents) {
+      if (!agent.honking) continue;
+      const dist = Math.hypot(
+        playerPosition.x - agent.position.x,
+        playerPosition.z - agent.position.z,
+      );
+      if (nearest < 0 || dist < nearest) nearest = dist;
+    }
+    return nearest;
   }
 
   getTrackSources(): TireTrackSource[] {
@@ -220,6 +258,16 @@ export class AmbientTrafficSystem {
       wheelWorldPositions: Array.from({ length: 4 }, () => new THREE.Vector3()),
       collisionRadius: 0.88 + route.scale * 0.86,
       behavior: 'cruising',
+      verticalVelocity: 0,
+      airborne: false,
+      airborneTime: 0,
+      tumblePitch: 0,
+      tumbleRoll: 0,
+      tumbleQuat: new THREE.Quaternion(),
+      spinVelocity: 0,
+      spinning: false,
+      recoveryTimer: 0,
+      honking: false,
     };
     this.#applyPose(agent, 1 / 60);
     return agent;
@@ -229,11 +277,29 @@ export class AmbientTrafficSystem {
     agent: AmbientTrafficAgent,
     dt: number,
     playerPosition: THREE.Vector3,
+    playerVelocity: THREE.Vector3,
     weather: Pick<
       WeatherSnapshot,
       'trafficSpeedMultiplier' | 'trafficCautionMultiplier' | 'visibilityScale'
     >,
   ): void {
+    // --- Recovery timer ---
+    if (agent.recoveryTimer > 0) {
+      agent.recoveryTimer = Math.max(0, agent.recoveryTimer - dt);
+    }
+
+    // --- Spin-out decay ---
+    if (agent.spinning) {
+      agent.heading += agent.spinVelocity * dt;
+      agent.spinVelocity *= 1 - 3.2 * dt; // decay spin
+      agent.speed = expLerp(agent.speed, 0, 4, dt); // slow down dramatically
+      if (Math.abs(agent.spinVelocity) < 0.3) {
+        agent.spinning = false;
+        agent.spinVelocity = 0;
+        agent.recoveryTimer = 2.5; // stunned after spin
+      }
+    }
+
     let target = agent.waypoints[agent.waypointIndex];
     if (!target) return;
 
@@ -273,51 +339,171 @@ export class AmbientTrafficSystem {
           1,
         );
     const avoidanceHeading = -playerSide * avoidanceProgress * 0.72;
+
+    // --- Head-on detection and improved braking ---
+    _agentForward.set(Math.sin(agent.heading), 0, Math.cos(agent.heading));
+    const playerSpeedSq = playerVelocity.x * playerVelocity.x + playerVelocity.z * playerVelocity.z;
+    let headOnBraking = 1;
+    agent.honking = false;
+    if (!encounterLocked && playerSpeedSq > 1 && playerDistance < cautionDistance * 1.2) {
+      _playerVelNorm.copy(playerVelocity).setY(0).normalize();
+      const headOnDot = _playerVelNorm.dot(_agentForward);
+      if (headOnDot < -0.5) {
+        // Player approaching head-on: brake harder based on how direct and close
+        const headOnIntensity = THREE.MathUtils.clamp((-headOnDot - 0.5) * 2, 0, 1);
+        const closeness = THREE.MathUtils.clamp(1 - playerDistance / cautionDistance, 0, 1);
+        headOnBraking = THREE.MathUtils.lerp(1, 0.05, headOnIntensity * closeness);
+        if (closeness > 0.4 && headOnIntensity > 0.3) {
+          agent.honking = true;
+        }
+      }
+    }
+
     const playerSlowdown = encounterLocked
       ? 1
       : THREE.MathUtils.clamp(
           (playerDistance - cautionDistance * 0.32) / (cautionDistance * 0.92),
           0.18,
           1,
-        );
+        ) * headOnBraking;
 
     const desiredHeading = targetHeading + avoidanceHeading;
     const turnRate = THREE.MathUtils.lerp(0.9, 2.2, cornering);
-    agent.heading += THREE.MathUtils.clamp(
-      this.#angleDelta(desiredHeading, agent.heading),
-      -turnRate * dt,
-      turnRate * dt,
-    );
+    if (!agent.spinning) {
+      agent.heading += THREE.MathUtils.clamp(
+        this.#angleDelta(desiredHeading, agent.heading),
+        -turnRate * dt,
+        turnRate * dt,
+      );
+    }
 
-    const targetSpeed =
+    // --- Damaged slowdown ---
+    const totalHealth = agent.vehicle.damage.totalHealth;
+    let damageSpeedMultiplier = 1;
+    if (totalHealth < 0.2) {
+      damageSpeedMultiplier = 0; // stopped — pull over
+    } else if (totalHealth < 0.4) {
+      damageSpeedMultiplier = 0.3; // limp
+    } else if (totalHealth < 0.7) {
+      // Gradual slowdown between 0.7 and 0.4
+      damageSpeedMultiplier = THREE.MathUtils.mapLinear(totalHealth, 0.4, 0.7, 0.3, 1);
+    }
+
+    // --- Recovery ramp ---
+    let recoveryMultiplier = 1;
+    if (agent.recoveryTimer > 0) {
+      // First half: stopped. Second half: ramp up.
+      const recoveryProgress = 1 - agent.recoveryTimer / 2.5;
+      recoveryMultiplier = recoveryProgress < 0.5 ? 0 : (recoveryProgress - 0.5) * 2;
+    }
+
+    let targetSpeed =
       agent.cruiseSpeed
       * weather.trafficSpeedMultiplier
       * THREE.MathUtils.lerp(1, 0.52, cornering)
-      * playerSlowdown;
+      * playerSlowdown
+      * damageSpeedMultiplier
+      * recoveryMultiplier;
+
+    // Override speed to 0 during active spin
+    if (agent.spinning) {
+      targetSpeed = 0;
+    }
+
     agent.speed = expLerp(agent.speed, targetSpeed, 2.8, dt);
+
+    // --- Missing wheel wobble ---
+    let missingWheels = 0;
+    for (const wheelName of WHEEL_NAMES) {
+      if (!agent.vehicle.damage.isPartAttached(wheelName)) {
+        missingWheels += 1;
+      }
+    }
+    if (missingWheels > 0 && agent.speed > 0.5 && !agent.airborne) {
+      const wobbleAmplitude = missingWheels * 0.04 * THREE.MathUtils.clamp(agent.speed / 8, 0, 1);
+      const wobbleFrequency = 4 + agent.speed * 0.6;
+      agent.heading += Math.sin(agent.wheelPhase * wobbleFrequency) * wobbleAmplitude * dt * wobbleFrequency;
+    }
 
     agent.position.x += Math.sin(agent.heading) * agent.speed * dt;
     agent.position.z += Math.cos(agent.heading) * agent.speed * dt;
-    agent.position.y =
+
+    // --- NPC gravity + tumble ---
+    const groundY =
       this.#terrain.getHeightAt(agent.position.x, agent.position.z)
       + VEHICLE_CLEARANCE * agent.scale;
+    const wasAirborne = agent.airborne;
+
+    if (agent.airborne) {
+      // Gravity
+      agent.verticalVelocity -= 24 * dt;
+      agent.position.y += agent.verticalVelocity * dt;
+      agent.airborneTime += dt;
+
+      // Tumble integration
+      if (agent.airborneTime > 0.15) {
+        agent.tumblePitch *= 1 - 0.4 * dt;
+        agent.tumbleRoll *= 1 - 0.5 * dt;
+        agent.tumblePitch += 1.8 * dt; // gravity pitches nose down
+      }
+
+      // Landing
+      if (agent.position.y <= groundY) {
+        agent.position.y = groundY;
+        // Tumble landing = damage
+        if (agent.airborneTime > 0.3) {
+          const landingImpact = Math.abs(agent.verticalVelocity);
+          const impactDir = new THREE.Vector3(0, -1, 0);
+          agent.vehicle.damage.applyImpact(
+            landingImpact,
+            impactDir,
+            agent.position,
+            this.#poseQuaternion,
+            new THREE.Vector3(Math.sin(agent.heading) * agent.speed, agent.verticalVelocity, Math.cos(agent.heading) * agent.speed),
+          );
+        }
+        agent.verticalVelocity = 0;
+        agent.airborne = false;
+        agent.airborneTime = 0;
+        agent.tumblePitch = 0;
+        agent.tumbleRoll = 0;
+        agent.tumbleQuat.identity();
+        agent.recoveryTimer = 3; // stunned after landing
+      }
+    } else {
+      // Check if we should become airborne (ground dropped away beneath us)
+      const gap = agent.position.y - groundY;
+      if (gap > 0.5) {
+        agent.airborne = true;
+        agent.verticalVelocity = 0;
+        // Seed tumble from current slope
+        const normal = this.#terrain.getNormalAt(agent.position.x, agent.position.z);
+        const fwd = new THREE.Vector3(Math.sin(agent.heading), 0, Math.cos(agent.heading));
+        const rt = new THREE.Vector3(fwd.z, 0, -fwd.x);
+        agent.tumblePitch = -normal.dot(fwd) * agent.speed * 0.10;
+        agent.tumbleRoll = normal.dot(rt) * agent.speed * 0.08;
+        agent.tumbleQuat.identity();
+      } else {
+        agent.position.y = groundY;
+      }
+    }
 
     const surface = this.#terrain.getSurfaceAt(agent.position.x, agent.position.z);
-    const bob = Math.sin(agent.wheelPhase += dt * (4 + agent.speed * 0.35)) * 0.04;
+    const bob = agent.airborne ? 0 : Math.sin(agent.wheelPhase += dt * (4 + agent.speed * 0.35)) * 0.04;
     const wheelLean = cornering * 0.08;
     agent.state.speed = agent.speed;
     agent.state.forwardSpeed = agent.speed;
     agent.state.lateralSpeed = Math.sin(headingDelta) * agent.speed * 0.18;
-    agent.state.verticalSpeed = 0;
-    agent.state.airborneTime = 0;
+    agent.state.verticalSpeed = agent.verticalVelocity;
+    agent.state.airborneTime = agent.airborneTime;
     agent.state.steering = THREE.MathUtils.clamp(headingDelta * 1.4, -1, 1);
-    agent.state.throttle = agent.speed > targetSpeed ? 0 : 0.6;
-    agent.state.isGrounded = true;
+    agent.state.throttle = agent.airborne ? 0 : (agent.speed > targetSpeed ? 0 : 0.6);
+    agent.state.isGrounded = !agent.airborne;
     agent.state.isBraking = targetSpeed + 0.35 < agent.speed;
     agent.state.isBoosting = false;
-    agent.state.isAccelerating = targetSpeed > agent.speed + 0.1;
+    agent.state.isAccelerating = !agent.airborne && targetSpeed > agent.speed + 0.1;
     agent.state.isDrifting = cornering > 0.6 && agent.speed > 6.4;
-    agent.state.wasAirborne = false;
+    agent.state.wasAirborne = wasAirborne && !agent.airborne;
     agent.state.surface = surface;
     agent.state.boostLevel = 0.55;
     agent.state.sinkDepth = 0;
@@ -402,6 +588,39 @@ export class AmbientTrafficSystem {
       agent.state.forwardSpeed = agent.speed;
       agent.state.isBraking = true;
       agent.behavior = 'contact';
+
+      const impactDirection = this.#playerToAgent.clone().negate();
+      const velocity = new THREE.Vector3(
+        Math.sin(agent.heading) * agent.speed,
+        0,
+        Math.cos(agent.heading) * agent.speed,
+      );
+      agent.vehicle.damage.applyImpact(
+        impactSpeed,
+        impactDirection,
+        agent.position,
+        this.#poseQuaternion,
+        velocity,
+      );
+
+      // Hard hits launch the NPC airborne and tumbling
+      if (impactSpeed > 8 && !agent.airborne) {
+        agent.airborne = true;
+        agent.verticalVelocity = 2.5 + impactSpeed * 0.2;
+        agent.tumblePitch = impactDirection.z * impactSpeed * 0.12;
+        agent.tumbleRoll = impactDirection.x * impactSpeed * 0.10;
+        agent.tumbleQuat.identity();
+      }
+
+      // Post-collision spin-out for moderate+ hits that don't go airborne
+      if (impactSpeed > 5 && !agent.airborne && !agent.spinning) {
+        const spinDirection = Math.sign(
+          impactDirection.x * Math.cos(agent.heading)
+          - impactDirection.z * Math.sin(agent.heading),
+        ) || 1;
+        agent.spinVelocity = spinDirection * (2.5 + impactSpeed * 0.3);
+        agent.spinning = true;
+      }
     }
 
     return {
@@ -439,8 +658,19 @@ export class AmbientTrafficSystem {
       this.#correctedForward,
     );
     this.#poseQuaternion.setFromRotationMatrix(this.#basisMatrix);
+
+    // Apply tumble rotation when airborne
+    if (agent.airborne && agent.airborneTime > 0.15) {
+      const pitchDelta = agent.tumblePitch * dt;
+      const rollDelta = agent.tumbleRoll * dt;
+      _tumbleIncrement.set(pitchDelta, 0, rollDelta, 1).normalize();
+      agent.tumbleQuat.multiply(_tumbleIncrement).normalize();
+      this.#poseQuaternion.multiply(agent.tumbleQuat);
+    }
+
     agent.vehicle.setPose(agent.position, this.#poseQuaternion);
     agent.vehicle.updateVisuals(dt, agent.state);
+    agent.vehicle.damage.update(dt, agent.position.y - 1.2);
 
     for (let index = 0; index < VEHICLE_WHEEL_OFFSETS.length; index += 1) {
       const offset = VEHICLE_WHEEL_OFFSETS[index];

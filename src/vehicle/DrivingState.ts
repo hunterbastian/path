@@ -27,6 +27,8 @@ export interface DrivingState {
   impactMagnitude: number;
   /** World-space direction of the impact (normalized). Zero vector if no impact. */
   impactDirection: THREE.Vector3;
+  /** Whether the vehicle is tumbling in the air. */
+  isTumbling: boolean;
 }
 
 export function createDefaultDrivingState(): DrivingState {
@@ -52,5 +54,6 @@ export function createDefaultDrivingState(): DrivingState {
     wheelContact: [true, true, true, true],
     impactMagnitude: 0,
     impactDirection: new THREE.Vector3(),
+    isTumbling: false,
   };
 }

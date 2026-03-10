@@ -24,6 +24,8 @@ const POST_SHADER = {
     uWaterPools: {
       value: Array.from({ length: MAX_WATER_DEBUG_POOLS }, () => new THREE.Vector4()),
     },
+    uDamageFlash: { value: 0 },
+    uSpeedIntensity: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -49,6 +51,8 @@ const POST_SHADER = {
     uniform mat4 uCameraMatrixWorld;
     uniform float uWaterPoolCount;
     uniform vec4 uWaterPools[MAX_WATER_DEBUG_POOLS];
+    uniform float uDamageFlash;
+    uniform float uSpeedIntensity;
 
     varying vec2 vUv;
 
@@ -175,6 +179,20 @@ const POST_SHADER = {
         }
       }
 
+      // Damage flash — red vignette from screen edges
+      if (uDamageFlash > 0.01) {
+        float edgeDist = length(vUv - 0.5) * 2.0;
+        float flashMask = smoothstep(0.3, 1.2, edgeDist);
+        outputColor = mix(outputColor, vec3(0.6, 0.04, 0.02), flashMask * uDamageFlash * 0.6);
+      }
+
+      // Speed vignette — subtle tunnel vision at high speed
+      if (uSpeedIntensity > 0.01) {
+        float speedEdge = length(vUv - 0.5) * 2.0;
+        float speedDarken = smoothstep(0.6, 1.4, speedEdge) * uSpeedIntensity * 0.18;
+        outputColor *= 1.0 - speedDarken;
+      }
+
       gl_FragColor = vec4(outputColor, 1.0);
     }
   `,
@@ -262,6 +280,16 @@ export class GritPostProcess {
     }
 
     uniforms.uWaterPoolCount.value = count;
+  }
+
+  setDamageFlash(intensity: number): void {
+    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+    uniforms.uDamageFlash.value = intensity;
+  }
+
+  setSpeedIntensity(intensity: number): void {
+    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+    uniforms.uSpeedIntensity.value = intensity;
   }
 
   render(): void {

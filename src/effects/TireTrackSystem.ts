@@ -115,7 +115,7 @@ export class TireTrackSystem {
       );
       mesh.visible = false;
       mesh.castShadow = false;
-      mesh.receiveShadow = true;
+      mesh.receiveShadow = false;
       this.#group.add(mesh);
       this.#segments.push({
         mesh,

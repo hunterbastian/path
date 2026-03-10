@@ -6,6 +6,7 @@ import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
 
 export type SurfaceType = 'sand' | 'dirt' | 'grass' | 'rock' | 'snow';
 
+
 export class Terrain {
   readonly mesh: THREE.Mesh;
   readonly size = 920;
@@ -16,6 +17,8 @@ export class Terrain {
   readonly outpostCenters: THREE.Vector2[];
   readonly serviceRoadPaths: THREE.Vector2[][];
   readonly #noise: ReturnType<typeof createNoise2D>;
+  readonly #heightCache = new Map<number, number>();
+  #cacheFrame = 0;
 
   constructor(scene: THREE.Scene) {
     const random = new SeededRandom(0x50415448);
@@ -127,7 +130,26 @@ export class Terrain {
     );
   }
 
+  /** Call once per frame to clear the height cache. */
+  flushHeightCache(): void {
+    this.#heightCache.clear();
+    this.#cacheFrame++;
+  }
+
   getHeightAt(x: number, z: number): number {
+    // Snap to 0.5-unit grid for cache lookups (close enough for rain/effects)
+    const gx = Math.round(x * 2) | 0;
+    const gz = Math.round(z * 2) | 0;
+    const key = gx * 131071 + gz;
+    const cached = this.#heightCache.get(key);
+    if (cached !== undefined) return cached;
+
+    const height = this.#computeHeightAt(x, z);
+    this.#heightCache.set(key, height);
+    return height;
+  }
+
+  #computeHeightAt(x: number, z: number): number {
     const pathCenter = this.getPathCenterX(z);
     const valleyDistance = Math.abs(x - pathCenter);
     const valleyWall = Math.pow(

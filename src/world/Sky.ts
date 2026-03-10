@@ -54,32 +54,32 @@ const SKY_MOODS: Record<WeatherCondition, SkyMood> = {
     cloudDeckEnd: 'rgba(189, 197, 205, 0)',
   },
   rainy: {
-    fogColor: 0xaab3b6,
-    hemisphereSky: 0xcbd4d8,
-    hemisphereGround: 0x546060,
-    hemisphereIntensity: 0.9,
-    sunColor: 0xd2c2b2,
-    sunIntensity: 0.78,
-    fillColor: 0x99aeb8,
-    fillIntensity: 0.84,
-    rimColor: 0x9e988f,
-    rimIntensity: 0.28,
-    backgroundBlurriness: 0.14,
+    fogColor: 0xb5bfbe,
+    hemisphereSky: 0xd4dce0,
+    hemisphereGround: 0x5e6e68,
+    hemisphereIntensity: 0.96,
+    sunColor: 0xddd0c0,
+    sunIntensity: 1.05,
+    fillColor: 0xa4b8c2,
+    fillIntensity: 0.94,
+    rimColor: 0xb0a898,
+    rimIntensity: 0.34,
+    backgroundBlurriness: 0.12,
     gradientStops: [
-      { offset: 0, color: '#7f919b' },
-      { offset: 0.24, color: '#b1babf' },
-      { offset: 0.48, color: '#987d77' },
-      { offset: 0.78, color: '#60636c' },
-      { offset: 1, color: '#474f59' },
+      { offset: 0, color: '#8a9da8' },
+      { offset: 0.24, color: '#bcc4c8' },
+      { offset: 0.48, color: '#a58a82' },
+      { offset: 0.78, color: '#6a6d76' },
+      { offset: 1, color: '#505862' },
     ],
-    sunGlowInner: 'rgba(255, 237, 210, 0.36)',
-    sunGlowMid: 'rgba(229, 188, 144, 0.16)',
-    sunGlowOuter: 'rgba(168, 133, 121, 0.04)',
-    hazeStart: 'rgba(192, 172, 160, 0)',
-    hazeEnd: 'rgba(104, 88, 101, 0.32)',
-    cloudDeckStart: 'rgba(214, 220, 224, 0.38)',
-    cloudDeckMid: 'rgba(165, 173, 183, 0.3)',
-    cloudDeckEnd: 'rgba(165, 173, 183, 0)',
+    sunGlowInner: 'rgba(255, 240, 216, 0.42)',
+    sunGlowMid: 'rgba(235, 196, 152, 0.20)',
+    sunGlowOuter: 'rgba(180, 148, 132, 0.06)',
+    hazeStart: 'rgba(200, 182, 168, 0)',
+    hazeEnd: 'rgba(118, 100, 110, 0.26)',
+    cloudDeckStart: 'rgba(220, 226, 230, 0.32)',
+    cloudDeckMid: 'rgba(178, 186, 196, 0.24)',
+    cloudDeckEnd: 'rgba(178, 186, 196, 0)',
   },
   sunny: {
     fogColor: 0xcfd3cb,
@@ -140,7 +140,7 @@ export class Sky {
     this.#sun = new THREE.DirectionalLight(0xffd6aa, 1.95);
     this.#sun.position.set(180, 140, 70);
     this.#sun.castShadow = true;
-    this.#sun.shadow.mapSize.set(2048, 2048);
+    this.#sun.shadow.mapSize.set(1024, 1024);
     this.#sun.shadow.camera.left = -160;
     this.#sun.shadow.camera.right = 160;
     this.#sun.shadow.camera.top = 160;

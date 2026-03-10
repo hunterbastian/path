@@ -48,7 +48,6 @@ interface AppShellElements {
   canvasMount: HTMLDivElement;
   loading: HTMLDivElement;
   title: HTMLDivElement;
-  titlePreviewMount: HTMLDivElement;
   startButton: HTMLButtonElement;
   arrival: HTMLDivElement;
   restartButton: HTMLButtonElement;
@@ -114,20 +113,6 @@ export class AppShell {
                   Drive the last dirt line below Tower Mountain and bring the
                   summit relay back online.
                 </p>
-              </div>
-              <div class="title-preview-shell" aria-label="Embedded alpha preview">
-                <div class="title-preview-topline">
-                  <span class="title-preview-kicker">Embedded preview</span>
-                  <span class="title-preview-meta">loop / 00:08</span>
-                </div>
-                <div class="title-preview-frame">
-                  <div id="title-alpha-preview" class="title-alpha-preview"></div>
-                </div>
-                <div class="title-preview-notes">
-                  <span>Dirt paths</span>
-                  <span>Weather cycle</span>
-                  <span>Relay route</span>
-                </div>
               </div>
             </div>
             <div class="title-facts">
@@ -343,7 +328,6 @@ export class AppShell {
       canvasMount: this.#query(root, '#game-stage'),
       loading: this.#query(root, '#loading'),
       title: this.#query(root, '#title-screen'),
-      titlePreviewMount: this.#query(root, '#title-alpha-preview'),
       startButton: this.#query(root, '#start-button'),
       arrival: this.#query(root, '#arrival-screen'),
       restartButton: this.#query(root, '#restart-button'),

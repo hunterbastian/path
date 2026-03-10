@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { EngineAudio, type AmbientAudioState } from '../audio/EngineAudio';
+import { ImpactAudio } from '../audio/ImpactAudio';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { GameTuningStore } from '../config/GameTuning';
 import {
@@ -38,7 +37,6 @@ import {
   isRenderDebugViewId,
   type RenderDebugViewId,
 } from '../render/RenderDebugView';
-import { TitleAlphaPreviewEmbed } from '../remotion/TitleAlphaPreviewEmbed';
 import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
 import { VehicleDamage } from '../vehicle/VehicleDamage';
@@ -88,7 +86,6 @@ const SCENARIO_IDS: ScenarioFixtureId[] = [
 
 export class PathGame {
   readonly #shell: AppShell;
-  readonly #titlePreviewRoot: Root;
   readonly #tuningStore: GameTuningStore;
   readonly #engine: Engine;
   readonly #input: InputManager;
@@ -98,6 +95,10 @@ export class PathGame {
   readonly #controller: VehicleController;
   readonly #camera: ThirdPersonCamera;
   readonly #engineAudio: EngineAudio;
+  #impactAudio: ImpactAudio | null = null;
+  #prevDamageHealth = 1;
+  #honkCooldown = 0;
+  #damageFlash = 0;
   readonly #rainSystem: RainSystem;
   readonly #dustSystem: DustSystem;
   readonly #snowSpraySystem: DustSystem;
@@ -171,7 +172,6 @@ export class PathGame {
 
   constructor(root: HTMLElement) {
     this.#shell = new AppShell(root);
-    this.#titlePreviewRoot = createRoot(this.#shell.elements.titlePreviewMount);
     this.#tuningStore = new GameTuningStore();
     this.#engine = new Engine(this.#shell.elements.canvasMount);
     this.#shell.mountCanvas(this.#engine.renderer.domElement);
@@ -335,7 +335,6 @@ export class PathGame {
     this.#shell.bindPauseResume(() => this.#setPauseVisible(false));
     this.#shell.bindPauseGodMode(() => this.#enterGodMode());
     this.#shell.bindPauseRestart(() => this.#restartRun());
-    this.#mountTitlePreview();
     this.#installAudioUnlockListeners();
     this.#shell.setLoadingVisible(false);
     this.#shell.setTitleVisible(true);
@@ -356,7 +355,6 @@ export class PathGame {
   dispose(): void {
     this.#loop.stop();
     this.#removeAudioUnlockListeners();
-    this.#titlePreviewRoot.unmount();
     this.#input.dispose();
     this.#camera.dispose();
     this.#engineAudio.dispose();
@@ -707,6 +705,7 @@ export class PathGame {
   }
 
   #step(dt: number): void {
+    this.#terrain.flushHeightCache();
     this.#input.update();
     this.#uiPulseTime += dt;
     this.#checkpointBannerTime = Math.max(0, this.#checkpointBannerTime - dt);
@@ -837,6 +836,55 @@ export class PathGame {
       );
     }
     this.#vehicle.damage.update(dt, this.#controller.position.y - 1.2);
+
+    // --- Impact audio triggers ---
+    if (this.#impactAudio) {
+      const currentHealth = this.#vehicle.damage.totalHealth;
+      if (currentHealth < this.#prevDamageHealth) {
+        this.#impactAudio.playPartDetach();
+      }
+      this.#prevDamageHealth = currentHealth;
+
+      if (this.#controller.state.wasAirborne) {
+        const mag = Math.min(Math.abs(this.#controller.state.impactMagnitude) / 12, 1);
+        this.#impactAudio.playLanding(mag);
+        this.#dustEmitter.emitLandingBurst(this.#controller, this.#controller.state.impactMagnitude);
+      }
+
+      if (
+        this.#controller.state.impactMagnitude > 1.5 &&
+        !this.#controller.state.wasAirborne
+      ) {
+        const mag = Math.min(this.#controller.state.impactMagnitude / 10, 1);
+        this.#impactAudio.playCollision(mag);
+      } else if (
+        this.#controller.state.impactMagnitude > 0.3 &&
+        this.#controller.state.impactMagnitude <= 1.5
+      ) {
+        this.#impactAudio.playScrape();
+      }
+
+      // Honk audio from NPCs
+      this.#honkCooldown = Math.max(0, this.#honkCooldown - dt);
+      if (this.#honkCooldown <= 0) {
+        const honkDist = this.#ambientTraffic.getNearestHonkDistance(this.#controller.position);
+        if (honkDist >= 0) {
+          this.#impactAudio.playHonk(honkDist);
+          this.#honkCooldown = 1.5; // Don't spam honks
+        }
+      }
+    }
+
+    // Screen effects — damage flash and speed vignette
+    if (this.#controller.state.impactMagnitude > 2) {
+      this.#damageFlash = Math.min(this.#controller.state.impactMagnitude / 8, 1);
+    }
+    this.#damageFlash *= Math.exp(-6 * dt);
+    if (this.#damageFlash < 0.01) this.#damageFlash = 0;
+    this.#engine.postProcess.setDamageFlash(this.#damageFlash);
+    this.#engine.postProcess.setSpeedIntensity(
+      Math.min(this.#controller.state.speed / 34, 1),
+    );
 
     if (this.#runSession.mode === 'driving') {
       this.#camera.updateDrive(
@@ -1356,6 +1404,7 @@ export class PathGame {
     }
     this.#controller.reset();
     this.#vehicle.damage.reset();
+    this.#prevDamageHealth = 1;
     this.#vehicle.setPose(
       this.#controller.pose.position,
       this.#controller.pose.quaternion,
@@ -1429,7 +1478,6 @@ export class PathGame {
       this.#controller.position.x,
       this.#controller.position.z,
     );
-    this.#clearTitlePreview();
     this.#shell.setMode(this.#runSession.mode);
     this.#shell.setTitleVisible(false);
     this.#shell.setArrivalVisible(false);
@@ -1437,18 +1485,18 @@ export class PathGame {
     void this.#activateAudio();
   }
 
-  #mountTitlePreview(): void {
-    this.#titlePreviewRoot.render(createElement(TitleAlphaPreviewEmbed));
-  }
-
-  #clearTitlePreview(): void {
-    this.#titlePreviewRoot.render(null);
-  }
-
   async #activateAudio(): Promise<void> {
     const unlocked = await this.#engineAudio.activate();
     if (unlocked) {
       this.#removeAudioUnlockListeners();
+      // Create ImpactAudio once audio is unlocked, connected to the shared compressor
+      if (!this.#impactAudio) {
+        const ctx = this.#engineAudio.audioContext;
+        const dest = this.#engineAudio.compressorNode;
+        if (ctx && dest) {
+          this.#impactAudio = new ImpactAudio(ctx, dest);
+        }
+      }
     }
     this.#syncShell();
   }

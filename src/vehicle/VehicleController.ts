@@ -15,6 +15,9 @@ import {
   VEHICLE_WHEEL_TRAVEL,
 } from './vehicleShared';
 
+/** Reusable quaternion for tumble integration — avoids per-frame allocation. */
+const _tumbleIncrement = new THREE.Quaternion();
+
 export class VehicleController {
   readonly position = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
@@ -56,6 +59,14 @@ export class VehicleController {
   #time = 0;
   #roadInfluence = 0;
   #rutPullStrength = 0;
+  /** Angular velocity for airborne tumbling (rad/s around local right axis). */
+  #tumblePitch = 0;
+  /** Angular velocity for airborne tumbling (rad/s around local forward axis). */
+  #tumbleRoll = 0;
+  /** Quaternion accumulating tumble rotation while airborne. */
+  readonly #tumbleQuat = new THREE.Quaternion();
+  /** Whether the vehicle is currently tumbling (airborne with angular velocity). */
+  #isTumbling = false;
 
   get heading(): number {
     return this.#heading;
@@ -94,8 +105,12 @@ export class VehicleController {
     this.#airborneTime = 0;
     this.#roadInfluence = 0;
     this.#rutPullStrength = 0;
+    this.#tumblePitch = 0;
+    this.#tumbleRoll = 0;
+    this.#tumbleQuat.identity();
+    this.#isTumbling = false;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
-    this.#composeOrientation();
+    this.#composeBaseOrientation();
     this.#updateWheelData();
     Object.assign(this.state, createDefaultDrivingState());
     this.state.surface = surfaceSample.surface;
@@ -117,8 +132,12 @@ export class VehicleController {
     this.#airborneTime = 0;
     this.#roadInfluence = 0;
     this.#rutPullStrength = 0;
+    this.#tumblePitch = 0;
+    this.#tumbleRoll = 0;
+    this.#tumbleQuat.identity();
+    this.#isTumbling = false;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
-    this.#composeOrientation();
+    this.#composeBaseOrientation();
     this.#updateWheelData();
     Object.assign(this.state, createDefaultDrivingState());
     this.state.surface = surfaceSample.surface;
@@ -294,6 +313,9 @@ export class VehicleController {
           0,
           0.36,
         );
+      // Momentum — the faster you're already going, the harder you push
+      const speedRatio = THREE.MathUtils.clamp(Math.abs(forwardSpeed) / vehicleTuning.maxCruiseSpeed, 0, 1);
+      const momentumMultiplier = 1 + speedRatio * 0.6;
       this.velocity.x +=
         this.#forward.x
         * driveThrottle
@@ -302,6 +324,7 @@ export class VehicleController {
         * bogFactor
         * tractionWindow
         * boostMultiplier
+        * momentumMultiplier
         * tractionControl
         * dt;
       this.velocity.z +=
@@ -312,6 +335,7 @@ export class VehicleController {
         * bogFactor
         * tractionWindow
         * boostMultiplier
+        * momentumMultiplier
         * tractionControl
         * dt;
     } else {
@@ -596,6 +620,52 @@ export class VehicleController {
       this.#airborneTime += dt;
     }
 
+    // --- Tumble physics ---
+    // Seed angular velocity when leaving the ground
+    if (previousGrounded && !isGrounded) {
+      // How tilted is the ground the vehicle launched from?
+      // surfaceNormal dot worldUp = 1 on flat ground, < 1 on slopes
+      const slopeForward = this.#surfaceNormal.dot(this.#forward);  // nose-up/down tilt
+      const slopeRight = this.#surfaceNormal.dot(this.#right);      // left/right bank
+
+      // Angular velocity from slope × speed — driving fast off a ramp = big pitch
+      this.#tumblePitch = -slopeForward * planarSpeed * 0.12;
+      this.#tumbleRoll = slopeRight * planarSpeed * 0.10 + lateralSpeed * 0.06;
+
+      // Vertical launch velocity adds pitch (popping off a bump at speed)
+      if (this.velocity.y > 1.5) {
+        this.#tumblePitch -= this.velocity.y * 0.08;
+      }
+
+      this.#tumbleQuat.identity();
+      this.#isTumbling = false;
+    }
+
+    // Collisions while airborne add tumble spin
+    if (!isGrounded && this.state.impactMagnitude > 2) {
+      const collisionSpin = this.state.impactMagnitude * 0.15;
+      this.#tumblePitch += this.state.impactDirection.y * collisionSpin;
+      this.#tumbleRoll += this.state.impactDirection.x * collisionSpin;
+    }
+
+    // Activate tumbling after brief airtime with enough angular velocity
+    if (
+      !isGrounded
+      && this.#airborneTime > 0.18
+      && (Math.abs(this.#tumblePitch) > 0.5 || Math.abs(this.#tumbleRoll) > 0.5)
+    ) {
+      this.#isTumbling = true;
+    }
+
+    // Integrate tumble while airborne
+    if (!isGrounded && this.#isTumbling) {
+      // Air drag — heavy vehicle doesn't spin forever
+      this.#tumblePitch *= 1 - 0.4 * dt;
+      this.#tumbleRoll *= 1 - 0.5 * dt;
+      // Gravity pitches the nose down (like a real falling object with front-heavy mass)
+      this.#tumblePitch += 1.8 * dt;
+    }
+
     const driftThreshold = 3.2 - tuning.slip * 1.6;
     const isDrifting =
       isGrounded && Math.abs(lateralSpeed) > driftThreshold && planarSpeed > 6;
@@ -608,7 +678,16 @@ export class VehicleController {
       this.velocity.y = Math.max(this.velocity.y, 0);
       this.#airborneTime = 0;
     }
-    landedThisFrame = !previousGrounded && isGrounded && impactVelocity < -0.9;
+    // Kill tumble on landing — tumbling landings hit harder
+    const wasTumbling = this.#isTumbling;
+    if (!previousGrounded && isGrounded) {
+      this.#tumblePitch = 0;
+      this.#tumbleRoll = 0;
+      this.#tumbleQuat.identity();
+      this.#isTumbling = false;
+    }
+    const landingThreshold = wasTumbling ? -0.4 : -0.9;
+    landedThisFrame = !previousGrounded && isGrounded && impactVelocity < landingThreshold;
     if (landedThisFrame) {
       const landingImpact = Math.abs(impactVelocity);
       if (landingImpact > this.state.impactMagnitude) {
@@ -639,6 +718,7 @@ export class VehicleController {
     this.state.isBoosting = isBoosting;
     this.state.isAccelerating = driveThrottle !== 0;
     this.state.isDrifting = isDrifting;
+    this.state.isTumbling = this.#isTumbling;
     this.state.wasAirborne = landedThisFrame;
     this.state.surface = resolvedSurface;
     this.state.boostLevel = this.#boostLevel;
@@ -674,15 +754,27 @@ export class VehicleController {
   }
 
   #updateOrientation(dt: number, grounded: boolean): void {
-    const targetNormal = grounded
-      ? this.#terrain.getNormalAt(this.position.x, this.position.z)
-      : this.#worldUp;
-    const blend = 1 - Math.exp(-(grounded ? 14 : 2.4) * dt);
-    this.#groundNormal.lerp(targetNormal, blend).normalize();
-    this.#composeOrientation();
+    if (this.#isTumbling && !grounded) {
+      // Build incremental tumble rotation from angular velocity
+      const pitchDelta = this.#tumblePitch * dt;
+      const rollDelta = this.#tumbleRoll * dt;
+      _tumbleIncrement.set(pitchDelta, 0, rollDelta, 1).normalize();
+      this.#tumbleQuat.multiply(_tumbleIncrement);
+      this.#tumbleQuat.normalize();
+      // Compose base orientation then layer tumble on top
+      this.#composeBaseOrientation();
+      this.pose.quaternion.multiply(this.#tumbleQuat);
+    } else {
+      const targetNormal = grounded
+        ? this.#terrain.getNormalAt(this.position.x, this.position.z)
+        : this.#worldUp;
+      const blend = 1 - Math.exp(-(grounded ? 14 : 2.4) * dt);
+      this.#groundNormal.lerp(targetNormal, blend).normalize();
+      this.#composeBaseOrientation();
+    }
   }
 
-  #composeOrientation(): void {
+  #composeBaseOrientation(): void {
     this.#forward
       .set(Math.sin(this.#heading), 0, Math.cos(this.#heading))
       .projectOnPlane(this.#groundNormal);

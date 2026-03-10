@@ -90,6 +90,16 @@ export class EngineAudio {
   };
   #arrivalCueEndsAt = 0;
 
+  /** Exposes the AudioContext so other audio systems can share it. Null until first activate(). */
+  get audioContext(): AudioContext | null {
+    return this.#context;
+  }
+
+  /** The compressor node sits right before context.destination — connect impact/SFX audio here. */
+  get compressorNode(): DynamicsCompressorNode | null {
+    return this.#compressor;
+  }
+
   async activate(): Promise<boolean> {
     this.#ensureGraph();
     if (!this.#context) return false;

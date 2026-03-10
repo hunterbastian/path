@@ -27,12 +27,23 @@ export class Vehicle {
   readonly #headlights: Array<{
     light: THREE.SpotLight;
     baseIntensity: number;
+    baseDistance: number;
   }> = [];
+  readonly #brakeLightMaterials: THREE.MeshStandardMaterial[] = [];
+  readonly #reverseLightMaterials: THREE.MeshStandardMaterial[] = [];
+  readonly #speedLineMaterials: THREE.MeshBasicMaterial[] = [];
+  readonly #speedLines: THREE.Mesh[] = [];
+  readonly #bodyMaterial: THREE.MeshStandardMaterial;
+  readonly #bodyBaseRoughness: number;
+  readonly #bodyBaseMetalness: number;
+  readonly #bodyBaseColor: THREE.Color;
+  readonly #bodyDirtyColor = new THREE.Color(0x3a3530);
   #bodyRoll = 0;
   #bodyPitch = 0;
   #bodySink = 0;
   #bodyHeave = 0;
   #bodyHeaveVelocity = 0;
+  #smoothedSpeedLineOpacity = 0;
 
   constructor(scene: THREE.Scene, options: VehicleOptions = {}, damage?: VehicleDamage) {
     this.damage = damage ?? new VehicleDamage(scene);
@@ -41,6 +52,10 @@ export class Vehicle {
       roughness: 0.82,
       metalness: 0.18,
     });
+    this.#bodyMaterial = bodyMaterial;
+    this.#bodyBaseRoughness = bodyMaterial.roughness;
+    this.#bodyBaseMetalness = bodyMaterial.metalness;
+    this.#bodyBaseColor = bodyMaterial.color.clone();
     const roofMaterial = new THREE.MeshStandardMaterial({
       color: options.roofColor ?? 0xd0c7b3,
       roughness: 0.88,
@@ -118,6 +133,17 @@ export class Vehicle {
     this.#bodyVisual.add(this.#box(markerMaterial, [0.2, 0.1, 0.08], [0.64, 0.35, 2.34]));
     this.#addHeadlight([-0.56, 0.1, 2.33], headlightColor, lightScale);
     this.#addHeadlight([0.56, 0.1, 2.33], headlightColor, lightScale);
+
+    // --- Brake lights (red, rear corners) ---
+    this.#addTailLight([-0.78, 0.22, -2.36], 0xff2200, this.#brakeLightMaterials);
+    this.#addTailLight([0.78, 0.22, -2.36], 0xff2200, this.#brakeLightMaterials);
+
+    // --- Reverse lights (white, near brake lights) ---
+    this.#addTailLight([-0.48, 0.22, -2.36], 0xeeeeff, this.#reverseLightMaterials);
+    this.#addTailLight([0.48, 0.22, -2.36], 0xeeeeff, this.#reverseLightMaterials);
+
+    // --- Speed lines (thin stretched meshes around the vehicle) ---
+    this.#createSpeedLines();
 
     const brushGuard = new THREE.Group();
     brushGuard.position.set(0, 0.04, 2.4);
@@ -256,7 +282,9 @@ export class Vehicle {
       this.mesh.add(berm);
     }
 
-    for (const offset of VEHICLE_WHEEL_OFFSETS) {
+    const wheelNames = ['wheelFL', 'wheelFR', 'wheelRL', 'wheelRR'] as const;
+    for (let i = 0; i < VEHICLE_WHEEL_OFFSETS.length; i++) {
+      const offset = VEHICLE_WHEEL_OFFSETS[i]!;
       const mount = new THREE.Group();
       mount.position.copy(offset);
       const tire = this.#wheel(metalMaterial);
@@ -264,6 +292,21 @@ export class Vehicle {
       this.#wheelMounts.push(mount);
       this.#wheelMeshes.push(tire);
       this.mesh.add(mount);
+
+      this.damage.registerPart({
+        name: wheelNames[i]!,
+        group: mount,
+        parent: this.mesh,
+        health: 1,
+        fragility: 0.08,
+        detachThreshold: 8,
+        directionalBias: new THREE.Vector3(
+          offset.x > 0 ? 1 : -1,
+          -0.5,
+          offset.z > 0 ? 0.3 : -0.3,
+        ).normalize(),
+        directionalWeight: 0.4,
+      });
     }
 
     if (options.scale && options.scale !== 1) {
@@ -278,6 +321,16 @@ export class Vehicle {
     this.mesh.quaternion.copy(quaternion);
   }
 
+  get missingWheelTilt(): { roll: number; pitch: number } {
+    const fl = this.damage.isPartAttached('wheelFL') ? 0 : 1;
+    const fr = this.damage.isPartAttached('wheelFR') ? 0 : 1;
+    const rl = this.damage.isPartAttached('wheelRL') ? 0 : 1;
+    const rr = this.damage.isPartAttached('wheelRR') ? 0 : 1;
+    const roll = (fr + rr - fl - rl) * 0.12;
+    const pitch = (fl + fr - rl - rr) * 0.08;
+    return { roll, pitch };
+  }
+
   updateVisuals(dt: number, state: DrivingState): void {
     const spin = (state.forwardSpeed / 0.48) * dt;
     for (const wheel of this.#wheelMeshes) {
@@ -289,33 +342,39 @@ export class Vehicle {
     if (frontLeft) frontLeft.rotation.y = state.steering * 0.48;
     if (frontRight) frontRight.rotation.y = state.steering * 0.48;
 
-    const targetRoll = THREE.MathUtils.clamp(-state.lateralSpeed * 0.018, -0.12, 0.12);
+    const targetRoll = THREE.MathUtils.clamp(
+      -state.lateralSpeed * 0.032
+        - state.steering * state.speed * 0.003,
+      -0.18, 0.18,
+    );
+    const brakeDive = state.isBraking ? -0.09 - Math.min(state.speed * 0.002, 0.04) : 0;
+    const accelSquat = state.isAccelerating ? 0.05 + Math.min(state.speed * 0.001, 0.02) : 0;
     const targetPitch =
-      (state.isBraking ? -0.05 : state.isAccelerating ? 0.03 : 0)
-      + THREE.MathUtils.clamp(-state.verticalSpeed * 0.012, -0.025, 0.045);
+      (brakeDive + accelSquat)
+      + THREE.MathUtils.clamp(-state.verticalSpeed * 0.018, -0.04, 0.06);
     const targetSink = state.surface === 'sand' ? state.sinkDepth * 0.72 : 0;
     const averageCompression =
       state.wheelCompression.reduce((sum, compression) => sum + Math.max(compression, 0), 0)
       / state.wheelCompression.length;
     const heaveTarget = THREE.MathUtils.clamp(
-      averageCompression * 0.1
-        + (state.isGrounded ? Math.max(-state.verticalSpeed, 0) * 0.004 : 0),
+      averageCompression * 0.16
+        + (state.isGrounded ? Math.max(-state.verticalSpeed, 0) * 0.007 : 0),
       0,
-      0.13,
+      0.2,
     );
     if (state.wasAirborne) {
       this.#bodyHeaveVelocity += THREE.MathUtils.clamp(
-        0.12 + Math.max(-state.verticalSpeed, 0) * 0.02,
-        0.12,
-        0.26,
+        0.18 + Math.max(-state.verticalSpeed, 0) * 0.035,
+        0.18,
+        0.38,
       );
     }
     const heaveAcceleration =
-      (heaveTarget - this.#bodyHeave) * 24
-      - this.#bodyHeaveVelocity * 8.5;
+      (heaveTarget - this.#bodyHeave) * 18
+      - this.#bodyHeaveVelocity * 6.8;
     this.#bodyHeaveVelocity += heaveAcceleration * dt;
     this.#bodyHeave += this.#bodyHeaveVelocity * dt;
-    this.#bodyHeave = THREE.MathUtils.clamp(this.#bodyHeave, -0.035, 0.16);
+    this.#bodyHeave = THREE.MathUtils.clamp(this.#bodyHeave, -0.05, 0.22);
     if (
       Math.abs(this.#bodyHeave) < 0.0006
       && Math.abs(this.#bodyHeaveVelocity) < 0.0006
@@ -324,21 +383,66 @@ export class Vehicle {
       this.#bodyHeave = 0;
       this.#bodyHeaveVelocity = 0;
     }
-    this.#bodyRoll = expLerp(this.#bodyRoll, targetRoll, 8, dt);
-    this.#bodyPitch = expLerp(this.#bodyPitch, targetPitch, 8, dt);
-    this.#bodySink = expLerp(this.#bodySink, targetSink, 9, dt);
+    this.#bodyRoll = expLerp(this.#bodyRoll, targetRoll, 5.5, dt);
+    this.#bodyPitch = expLerp(this.#bodyPitch, targetPitch, 5.5, dt);
+    this.#bodySink = expLerp(this.#bodySink, targetSink, 7, dt);
+    const wheelTilt = this.missingWheelTilt;
     this.#bodyVisual.position.y = -(this.#bodySink + this.#bodyHeave);
-    this.#bodyVisual.rotation.z = this.#bodyRoll;
-    this.#bodyVisual.rotation.x = this.#bodyPitch;
+    this.#bodyVisual.rotation.z = this.#bodyRoll + wheelTilt.roll;
+    this.#bodyVisual.rotation.x = this.#bodyPitch + wheelTilt.pitch;
 
     this.#boostStripMaterial.emissiveIntensity = state.isBoosting ? 1.8 : 0.7;
+
+    // --- Feature 5: Headlight intensity by speed ---
+    const speedIntensityScale = 1 + state.speed * 0.01;
     for (const material of this.#headlightMaterials) {
-      material.emissiveIntensity = state.isGrounded ? 1.85 : 1.55;
+      material.emissiveIntensity = (state.isGrounded ? 1.85 : 1.55) * speedIntensityScale;
     }
     for (const headlight of this.#headlights) {
       headlight.light.intensity =
-        headlight.baseIntensity * (state.isGrounded ? 1 : 0.9);
+        headlight.baseIntensity * (state.isGrounded ? 1 : 0.9) * speedIntensityScale;
+      headlight.light.distance = headlight.baseDistance * (1 + state.speed * 0.005);
     }
+
+    // --- Feature 1: Brake lights ---
+    const brakeGlow = state.isBraking ? 2.4 : 0.15;
+    for (const mat of this.#brakeLightMaterials) {
+      mat.emissiveIntensity = brakeGlow;
+    }
+
+    // --- Feature 2: Reverse lights ---
+    const reverseGlow = state.throttle < 0 ? 1.8 : 0.1;
+    for (const mat of this.#reverseLightMaterials) {
+      mat.emissiveIntensity = reverseGlow;
+    }
+
+    // --- Feature 3: Speed lines ---
+    const speedLineFraction = THREE.MathUtils.clamp((state.speed - 20) / 30, 0, 1);
+    const targetOpacity = speedLineFraction * 0.35;
+    this.#smoothedSpeedLineOpacity = expLerp(this.#smoothedSpeedLineOpacity, targetOpacity, 6, dt);
+    const lineVisible = this.#smoothedSpeedLineOpacity > 0.005;
+    for (let i = 0; i < this.#speedLines.length; i++) {
+      const line = this.#speedLines[i]!;
+      const mat = this.#speedLineMaterials[i]!;
+      line.visible = lineVisible;
+      if (lineVisible) {
+        mat.opacity = this.#smoothedSpeedLineOpacity;
+        // Stretch lines along Z based on speed
+        line.scale.z = 1 + speedLineFraction * 2.5;
+      }
+    }
+
+    // --- Feature 6: Damage visual feedback ---
+    const health = this.damage.totalHealth;
+    const damageFraction = THREE.MathUtils.clamp(1 - health, 0, 1);
+    this.#bodyMaterial.roughness = this.#bodyBaseRoughness + damageFraction * 0.16;
+    this.#bodyMaterial.metalness = this.#bodyBaseMetalness * (1 - damageFraction * 0.6);
+    // Darken the body color toward a dirty brownish tone as damage increases
+    this.#bodyMaterial.color.copy(this.#bodyBaseColor).lerp(
+      this.#bodyDirtyColor,
+      damageFraction * 0.4,
+    );
+
     this.#sandBermMaterial.opacity =
       state.surface === 'sand'
         ? THREE.MathUtils.clamp(0.08 + state.surfaceBuildup * 0.26 + state.sinkDepth * 0.6, 0, 0.42)
@@ -379,6 +483,54 @@ export class Vehicle {
         baseScale.y * height,
         baseScale.z * spread,
       );
+    }
+  }
+
+  #addTailLight(
+    position: [number, number, number],
+    color: THREE.ColorRepresentation,
+    materialList: THREE.MeshStandardMaterial[],
+  ): void {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.15,
+      roughness: 0.24,
+      metalness: 0.08,
+    });
+    const housing = this.#box(material, [0.18, 0.1, 0.06], position);
+    materialList.push(material);
+    this.#bodyVisual.add(housing);
+  }
+
+  #createSpeedLines(): void {
+    // Create several thin stretched boxes along the sides and top of the vehicle
+    const lineGeo = new THREE.BoxGeometry(0.02, 0.02, 1.6);
+    const lineConfigs: [number, number, number][] = [
+      [-1.2, 0.5, -0.5],
+      [-1.2, 0.2, -0.8],
+      [-1.2, 0.8, -0.3],
+      [1.2, 0.5, -0.5],
+      [1.2, 0.2, -0.8],
+      [1.2, 0.8, -0.3],
+      [-0.6, 1.2, -0.4],
+      [0.6, 1.2, -0.4],
+    ];
+    for (const pos of lineConfigs) {
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      });
+      const line = new THREE.Mesh(lineGeo, material);
+      line.position.set(pos[0], pos[1], pos[2]);
+      line.visible = false;
+      line.castShadow = false;
+      line.receiveShadow = false;
+      this.#speedLineMaterials.push(material);
+      this.#speedLines.push(line);
+      this.#bodyVisual.add(line);
     }
   }
 
@@ -423,10 +575,11 @@ export class Vehicle {
     this.#headlightMaterials.push(material);
     this.#bodyVisual.add(housing);
 
+    const baseDistance = 34 * scale;
     const light = new THREE.SpotLight(
       color,
       6.4 * scale,
-      34 * scale,
+      baseDistance,
       Math.PI / 8.5,
       0.5,
       1.4,
@@ -442,6 +595,7 @@ export class Vehicle {
     this.#headlights.push({
       light,
       baseIntensity: 6.4 * scale,
+      baseDistance,
     });
   }
 

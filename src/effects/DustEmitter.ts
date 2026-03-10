@@ -80,6 +80,8 @@ export class DustEmitter {
   #driftTimer = 0;
   #brakeTimer = 0;
   #debrisTimer = 0;
+  /** Pre-allocated config used to apply high-speed persistence scaling without allocation. */
+  readonly #scaledConfig: DustConfig = { size: 0, growth: 0, life: 0, spread: 0, lift: 0, jitter: 0 };
 
   constructor(dustSystem: DustSystem, options: DustEmitterOptions) {
     this.#dust = dustSystem;
@@ -183,6 +185,22 @@ export class DustEmitter {
   ): void {
     const wheel = vehicle.wheelWorldPositions[wheelIndex];
     if (!wheel) return;
+
+    // Feature 4: At high speed, increase particle lifetime, size, and spread
+    // for a more visible, lingering dust trail.
+    const speed = vehicle.state.speed;
+    const speedFactor = Math.min(speed / 40, 1); // 0..1 as speed goes 0..40
+    const lifeScale = 1 + speedFactor * 0.8;     // up to 1.8x lifetime
+    const sizeScale = 1 + speedFactor * 0.35;    // up to 1.35x size
+    const growthScale = 1 + speedFactor * 0.3;   // up to 1.3x growth (slower fade-out look)
+
+    this.#scaledConfig.size = config.size * sizeScale;
+    this.#scaledConfig.growth = config.growth * growthScale;
+    this.#scaledConfig.life = config.life * lifeScale;
+    this.#scaledConfig.spread = config.spread * (1 + speedFactor * 0.25);
+    this.#scaledConfig.lift = config.lift;
+    this.#scaledConfig.jitter = config.jitter;
+
     system.emit(
       wheel,
       {
@@ -190,8 +208,35 @@ export class DustEmitter {
         y: 0.18,
         z: vehicle.velocity.z * 0.25,
       },
-      config,
+      this.#scaledConfig,
       count,
     );
+  }
+
+  /** Burst of dust/debris when landing hard from a jump or tumble. */
+  emitLandingBurst(vehicle: VehicleController, magnitude: number): void {
+    if (vehicle.state.surface === 'water') return;
+    const intensity = Math.min(magnitude / 10, 1);
+    const count = Math.round(3 + intensity * 5);
+    const burstConfig: DustConfig = {
+      size: 1.4 + intensity * 0.8,
+      growth: 2.8,
+      life: 0.9 + intensity * 0.5,
+      spread: 1.2 + intensity * 0.6,
+      lift: 0.6 + intensity * 0.4,
+      jitter: 2.0,
+    };
+    // Emit from all 4 wheels for a radial burst
+    for (let i = 0; i < 4; i++) {
+      const wheel = vehicle.wheelWorldPositions[i];
+      if (!wheel) continue;
+      const system = vehicle.state.surface === 'snow' ? this.#snow : this.#dust;
+      system.emit(
+        wheel,
+        { x: (Math.random() - 0.5) * 3, y: 1.2 + intensity * 0.8, z: (Math.random() - 0.5) * 3 },
+        burstConfig,
+        count,
+      );
+    }
   }
 }

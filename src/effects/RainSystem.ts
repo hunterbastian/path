@@ -11,7 +11,7 @@ interface DropRecord {
   drift: number;
 }
 
-const DROP_COUNT = 260;
+const DROP_COUNT = 160;
 const FIELD_WIDTH = 92;
 const FIELD_DEPTH = 74;
 const FIELD_HEIGHT = 46;
