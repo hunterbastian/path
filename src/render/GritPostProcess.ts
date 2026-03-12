@@ -16,7 +16,7 @@ const POST_SHADER = {
     uPixelSize: { value: 2 },
     uColorSteps: { value: 24 },
     uDebugView: { value: 0 },
-    uNearFar: { value: new THREE.Vector2(0.1, 2400) },
+    uNearFar: { value: new THREE.Vector2(0.5, 1200) },
     uFogNearFar: { value: new THREE.Vector2(46, 430) },
     uProjectionInverse: { value: new THREE.Matrix4() },
     uCameraMatrixWorld: { value: new THREE.Matrix4() },
@@ -26,6 +26,7 @@ const POST_SHADER = {
     },
     uDamageFlash: { value: 0 },
     uSpeedIntensity: { value: 0 },
+    uMotionBlur: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -53,6 +54,7 @@ const POST_SHADER = {
     uniform vec4 uWaterPools[MAX_WATER_DEBUG_POOLS];
     uniform float uDamageFlash;
     uniform float uSpeedIntensity;
+    uniform float uMotionBlur;
 
     varying vec2 vUv;
 
@@ -114,6 +116,30 @@ const POST_SHADER = {
       return vec2(mask, depth);
     }
 
+    vec3 radialBlur(sampler2D tex, vec2 uv, float strength) {
+      vec2 dir = uv - 0.5;
+      vec2 step = dir * strength * 0.018;
+
+      vec3 acc = vec3(0.0);
+      float total = 0.0;
+      for (int i = 0; i < 4; i += 1) {
+        float weight = 1.0 - float(i) / 4.0;
+        acc += texture2D(tex, uv - step * float(i)).rgb * weight;
+        total += weight;
+      }
+      return acc / total;
+    }
+
+    vec3 chromaticAberration(sampler2D tex, vec2 uv, float strength) {
+      vec2 dir = uv - 0.5;
+      float dist = length(dir);
+      vec2 offset = dir * dist * strength * 0.02;
+      float r = texture2D(tex, uv + offset).r;
+      float g = texture2D(tex, uv).g;
+      float b = texture2D(tex, uv - offset).b;
+      return vec3(r, g, b);
+    }
+
     vec3 applyFinalGrade(vec3 color, vec2 uv, vec2 sampleUv) {
       float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
       vec3 graded = mix(color, vec3(luma) * vec3(1.02, 1.0, 0.98), 0.035);
@@ -138,14 +164,44 @@ const POST_SHADER = {
     void main() {
       vec2 grid = max(floor(uResolution / uPixelSize), vec2(1.0));
       vec2 sampleUv = floor(vUv * grid) / grid;
-      vec3 sceneColor = texture2D(tScene, vUv).rgb;
-      vec3 finalColor = applyFinalGrade(texture2D(tScene, sampleUv).rgb, vUv, sampleUv);
-      float rawDepth = texture2D(tDepth, vUv).r;
-      bool hasSurface = rawDepth < 0.99999;
+
+      // Radial motion blur — only when moving fast
+      float blurStrength = uMotionBlur * uSpeedIntensity;
+      vec3 baseColor = texture2D(tScene, sampleUv).rgb;
+      vec3 preGrade = baseColor;
+
+      if (blurStrength > 0.02) {
+        preGrade = radialBlur(tScene, sampleUv, blurStrength);
+      }
+
+      // Chromatic aberration — only on damage or high speed
+      float caStrength = uDamageFlash * 3.0 + uSpeedIntensity * 0.5;
+      if (caStrength > 0.05) {
+        vec3 caColor = chromaticAberration(tScene, sampleUv, caStrength);
+        preGrade = mix(preGrade, caColor, clamp(caStrength * 0.6, 0.0, 1.0));
+      }
+
+      vec3 finalColor = applyFinalGrade(preGrade, vUv, sampleUv);
+
+      // Damage flash — red tint overlay
+      if (uDamageFlash > 0.01) {
+        vec3 flashColor = vec3(0.85, 0.12, 0.08);
+        finalColor = mix(finalColor, flashColor, uDamageFlash * 0.35);
+      }
+
+      // Speed vignette — tighter darkening at edges with speed
+      if (uSpeedIntensity > 0.01) {
+        float dist = length(vUv - 0.5);
+        float speedVignette = smoothstep(0.55 - uSpeedIntensity * 0.15, 0.15, dist);
+        finalColor *= mix(0.7, 1.0, speedVignette);
+      }
 
       vec3 outputColor = finalColor;
 
       if (uDebugView > 0.5) {
+        float rawDepth = texture2D(tDepth, vUv).r;
+        bool hasSurface = rawDepth < 0.99999;
+        vec3 sceneColor = texture2D(tScene, vUv).rgb;
         float linearDepth = hasSurface ? linearizeDepth(rawDepth) : uNearFar.y;
         float depth01 = clamp(linearDepth / max(uNearFar.y, 0.00001), 0.0, 1.0);
         float fogFactor = smoothstep(uFogNearFar.x, uFogNearFar.y, linearDepth);
@@ -177,20 +233,6 @@ const POST_SHADER = {
         } else {
           outputColor = hasSurface ? heatRamp(height01) : vec3(0.0, 0.0, 0.0);
         }
-      }
-
-      // Damage flash — red vignette from screen edges
-      if (uDamageFlash > 0.01) {
-        float edgeDist = length(vUv - 0.5) * 2.0;
-        float flashMask = smoothstep(0.3, 1.2, edgeDist);
-        outputColor = mix(outputColor, vec3(0.6, 0.04, 0.02), flashMask * uDamageFlash * 0.6);
-      }
-
-      // Speed vignette — subtle tunnel vision at high speed
-      if (uSpeedIntensity > 0.01) {
-        float speedEdge = length(vUv - 0.5) * 2.0;
-        float speedDarken = smoothstep(0.6, 1.4, speedEdge) * uSpeedIntensity * 0.18;
-        outputColor *= 1.0 - speedDarken;
       }
 
       gl_FragColor = vec4(outputColor, 1.0);
@@ -290,6 +332,11 @@ export class GritPostProcess {
   setSpeedIntensity(intensity: number): void {
     const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
     uniforms.uSpeedIntensity.value = intensity;
+  }
+
+  setMotionBlurStrength(strength: number): void {
+    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+    uniforms.uMotionBlur.value = strength;
   }
 
   render(): void {

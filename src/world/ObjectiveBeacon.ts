@@ -30,7 +30,7 @@ function createLink(
     new THREE.Vector3(0, 1, 0),
     delta.normalize(),
   );
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   return mesh;
 }
 
@@ -148,7 +148,7 @@ export class ObjectiveBeacon {
       if (rotation) {
         mesh.rotation.copy(rotation);
       }
-      mesh.castShadow = true;
+      mesh.castShadow = false;
       mesh.receiveShadow = receiveShadow;
       this.group.add(mesh);
       return mesh;
@@ -162,6 +162,8 @@ export class ObjectiveBeacon {
       pulseIntensity: number,
       completionBoost: number,
     ): void => {
+      // Only objective beacon gets PointLights — outposts use emissive only (performance)
+      if (!this.#isObjective) return;
       const light = new THREE.PointLight(color, baseIntensity, distance, 2);
       light.position.copy(positionVector);
       this.group.add(light);

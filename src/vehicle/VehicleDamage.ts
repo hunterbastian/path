@@ -26,6 +26,11 @@ interface PartRecord {
   config: DetachablePartConfig;
   initialPosition: THREE.Vector3;
   initialQuaternion: THREE.Quaternion;
+  initialEuler: THREE.Euler;
+  /** Accumulated deformation offset in local space. */
+  deformOffset: THREE.Vector3;
+  /** Accumulated deformation rotation (Euler angles). */
+  deformRotation: THREE.Vector3;
 }
 
 const GRAVITY = 24;
@@ -45,6 +50,9 @@ export class VehicleDamage {
       config: { ...config },
       initialPosition: config.group.position.clone(),
       initialQuaternion: config.group.quaternion.clone(),
+      initialEuler: config.group.rotation.clone(),
+      deformOffset: new THREE.Vector3(),
+      deformRotation: new THREE.Vector3(),
     });
   }
 
@@ -76,6 +84,7 @@ export class VehicleDamage {
 
       const damage =
         (magnitude - config.detachThreshold) * config.fragility * directionalFactor;
+      const prevHealth = config.health;
       config.health = Math.max(0, config.health - damage);
 
       if (config.health <= 0) {
@@ -87,6 +96,33 @@ export class VehicleDamage {
           vehicleVelocity,
           direction,
           magnitude,
+        );
+      } else {
+        // Deform the part — push it in the impact direction, twist it
+        const damageFraction = 1 - config.health;
+        const hitStrength = Math.min((prevHealth - config.health) * 2, 0.5);
+
+        // Offset: push part along local impact direction
+        record.deformOffset.addScaledVector(localDir, hitStrength * 0.06);
+        // Clamp total deformation offset
+        record.deformOffset.clampLength(0, 0.12);
+
+        // Rotation: twist proportional to total damage taken
+        // Use impact direction cross product for natural twist axis
+        record.deformRotation.x += localDir.z * hitStrength * 0.15;
+        record.deformRotation.y += (Math.random() - 0.5) * hitStrength * 0.08;
+        record.deformRotation.z += -localDir.x * hitStrength * 0.15;
+        // Clamp rotation
+        record.deformRotation.x = THREE.MathUtils.clamp(record.deformRotation.x, -0.22, 0.22);
+        record.deformRotation.y = THREE.MathUtils.clamp(record.deformRotation.y, -0.12, 0.12);
+        record.deformRotation.z = THREE.MathUtils.clamp(record.deformRotation.z, -0.22, 0.22);
+
+        // Apply deformation to the visual
+        config.group.position.copy(record.initialPosition).add(record.deformOffset);
+        config.group.rotation.set(
+          record.initialEuler.x + record.deformRotation.x,
+          record.initialEuler.y + record.deformRotation.y,
+          record.initialEuler.z + record.deformRotation.z,
         );
       }
     }
@@ -204,6 +240,14 @@ export class VehicleDamage {
     return record ? record.config.health > 0 : true;
   }
 
+  get detachedCount(): number {
+    let count = 0;
+    for (const record of this.#parts.values()) {
+      if (record.config.health <= 0) count++;
+    }
+    return count;
+  }
+
   get totalHealth(): number {
     if (this.#parts.size === 0) return 1;
     let sum = 0;
@@ -243,6 +287,8 @@ export class VehicleDamage {
 
       record.config.parent.add(obj);
       record.config.health = 1;
+      record.deformOffset.set(0, 0, 0);
+      record.deformRotation.set(0, 0, 0);
     }
   }
 }

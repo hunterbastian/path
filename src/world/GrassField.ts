@@ -12,6 +12,10 @@ interface GrassPatch {
   swayAmplitude: number;
   lean: number;
   tint: THREE.Color;
+  /** 0 = upright, 1 = fully flattened */
+  trample: number;
+  /** Direction the grass was pushed (radians) */
+  trampleYaw: number;
 }
 
 export class GrassField {
@@ -23,9 +27,13 @@ export class GrassField {
   readonly #meshA: THREE.InstancedMesh;
   readonly #meshB: THREE.InstancedMesh;
   readonly #patches: GrassPatch[];
+  readonly #patchHidden: boolean[];
   readonly #dummy = new THREE.Object3D();
   readonly #windDirection = new THREE.Vector3(-1, 0, 0.35).normalize();
+  readonly #trampledTint = new THREE.Color(0x8a7e48); // yellowed/dried
+  readonly #tempColor = new THREE.Color();
   #time = 0;
+  #colorsDirty = false;
   #visibleCount = 0;
   #averageSwayDegrees = 0;
   #windStrength = 0;
@@ -35,6 +43,7 @@ export class GrassField {
     this.#texture = this.#createBladeTexture();
     this.#geometry = this.#createBladeGeometry();
     this.#patches = this.#buildPatches();
+    this.#patchHidden = new Array(this.#patches.length).fill(false);
 
     this.#materialA = this.#createMaterial();
     this.#materialB = this.#createMaterial();
@@ -68,6 +77,26 @@ export class GrassField {
     scene.add(this.#meshB);
   }
 
+  /**
+   * Trample grass near a world position. Called each frame while the vehicle
+   * is grounded on grass/dirt surfaces.
+   */
+  trample(worldX: number, worldZ: number, radius: number, strength: number, directionYaw: number): void {
+    const rSq = radius * radius;
+    for (const patch of this.#patches) {
+      const dx = patch.position.x - worldX;
+      const dz = patch.position.z - worldZ;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > rSq) continue;
+
+      const proximity = 1 - Math.sqrt(distSq) / radius;
+      const amount = proximity * strength;
+      patch.trample = Math.min(1, patch.trample + amount);
+      // Blend toward the vehicle's travel direction
+      patch.trampleYaw = THREE.MathUtils.lerp(patch.trampleYaw, directionYaw, amount * 0.6);
+    }
+  }
+
   dispose(): void {
     this.#meshA.removeFromParent();
     this.#meshB.removeFromParent();
@@ -95,17 +124,43 @@ export class GrassField {
     );
     const heightScale = weatherCondition === 'rainy' ? 0.95 : 1;
 
+    const camX = cameraPosition.x;
+    const camZ = cameraPosition.z;
+    const time = this.#time;
+    const windDirZ = this.#windDirection.z;
+    const windDirX = this.#windDirection.x;
     let visibleCount = 0;
     let swaySum = 0;
+    let anyVisible = false;
 
     for (let index = 0; index < this.#patches.length; index += 1) {
       const patch = this.#patches[index];
       if (!patch) continue;
 
-      const distance = Math.hypot(
-        cameraPosition.x - patch.position.x,
-        cameraPosition.z - patch.position.z,
-      );
+      // Use squared distance to avoid sqrt for culling
+      const dx = camX - patch.position.x;
+      const dz = camZ - patch.position.z;
+      const distSq = dx * dx + dz * dz;
+
+      // 232 = 18 + 214 (max visible distance), squared = 53824
+      if (distSq > 53824) {
+        // Only zero out if it was previously visible (avoid redundant uploads)
+        if (!this.#patchHidden[index]) {
+          this.#dummy.position.copy(patch.position);
+          this.#dummy.scale.setScalar(0.0001);
+          this.#dummy.updateMatrix();
+          this.#meshA.setMatrixAt(index, this.#dummy.matrix);
+          this.#meshB.setMatrixAt(index, this.#dummy.matrix);
+          this.#patchHidden[index] = true;
+          anyVisible = true; // need to flag update
+        }
+        continue;
+      }
+
+      this.#patchHidden[index] = false;
+      anyVisible = true;
+
+      const distance = Math.sqrt(distSq);
       const visibility = THREE.MathUtils.clamp(
         1 - (distance - 18) / 214,
         0,
@@ -122,35 +177,76 @@ export class GrassField {
       }
 
       visibleCount += 1;
+
+      // Trample recovery — slowly spring back (faster when rainy — water helps)
+      if (patch.trample > 0) {
+        const recoveryRate = weatherCondition === 'rainy' ? 0.025 : 0.012;
+        patch.trample = Math.max(0, patch.trample - recoveryRate * dt);
+      }
+      const trample = patch.trample;
+
+      const phase = patch.phase;
       const gust =
         0.64
-        + Math.sin(this.#time * 0.72 + patch.phase * 0.6) * 0.28
-        + Math.sin(this.#time * 1.48 + patch.phase * 1.2) * 0.22;
+        + Math.sin(time * 0.72 + phase * 0.6) * 0.28
+        + Math.sin(time * 1.48 + phase * 1.2) * 0.22;
+      // Trampled grass sways less
+      const swayDamp = 1 - trample * 0.85;
       const sway =
-        Math.sin(this.#time * (1.1 + windDensity * 0.9) + patch.phase)
+        Math.sin(time * (1.1 + windDensity * 0.9) + phase)
         * patch.swayAmplitude
         * windStrength
         * gust
-        * visibility;
+        * visibility
+        * swayDamp;
       swaySum += Math.abs(sway);
 
-      const tiltX = this.#windDirection.z * (patch.lean + sway);
-      const tiltZ = -this.#windDirection.x * (patch.lean + sway);
+      // Trample pushes grass sideways and reduces height
+      const trampleLean = trample * 0.65; // how far it's pushed over
+      const trampleTiltX = Math.sin(patch.trampleYaw) * trampleLean;
+      const trampleTiltZ = -Math.cos(patch.trampleYaw) * trampleLean;
+
+      const lean = patch.lean + sway;
+      const tiltX = windDirZ * lean + trampleTiltX;
+      const tiltZ = -windDirX * lean + trampleTiltZ;
       const baseScale = visibility * THREE.MathUtils.lerp(0.82, 1, visibility);
+      // Trampled grass is shorter
+      const trampleHeightScale = 1 - trample * 0.45;
 
       this.#dummy.position.copy(patch.position);
       this.#dummy.rotation.set(tiltX, patch.yaw, tiltZ, 'YXZ');
-      this.#dummy.scale.set(patch.width * baseScale, patch.height * heightScale * baseScale, 1);
+      this.#dummy.scale.set(
+        patch.width * baseScale * (1 + trample * 0.15), // slightly wider when flattened
+        patch.height * heightScale * baseScale * trampleHeightScale,
+        1,
+      );
       this.#dummy.updateMatrix();
       this.#meshA.setMatrixAt(index, this.#dummy.matrix);
 
       this.#dummy.rotation.set(tiltX, patch.yaw + Math.PI * 0.5, tiltZ, 'YXZ');
       this.#dummy.updateMatrix();
       this.#meshB.setMatrixAt(index, this.#dummy.matrix);
+
+      // Tint trampled grass toward dried yellow-brown
+      if (trample > 0.02) {
+        this.#tempColor.copy(patch.tint).lerp(this.#trampledTint, trample * 0.55);
+        this.#meshA.setColorAt(index, this.#tempColor);
+        this.#tempColor.offsetHSL(0, -0.02, -0.03);
+        this.#meshB.setColorAt(index, this.#tempColor);
+        this.#colorsDirty = true;
+      }
     }
 
-    this.#meshA.instanceMatrix.needsUpdate = true;
-    this.#meshB.instanceMatrix.needsUpdate = true;
+    // Only upload instance matrices when something changed
+    if (anyVisible || visibleCount > 0) {
+      this.#meshA.instanceMatrix.needsUpdate = true;
+      this.#meshB.instanceMatrix.needsUpdate = true;
+    }
+    if (this.#colorsDirty) {
+      if (this.#meshA.instanceColor) this.#meshA.instanceColor.needsUpdate = true;
+      if (this.#meshB.instanceColor) this.#meshB.instanceColor.needsUpdate = true;
+      this.#colorsDirty = false;
+    }
     this.#visibleCount = visibleCount;
     this.#averageSwayDegrees =
       visibleCount > 0
@@ -180,7 +276,7 @@ export class GrassField {
     const cityCenter = this.#terrain.getCityCenterPosition();
     const outposts = this.#terrain.getOutpostPositions();
 
-    for (let attempt = 0; attempt < 5200 && patches.length < 480; attempt += 1) {
+    for (let attempt = 0; attempt < 3600 && patches.length < 320; attempt += 1) {
       const x = random.range(-halfSize, halfSize);
       const z = random.range(-halfSize, halfSize);
       if (!this.#terrain.isWithinBounds(x, z)) continue;
@@ -259,6 +355,8 @@ export class GrassField {
         swayAmplitude: random.range(0.08, 0.19),
         lean: random.range(-0.02, 0.03),
         tint,
+        trample: 0,
+        trampleYaw: 0,
       });
     }
 

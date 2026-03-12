@@ -396,7 +396,7 @@ export class ReactiveWorldPropsSystem {
       shoveable = true;
       const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 0.9), materials.concrete);
       body.position.set(0, 0.5, 0);
-      body.castShadow = true;
+      body.castShadow = false;
       body.receiveShadow = true;
       pivot.add(body);
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.16, 0.08), materials.marker);
@@ -409,12 +409,12 @@ export class ReactiveWorldPropsSystem {
       shoveable = true;
       const lower = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.78, 1.1), materials.crate);
       lower.position.set(0, 0.39, 0);
-      lower.castShadow = true;
+      lower.castShadow = false;
       lower.receiveShadow = true;
       pivot.add(lower);
       const upper = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.56, 0.82), materials.crateLight);
       upper.position.set(0.08, 1.06, -0.02);
-      upper.castShadow = true;
+      upper.castShadow = false;
       upper.receiveShadow = true;
       pivot.add(upper);
     } else if (type === 'pole') {
@@ -423,7 +423,7 @@ export class ReactiveWorldPropsSystem {
       collisionHeight = 3.3;
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 3.4, 6), materials.steel);
       mast.position.set(0, 1.7, 0);
-      mast.castShadow = true;
+      mast.castShadow = false;
       pivot.add(mast);
       const cap = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.18, 0.44), materials.darkSteel);
       cap.position.set(0, 3.36, 0);
@@ -434,11 +434,11 @@ export class ReactiveWorldPropsSystem {
       collisionHeight = 2.8;
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.7, 6), materials.steel);
       post.position.set(0, 1.35, 0);
-      post.castShadow = true;
+      post.castShadow = false;
       pivot.add(post);
       const panel = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.98, 0.12), materials.sign);
       panel.position.set(0, 2.16, 0.18);
-      panel.castShadow = true;
+      panel.castShadow = false;
       panel.receiveShadow = true;
       pivot.add(panel);
       const glyph = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.14, 0.04), materials.marker);
@@ -450,20 +450,19 @@ export class ReactiveWorldPropsSystem {
       collisionHeight = 3.8;
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 3.8, 6), materials.steel);
       mast.position.set(0, 1.9, 0);
-      mast.castShadow = true;
+      mast.castShadow = false;
       pivot.add(mast);
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.42, 0.56), materials.darkSteel);
       head.position.set(0, 3.62, 0.18);
       head.rotation.x = -0.22;
-      head.castShadow = true;
+      head.castShadow = false;
       pivot.add(head);
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.08), materials.window);
       glow.position.set(0, 3.54, 0.46);
       glow.rotation.x = -0.22;
       pivot.add(glow);
-      const light = new THREE.PointLight(0xffd7a2, 0.58, 14, 2);
-      light.position.set(0, 3.36, 0.9);
-      pivot.add(light);
+      // Emissive glow only — no PointLight (performance)
+
     }
 
     const position = new THREE.Vector3(

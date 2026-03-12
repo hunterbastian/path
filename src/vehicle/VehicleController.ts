@@ -67,9 +67,82 @@ export class VehicleController {
   readonly #tumbleQuat = new THREE.Quaternion();
   /** Whether the vehicle is currently tumbling (airborne with angular velocity). */
   #isTumbling = false;
+  /** Which wheels are still attached (FL, FR, RL, RR). */
+  #wheelAttached: [boolean, boolean, boolean, boolean] = [true, true, true, true];
+  /** Extra drag multiplier from missing body panels (hood, windshield, doors). */
+  #aeroDragPenalty = 1;
+  /** Weight transfer pitch: positive = nose down (braking), negative = nose up (accel). */
+  #weightPitch = 0;
+  /** Weight transfer roll: positive = lean right (turning left). */
+  #weightRoll = 0;
+  /** Suspension-derived pitch from per-wheel terrain contact. */
+  #suspensionPitch = 0;
+  /** Suspension-derived roll from per-wheel terrain contact. */
+  #suspensionRoll = 0;
+  /** Current water submersion depth (0 when not in water). */
+  #waterDepth = 0;
+  /** Speed when entering water — used for hydroplane-to-catch spike. */
+  #waterEntrySpeed = 0;
+  /** Whether the vehicle was in water last frame. */
+  #wasInWater = false;
 
   get heading(): number {
     return this.#heading;
+  }
+
+  setWheelAttached(attached: [boolean, boolean, boolean, boolean]): void {
+    this.#wheelAttached[0] = attached[0];
+    this.#wheelAttached[1] = attached[1];
+    this.#wheelAttached[2] = attached[2];
+    this.#wheelAttached[3] = attached[3];
+  }
+
+  /** Set aero drag penalty from missing body panels. 1 = intact, higher = more drag. */
+  setAeroDragPenalty(penalty: number): void {
+    this.#aeroDragPenalty = penalty;
+  }
+
+  /**
+   * Compute physics penalties from missing wheels.
+   * FL=0, FR=1, RL=2, RR=3
+   */
+  get #wheelPenalty(): {
+    /** 0–1 traction multiplier (fewer wheels = less grip/accel) */
+    traction: number;
+    /** Steering pull: negative = pulls left, positive = pulls right */
+    steerPull: number;
+    /** 0–1 max speed multiplier */
+    speedCap: number;
+    /** Extra yaw instability added per frame */
+    yawNoise: number;
+    /** How many wheels remain */
+    count: number;
+  } {
+    const fl = this.#wheelAttached[0] ? 1 : 0;
+    const fr = this.#wheelAttached[1] ? 1 : 0;
+    const rl = this.#wheelAttached[2] ? 1 : 0;
+    const rr = this.#wheelAttached[3] ? 1 : 0;
+    const count = fl + fr + rl + rr;
+
+    // Each wheel contributes 25% traction, but losing the first is less punishing
+    // than losing the third — exponential penalty curve
+    const fraction = count / 4;
+    const traction = fraction * fraction; // 4→1.0, 3→0.56, 2→0.25, 1→0.06, 0→0
+
+    // Steering pull: missing a left wheel pulls left (negative), right pulls right
+    // Front wheels have more steering influence than rear
+    const frontBias = ((fr - fl) * 0.7);
+    const rearBias = ((rr - rl) * 0.3);
+    const steerPull = frontBias + rearBias;
+
+    // Speed cap degrades with missing wheels
+    const speedCap = THREE.MathUtils.lerp(0.15, 1, fraction);
+
+    // Missing rear wheels cause fishtailing
+    const rearMissing = (rl === 0 ? 1 : 0) + (rr === 0 ? 1 : 0);
+    const yawNoise = rearMissing * 0.35;
+
+    return { traction, steerPull, speedCap, yawNoise, count };
   }
 
   get surfaceFeedback(): { roadInfluence: number; rutPullStrength: number } {
@@ -109,6 +182,15 @@ export class VehicleController {
     this.#tumbleRoll = 0;
     this.#tumbleQuat.identity();
     this.#isTumbling = false;
+    this.#wheelAttached = [true, true, true, true];
+    this.#aeroDragPenalty = 1;
+    this.#weightPitch = 0;
+    this.#weightRoll = 0;
+    this.#suspensionPitch = 0;
+    this.#suspensionRoll = 0;
+    this.#waterDepth = 0;
+    this.#waterEntrySpeed = 0;
+    this.#wasInWater = false;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeBaseOrientation();
     this.#updateWheelData();
@@ -136,6 +218,15 @@ export class VehicleController {
     this.#tumbleRoll = 0;
     this.#tumbleQuat.identity();
     this.#isTumbling = false;
+    this.#wheelAttached = [true, true, true, true];
+    this.#aeroDragPenalty = 1;
+    this.#weightPitch = 0;
+    this.#weightRoll = 0;
+    this.#suspensionPitch = 0;
+    this.#suspensionRoll = 0;
+    this.#waterDepth = 0;
+    this.#waterEntrySpeed = 0;
+    this.#wasInWater = false;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeBaseOrientation();
     this.#updateWheelData();
@@ -249,8 +340,9 @@ export class VehicleController {
       speed: surfaceTuning.speed * vehicleTuning.speedMultiplier,
       yawDamping: surfaceTuning.yawDamping * vehicleTuning.yawDampingMultiplier,
     };
+    const wp = this.#wheelPenalty;
     let slopeMagnitude = 0;
-    const steerInput = controlsEnabled ? input.steering : 0;
+    const steerInput = controlsEnabled ? input.steering + wp.steerPull * 0.18 : 0;
     const maxSandSinkDepth = vehicleTuning.maxSandSinkDepth * vehicleTuning.sinkDepthMultiplier;
     const tractionControl = previousGrounded ? 1 : vehicleTuning.airControl;
     const turnControl = previousGrounded ? 1 : vehicleTuning.airTurnControl;
@@ -316,9 +408,8 @@ export class VehicleController {
       // Momentum — the faster you're already going, the harder you push
       const speedRatio = THREE.MathUtils.clamp(Math.abs(forwardSpeed) / vehicleTuning.maxCruiseSpeed, 0, 1);
       const momentumMultiplier = 1 + speedRatio * 0.6;
-      this.velocity.x +=
-        this.#forward.x
-        * driveThrottle
+      const accelForce =
+        driveThrottle
         * acceleration
         * tuning.acceleration
         * bogFactor
@@ -326,18 +417,10 @@ export class VehicleController {
         * boostMultiplier
         * momentumMultiplier
         * tractionControl
+        * wp.traction
         * dt;
-      this.velocity.z +=
-        this.#forward.z
-        * driveThrottle
-        * acceleration
-        * tuning.acceleration
-        * bogFactor
-        * tractionWindow
-        * boostMultiplier
-        * momentumMultiplier
-        * tractionControl
-        * dt;
+      this.velocity.x += this.#forward.x * accelForce;
+      this.velocity.z += this.#forward.z * accelForce;
     } else {
       const coastLoss =
         forwardSpeed
@@ -366,12 +449,43 @@ export class VehicleController {
     );
     const gripScale =
       1 - tuning.slip * driftPressure * (driveThrottle > 0 ? 0.42 : 0.2);
+    // Water depth reduces grip — shallow is slippery, deep is sluggish
+    const waterGripScale = this.#waterDepth > 0.05
+      ? THREE.MathUtils.clamp(1 - this.#waterDepth * 0.35, 0.2, 1)
+      : 1;
+
+    // ── Tire slip curve ──
+    // Grip peaks at moderate slip angle (~0.3), drops off at high slip.
+    // This creates progressive, predictable breakaway instead of binary grip.
+    const absLateral = Math.abs(lateralSpeed);
+    const slipAngle = planarSpeed > 1
+      ? THREE.MathUtils.clamp(absLateral / planarSpeed, 0, 1)
+      : 0;
+    // Simplified Pacejka-like curve: peaks at 0.3, drops after 0.5
+    const slipGrip = slipAngle < 0.3
+      ? 1.0 + slipAngle * 0.6  // grip builds as tires work harder
+      : THREE.MathUtils.lerp(1.18, 0.55, THREE.MathUtils.clamp((slipAngle - 0.3) / 0.5, 0, 1));
+
+    // ── Weight transfer → grip ──
+    // Roll transfers load to outside wheels, reducing total grip at high roll
+    const rollGripLoss = Math.abs(this.#weightRoll) * 2.8; // 0–0.14 range
+    const weightTransferGrip = THREE.MathUtils.clamp(1 - rollGripLoss, 0.72, 1.0);
+
+    // ── Downforce ──
+    // Speed increases tire load via aerodynamic pressure, improving grip
+    const downforceFactor = 1 + THREE.MathUtils.clamp(planarSpeed / 34, 0, 1) * 0.18;
+
     const lateralGrip =
       tuning.grip
       * gripScale
+      * waterGripScale
+      * slipGrip
+      * weightTransferGrip
+      * downforceFactor
       * (counterSteering ? tuning.counterSteer : 1)
       * (braking ? 1.18 : 1)
-      * tractionControl;
+      * tractionControl
+      * wp.traction;
     const lateralCorrection = lateralSpeed * lateralGrip * dt;
     this.velocity.x -= this.#right.x * lateralCorrection;
     this.velocity.z -= this.#right.z * lateralCorrection;
@@ -446,6 +560,50 @@ export class VehicleController {
       }
     }
 
+    // --- Water depth drag ---
+    const groundHeightForWater = this.#terrain.getHeightAt(this.position.x, this.position.z);
+    const waterHeightHere = this.#water.getWaterHeightAt(this.position.x, this.position.z);
+    const isInWater = waterHeightHere !== null && waterHeightHere > groundHeightForWater + 0.1;
+    if (isInWater && waterHeightHere !== null) {
+      this.#waterDepth = THREE.MathUtils.clamp(
+        waterHeightHere - groundHeightForWater,
+        0,
+        3,
+      );
+
+      // Entry spike — hitting water at speed creates sudden deceleration
+      if (!this.#wasInWater && planarSpeed > 6) {
+        this.#waterEntrySpeed = planarSpeed;
+        const entryDrag = THREE.MathUtils.clamp(
+          this.#waterDepth * planarSpeed * 0.008,
+          0,
+          0.35,
+        );
+        this.velocity.x *= (1 - entryDrag);
+        this.velocity.z *= (1 - entryDrag);
+        // Splash impact
+        if (this.#waterDepth > 0.3 && planarSpeed > 10) {
+          const splashImpact = Math.min(this.#waterDepth * planarSpeed * 0.04, 3);
+          if (splashImpact > this.state.impactMagnitude) {
+            this.state.impactMagnitude = splashImpact;
+            this.state.impactDirection.set(0, -1, 0);
+          }
+        }
+      }
+      this.#wasInWater = true;
+    } else {
+      // Exiting water — hydroplane release
+      if (this.#wasInWater && this.#waterDepth > 0.2) {
+        this.#waterEntrySpeed = 0;
+      }
+      this.#waterDepth = expLerp(this.#waterDepth, 0, 8, dt);
+      this.#wasInWater = false;
+    }
+    // Exponential drag from water depth — shallow = mild, deep = crushing
+    const waterDragExtra = this.#waterDepth > 0.05
+      ? (Math.exp(this.#waterDepth * 1.8) - 1) * 0.8
+      : 0;
+
     const sinkDrag = currentSurface === 'sand'
       ? THREE.MathUtils.clamp(this.#sinkDepth * 4.5, 0, 1.2)
       : 0;
@@ -471,10 +629,11 @@ export class VehicleController {
         ),
       )
       : 1;
-    const dragBase = previousGrounded
-      ? (0.92 * tuning.drag + sinkDrag + planarSpeed * vehicleTuning.dragVelocityFactor)
+    const dragBase = (previousGrounded
+      ? (0.92 * tuning.drag + sinkDrag + waterDragExtra + planarSpeed * vehicleTuning.dragVelocityFactor)
         * slopeDragScale
-      : 0.14 + planarSpeed * vehicleTuning.dragVelocityFactor * 0.38;
+      : 0.14 + planarSpeed * vehicleTuning.dragVelocityFactor * 0.38)
+      * this.#aeroDragPenalty;
     const dragFactor = Math.max(
       0,
       1 - dragBase * dt,
@@ -498,6 +657,8 @@ export class VehicleController {
         -1.3,
         1.3,
       );
+      // Weight pitch affects rear grip: nose-down (braking) unloads rear → more oversteer
+      const pitchOversteerBias = 1 + this.#weightPitch * 4.5; // range ~0.73–1.27
       const yawAcceleration =
         (
           this.#steering
@@ -507,6 +668,7 @@ export class VehicleController {
             * lowSpeedTurnBoost
             * (forwardSpeed >= 0 ? 1 : -0.72)
           + slipAngle * tuning.slip * (driveThrottle > 0 ? 2.2 : 1.35)
+            * pitchOversteerBias
         )
         * turnControl;
       this.#yawVelocity += yawAcceleration * dt;
@@ -520,11 +682,42 @@ export class VehicleController {
     if (planarSpeed < 1.4) {
       this.#yawVelocity = expDecay(this.#yawVelocity, 10, dt);
     }
+    // Missing rear wheels cause random fishtailing
+    if (wp.yawNoise > 0 && planarSpeed > 4) {
+      const noise = (Math.sin(this.#time * 7.3) * 0.6 + Math.sin(this.#time * 13.1) * 0.4)
+        * wp.yawNoise * THREE.MathUtils.clamp(planarSpeed / 18, 0.3, 1);
+      this.#yawVelocity += noise * dt;
+    }
     this.#heading += this.#yawVelocity * dt;
+
+    // --- Weight transfer ---
+    // Longitudinal: braking pitches nose down, acceleration pitches nose up
+    const longitudinalAccel = driveThrottle * tuning.acceleration * (braking ? -1.8 : 1);
+    const targetWeightPitch = previousGrounded
+      ? THREE.MathUtils.clamp(
+          (braking ? 0.04 : 0)
+          + longitudinalAccel * -0.0018
+          + (isBoosting ? -0.02 : 0),
+          -0.06,
+          0.06,
+        )
+      : 0;
+    // Lateral: turning at speed leans the body outward
+    const targetWeightRoll = previousGrounded
+      ? THREE.MathUtils.clamp(
+          this.#yawVelocity * planarSpeed * -0.0012
+          + lateralSpeed * 0.003,
+          -0.05,
+          0.05,
+        )
+      : 0;
+    this.#weightPitch = expLerp(this.#weightPitch, targetWeightPitch, 8, dt);
+    this.#weightRoll = expLerp(this.#weightRoll, targetWeightRoll, 6, dt);
 
     const maxSpeed =
       (isBoosting ? vehicleTuning.maxBoostSpeed : vehicleTuning.maxCruiseSpeed)
-      * tuning.speed;
+      * tuning.speed
+      * wp.speedCap;
     if (planarSpeed > maxSpeed) {
       const scale = maxSpeed / planarSpeed;
       this.velocity.x *= scale;
@@ -724,6 +917,7 @@ export class VehicleController {
     this.state.boostLevel = this.#boostLevel;
     this.state.sinkDepth = this.#sinkDepth;
     this.state.surfaceBuildup = this.#surfaceBuildup;
+    this.state.wheelAttached = [...this.#wheelAttached];
   }
 
   #resolveSurface(x: number, z: number): DriveSurface {
@@ -786,6 +980,14 @@ export class VehicleController {
     this.#correctedForward.crossVectors(this.#right, this.#groundNormal).normalize();
     this.#basisMatrix.makeBasis(this.#right, this.#groundNormal, this.#correctedForward);
     this.pose.quaternion.setFromRotationMatrix(this.#basisMatrix);
+
+    // Apply weight transfer + suspension tilt as small rotations
+    const totalPitch = this.#weightPitch + this.#suspensionPitch;
+    const totalRoll = this.#weightRoll + this.#suspensionRoll;
+    if (Math.abs(totalPitch) > 0.0005 || Math.abs(totalRoll) > 0.0005) {
+      _tumbleIncrement.set(totalPitch, 0, totalRoll, 1).normalize();
+      this.pose.quaternion.multiply(_tumbleIncrement);
+    }
   }
 
   #updateWheelData(): number {
@@ -817,6 +1019,19 @@ export class VehicleController {
         wheelContactCount += 1;
       }
     }
+
+    // Per-wheel suspension tilt: compare front vs rear and left vs right compression
+    // FL=0, FR=1, RL=2, RR=3
+    const frontAvg = (wheelCompression[0] + wheelCompression[1]) * 0.5;
+    const rearAvg = (wheelCompression[2] + wheelCompression[3]) * 0.5;
+    const leftAvg = (wheelCompression[0] + wheelCompression[2]) * 0.5;
+    const rightAvg = (wheelCompression[1] + wheelCompression[3]) * 0.5;
+    // Front compressed more than rear = nose dips (positive pitch)
+    const targetSuspPitch = (frontAvg - rearAvg) * 0.035;
+    // Right compressed more than left = lean right (positive roll)
+    const targetSuspRoll = (rightAvg - leftAvg) * 0.03;
+    this.#suspensionPitch = THREE.MathUtils.lerp(this.#suspensionPitch, targetSuspPitch, 0.18);
+    this.#suspensionRoll = THREE.MathUtils.lerp(this.#suspensionRoll, targetSuspRoll, 0.18);
 
     this.state.wheelCompression = wheelCompression;
     this.state.wheelContact = wheelContact;

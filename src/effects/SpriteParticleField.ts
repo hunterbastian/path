@@ -7,6 +7,7 @@ interface ParticleFieldOptions {
   gravity: number;
   drag: number;
   fade: (lifeFraction: number) => number;
+  blending?: THREE.Blending;
 }
 
 export interface ParticleSpawn {
@@ -74,38 +75,14 @@ export class SpriteParticleField {
       new THREE.BufferAttribute(this.#sizes, 1),
     );
 
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uColor: { value: new THREE.Color(options.color) },
-        uOpacity: { value: options.opacity },
-      },
-      vertexShader: /* glsl */ `
-        attribute float aSize;
-
-        void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = clamp(aSize * (300.0 / max(-mvPosition.z, 0.1)), 1.0, 96.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform vec3 uColor;
-        uniform float uOpacity;
-
-        void main() {
-          vec2 centered = gl_PointCoord - 0.5;
-          float distanceSquared = dot(centered, centered);
-          if (distanceSquared > 0.25) {
-            discard;
-          }
-
-          float alpha = smoothstep(0.25, 0.0, distanceSquared) * uOpacity;
-          gl_FragColor = vec4(uColor, alpha);
-        }
-      `,
+    const material = new THREE.PointsMaterial({
+      color: options.color,
       transparent: true,
       depthWrite: false,
-      blending: THREE.NormalBlending,
+      blending: options.blending ?? THREE.NormalBlending,
+      opacity: options.opacity,
+      size: 1.0,
+      sizeAttenuation: true,
     });
 
     this.#points = new THREE.Points(this.#geometry, material);
@@ -140,11 +117,15 @@ export class SpriteParticleField {
   }
 
   update(dt: number): void {
-    this.#activeCount = 0;
+    let activeCount = 0;
+    const gravity = this.#gravity;
+    const drag = this.#drag;
+    const fade = this.#fade;
+    const positions = this.#positions;
+    const sizes = this.#sizes;
 
     for (let index = 0; index < this.#particles.length; index += 1) {
-      const particle = this.#particles[index];
-      if (!particle) continue;
+      const particle = this.#particles[index]!;
       if (!particle.alive) continue;
 
       particle.age += dt;
@@ -152,33 +133,33 @@ export class SpriteParticleField {
 
       if (lifeFraction >= 1) {
         particle.alive = false;
-        this.#positions[index * 3 + 1] = PARK_Y;
-        this.#sizes[index] = 0;
+        positions[index * 3 + 1] = PARK_Y;
+        sizes[index] = 0;
         continue;
       }
 
-      this.#activeCount += 1;
+      activeCount += 1;
 
-      particle.vy += this.#gravity * dt;
-      particle.vx *= this.#drag;
-      particle.vy *= this.#drag;
-      particle.vz *= this.#drag;
+      particle.vy += gravity * dt;
+      particle.vx *= drag;
+      particle.vy *= drag;
+      particle.vz *= drag;
       particle.size += particle.growth * dt;
 
       const positionIndex = index * 3;
-      this.#positions[positionIndex] =
-        (this.#positions[positionIndex] ?? 0) + particle.vx * dt;
-      this.#positions[positionIndex + 1] =
-        (this.#positions[positionIndex + 1] ?? 0) + particle.vy * dt;
-      this.#positions[positionIndex + 2] =
-        (this.#positions[positionIndex + 2] ?? 0) + particle.vz * dt;
-      this.#sizes[index] = particle.size * Math.max(this.#fade(lifeFraction), 0);
+      positions[positionIndex] = (positions[positionIndex] ?? 0) + particle.vx * dt;
+      positions[positionIndex + 1] = (positions[positionIndex + 1] ?? 0) + particle.vy * dt;
+      positions[positionIndex + 2] = (positions[positionIndex + 2] ?? 0) + particle.vz * dt;
+      sizes[index] = particle.size * Math.max(fade(lifeFraction), 0);
     }
 
-    (
-      this.#geometry.attributes.position as THREE.BufferAttribute
-    ).needsUpdate = true;
-    (this.#geometry.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
+    this.#activeCount = activeCount;
+
+    // Only upload buffers if there are active particles (or were recently)
+    const posAttr = this.#geometry.attributes.position as THREE.BufferAttribute;
+    const sizeAttr = this.#geometry.attributes.aSize as THREE.BufferAttribute;
+    posAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
   }
 
   dispose(): void {

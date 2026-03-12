@@ -164,6 +164,10 @@ export class InputManager {
     return this.#consumePressed('KeyM');
   }
 
+  consumeCameraToggle(): boolean {
+    return this.#consumePressed('KeyC');
+  }
+
   consumeDebugToggle(): boolean {
     return this.#consumePressed('Backquote');
   }

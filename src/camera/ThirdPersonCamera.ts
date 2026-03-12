@@ -5,11 +5,14 @@ import { expDecay, expLerp } from '../core/math';
 import type { DrivingState } from '../vehicle/DrivingState';
 import type { Terrain } from '../world/Terrain';
 
+export type CameraView = 'chase' | 'cockpit';
+
 export class ThirdPersonCamera {
   readonly #canvas: HTMLCanvasElement;
   readonly #tuning: GameTuning;
   readonly #terrain: Terrain;
   readonly #prefersReducedMotion: boolean;
+  #view: CameraView = 'chase';
   #isDragging = false;
   #pointerId = -1;
   #yawOrbit = 0;
@@ -85,6 +88,17 @@ export class ThirdPersonCamera {
   // Landing compression
   #landingCompression = 0;
 
+  // --- Cockpit camera state ---
+  /** Local-space driver head position (slightly right of center, at head height, behind windshield). */
+  readonly #cockpitSeatOffset = new THREE.Vector3(0.25, 1.0, 0.1);
+  #cockpitHeadBob = 0;
+  #cockpitShakeX = 0;
+  #cockpitShakeY = 0;
+  #cockpitLookOffset = new THREE.Vector3();
+  #cockpitPosition = new THREE.Vector3();
+  #cockpitLookTarget = new THREE.Vector3();
+  #cockpitFov = 75;
+
   constructor(tuning: GameTuning, terrain: Terrain, canvas: HTMLCanvasElement) {
     this.#tuning = tuning;
     this.#terrain = terrain;
@@ -97,6 +111,14 @@ export class ThirdPersonCamera {
     canvas.addEventListener('pointercancel', this.#handlePointerUp);
     canvas.addEventListener('dblclick', this.#handleDoubleClick);
     canvas.addEventListener('contextmenu', this.#handleContextMenu);
+  }
+
+  get view(): CameraView {
+    return this.#view;
+  }
+
+  toggleView(): void {
+    this.#view = this.#view === 'chase' ? 'cockpit' : 'chase';
   }
 
   dispose(): void {
@@ -492,6 +514,97 @@ export class ThirdPersonCamera {
     camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll + this.#shakeRollOffset);
     // Apply shake pitch offset to the look target (subtle vertical jitter)
     this.#currentLookTarget.y += this.#shakePitchOffset;
+    camera.lookAt(this.#currentLookTarget);
+  }
+
+  updateCockpit(
+    dt: number,
+    camera: THREE.PerspectiveCamera,
+    vehiclePosition: THREE.Vector3,
+    vehicleQuaternion: THREE.Quaternion,
+    state: DrivingState,
+  ): void {
+    const speed = state.speed;
+    const speedNorm = Math.min(speed / 30, 1);
+
+    // --- Head bob from terrain roughness ---
+    this.#cockpitHeadBob += dt * (8 + speed * 0.6);
+    const compressionSpread = Math.max(...state.wheelCompression)
+      - Math.min(...state.wheelCompression);
+    const roughness = THREE.MathUtils.clamp(
+      compressionSpread * 0.6
+        + (state.isDrifting ? 0.2 : 0)
+        + (state.isBraking ? 0.1 : 0),
+      0,
+      1,
+    );
+    const bobIntensity = roughness * speedNorm * 0.04;
+    const bobX = Math.sin(this.#cockpitHeadBob * 1.3) * bobIntensity * 0.5;
+    const bobY = Math.sin(this.#cockpitHeadBob) * bobIntensity;
+
+    // --- Impact shake (reuse the existing shake state) ---
+    if (state.wasAirborne || state.impactMagnitude > 0) {
+      const impactStrength = Math.max(
+        state.wasAirborne
+          ? THREE.MathUtils.clamp(Math.abs(state.verticalSpeed) * 0.08 + 0.2, 0.2, 0.8)
+          : 0,
+        THREE.MathUtils.clamp(state.impactMagnitude * 0.04, 0, 0.6),
+      );
+      this.#cockpitShakeX = (Math.random() - 0.5) * impactStrength * 0.08;
+      this.#cockpitShakeY = (Math.random() - 0.5) * impactStrength * 0.06;
+    }
+    this.#cockpitShakeX *= Math.exp(-12 * dt);
+    this.#cockpitShakeY *= Math.exp(-12 * dt);
+
+    // --- Compute world-space position from local seat offset ---
+    const seatOffset = this.#cockpitLookOffset.copy(this.#cockpitSeatOffset);
+    seatOffset.x += bobX + this.#cockpitShakeX;
+    seatOffset.y += bobY + this.#cockpitShakeY;
+
+    // Lean into turns slightly
+    seatOffset.x -= state.steering * 0.06;
+    // Lean back slightly under acceleration
+    if (state.isAccelerating) {
+      seatOffset.z -= speedNorm * 0.04;
+    }
+
+    seatOffset.applyQuaternion(vehicleQuaternion);
+    const cockpitPos = this.#cockpitPosition.copy(vehiclePosition).add(seatOffset);
+
+    // --- Look target: far ahead along the vehicle's forward direction ---
+    const forward = this.#forward.set(0, 0, 1).applyQuaternion(vehicleQuaternion);
+    const right = this.#right.set(1, 0, 0).applyQuaternion(vehicleQuaternion);
+
+    const lookTarget = this.#cockpitLookTarget
+      .copy(cockpitPos)
+      .addScaledVector(forward, 20 + speedNorm * 10);
+    // Steering turns the head slightly
+    lookTarget.addScaledVector(right, state.steering * 2.0);
+    // Look up slightly when airborne
+    if (state.airborneTime > 0.15) {
+      lookTarget.y += Math.min(state.airborneTime * 1.5, 3);
+    }
+
+    // Smooth position (very responsive — cockpit needs tight coupling)
+    if (!this.#initialized) {
+      this.#currentPosition.copy(cockpitPos);
+      this.#currentLookTarget.copy(lookTarget);
+      this.#initialized = true;
+      this.#lookInitialized = true;
+    }
+    this.#currentPosition.lerp(cockpitPos, 1 - Math.exp(-18 * dt));
+    this.#currentLookTarget.lerp(lookTarget, 1 - Math.exp(-14 * dt));
+
+    camera.position.copy(this.#currentPosition);
+
+    // --- FOV: wider in cockpit, widens more with speed ---
+    const targetFov = 75 + speedNorm * 8 + (state.isBoosting ? 4 : 0);
+    this.#updateCameraFov(camera, targetFov, dt, 5.0);
+
+    // Roll the camera with steering for immersion
+    const rollAngle = -state.steering * 0.04 - state.lateralSpeed * 0.008;
+    camera.up.copy(this.#worldUp);
+    camera.up.applyAxisAngle(forward.normalize(), rollAngle);
     camera.lookAt(this.#currentLookTarget);
   }
 

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { GritPostProcess } from '../render/GritPostProcess';
 
-const MAX_RENDER_PIXEL_RATIO = 1.35;
-const MIN_RENDER_PIXEL_RATIO = 0.85;
-const SLOW_FRAME_SECONDS = 1 / 52;
-const FAST_FRAME_SECONDS = 1 / 72;
+const MAX_RENDER_PIXEL_RATIO = 1.15;
+const MIN_RENDER_PIXEL_RATIO = 0.6;
+const SLOW_FRAME_SECONDS = 1 / 56;
+const FAST_FRAME_SECONDS = 1 / 68;
 
 export class Engine {
   readonly scene: THREE.Scene;
@@ -27,9 +27,9 @@ export class Engine {
   constructor(container: HTMLElement) {
     this.#container = container;
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2400);
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, 1200);
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false,
       powerPreference: 'high-performance',
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -52,6 +52,10 @@ export class Engine {
     });
     this.#resizeObserver.observe(container);
     this.#resize();
+  }
+
+  async init(): Promise<void> {
+    // No-op for WebGL — WebGPURenderer needs async init, WebGL does not.
   }
 
   render(frameSeconds = 1 / 60): void {
@@ -108,10 +112,10 @@ export class Engine {
       this.#fastFrameCount = Math.max(0, this.#fastFrameCount - 1);
     }
 
-    if (this.#slowFrameCount >= 8 && this.#currentPixelRatio > this.#minPixelRatio) {
+    if (this.#slowFrameCount >= 3 && this.#currentPixelRatio > this.#minPixelRatio) {
       this.#currentPixelRatio = Math.max(
         this.#minPixelRatio,
-        this.#currentPixelRatio - 0.08,
+        this.#currentPixelRatio - 0.15,
       );
       this.#slowFrameCount = 0;
       this.#applyRenderScale();

@@ -1,4 +1,5 @@
 import { DustSystem, type DustConfig } from './DustSystem';
+import type { SparkSystem } from './SparkSystem';
 import { VehicleController } from '../vehicle/VehicleController';
 import { Terrain } from '../world/Terrain';
 
@@ -69,17 +70,20 @@ interface DustEmitterOptions {
   terrain: Terrain;
   snowSystem: DustSystem;
   debrisSystem: DustSystem;
+  sparkSystem?: SparkSystem;
 }
 
 export class DustEmitter {
   readonly #dust: DustSystem;
   readonly #snow: DustSystem;
   readonly #debris: DustSystem;
+  readonly #sparks: SparkSystem | null;
   readonly #terrain: Terrain;
   #driveTimer = 0;
   #driftTimer = 0;
   #brakeTimer = 0;
   #debrisTimer = 0;
+  #sparkTimer = 0;
   /** Pre-allocated config used to apply high-speed persistence scaling without allocation. */
   readonly #scaledConfig: DustConfig = { size: 0, growth: 0, life: 0, spread: 0, lift: 0, jitter: 0 };
 
@@ -88,6 +92,7 @@ export class DustEmitter {
     this.#terrain = options.terrain;
     this.#snow = options.snowSystem;
     this.#debris = options.debrisSystem;
+    this.#sparks = options.sparkSystem ?? null;
   }
 
   update(dt: number, vehicle: VehicleController): void {
@@ -172,6 +177,29 @@ export class DustEmitter {
       for (const wheelIndex of [2, 3] as const) {
         if (!state.wheelContact[wheelIndex]) continue;
         this.#emit(this.#debris, vehicle, wheelIndex, ROCK_DEBRIS, debrisCount);
+      }
+    }
+
+    // --- Sparks from missing wheels grinding on ground ---
+    if (this.#sparks && state.isGrounded && state.speed > 2) {
+      this.#sparkTimer += dt;
+      // Emit every 0.03s — fast bursts
+      if (this.#sparkTimer >= 0.03) {
+        this.#sparkTimer = 0;
+        const speedNorm = Math.min(state.speed / 25, 1);
+        for (let i = 0; i < 4; i++) {
+          if (state.wheelAttached[i]) continue;
+          const wheel = vehicle.wheelWorldPositions[i];
+          if (!wheel) continue;
+          // More sparks at higher speed
+          const count = speedNorm > 0.5 ? 3 : speedNorm > 0.25 ? 2 : 1;
+          this.#sparks.emit(
+            { x: wheel.x, y: wheel.y - 0.3, z: wheel.z },
+            vehicle.velocity,
+            count,
+            speedNorm,
+          );
+        }
       }
     }
   }

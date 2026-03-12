@@ -17,7 +17,7 @@ function createBeam(
     new THREE.Vector3(0, 1, 0),
     delta.normalize(),
   );
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -125,7 +125,7 @@ export class MountainHub {
       if (rotation) {
         mesh.rotation.copy(rotation);
       }
-      mesh.castShadow = true;
+      mesh.castShadow = false;
       mesh.receiveShadow = receiveShadow;
       this.group.add(mesh);
       return mesh;
@@ -229,7 +229,7 @@ export class MountainHub {
       box(0.22, 3.4, 0.22, steel, post.x, post.y, post.z);
       box(0.9, 0.32, 0.52, darkSteel, post.x, post.y + 1.82, post.z + 0.24);
       box(0.48, 0.14, 0.12, this.#windowMaterial, post.x, post.y + 1.74, post.z + 0.48, undefined, false);
-      addLight(post.x, post.y + 1.52, post.z + 0.94, 0xffd8a0, 26, 0.94, 0.28);
+      // No PointLight on courtyard floods — emissive glow only (performance)
     }
 
     const courtyardBlocks: Array<[number, number, number]> = [

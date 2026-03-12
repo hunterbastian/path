@@ -29,6 +29,8 @@ export interface DrivingState {
   impactDirection: THREE.Vector3;
   /** Whether the vehicle is tumbling in the air. */
   isTumbling: boolean;
+  /** Which wheels are still attached (FL, FR, RL, RR). */
+  wheelAttached: [boolean, boolean, boolean, boolean];
 }
 
 export function createDefaultDrivingState(): DrivingState {
@@ -55,5 +57,6 @@ export function createDefaultDrivingState(): DrivingState {
     impactMagnitude: 0,
     impactDirection: new THREE.Vector3(),
     isTumbling: false,
+    wheelAttached: [true, true, true, true],
   };
 }

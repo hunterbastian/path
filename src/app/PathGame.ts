@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { EngineAudio, type AmbientAudioState } from '../audio/EngineAudio';
-import { ImpactAudio } from '../audio/ImpactAudio';
+import { EngineAudio } from '../audio/EngineAudio';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { GameTuningStore } from '../config/GameTuning';
 import {
@@ -13,15 +12,9 @@ import {
 import { Engine } from '../core/Engine';
 import { FixedStepLoop } from '../core/FixedStepLoop';
 import { InputManager } from '../core/InputManager';
-import { SeededRandom } from '../core/SeededRandom';
 import { DebugPanel, type DebugTelemetrySnapshot } from '../debug/DebugPanel';
-import { DustEmitter } from '../effects/DustEmitter';
-import { DustSystem, type DustConfig } from '../effects/DustSystem';
-import { RainSystem } from '../effects/RainSystem';
-import { SplashEmitter } from '../effects/SplashEmitter';
-import { SplashSystem } from '../effects/SplashSystem';
-import { TireTrackSystem } from '../effects/TireTrackSystem';
-import { WindSystem } from '../effects/WindSystem';
+import { AchievementSystem } from '../gameplay/AchievementSystem';
+import { DriverProfile } from '../gameplay/DriverProfile';
 import { MapDiscoverySystem } from '../gameplay/MapDiscoverySystem';
 import {
   ScenarioFixtures,
@@ -37,10 +30,12 @@ import {
   isRenderDebugViewId,
   type RenderDebugViewId,
 } from '../render/RenderDebugView';
+import { DamageHud } from '../ui/DamageHud';
+import { RadioLog } from '../ui/RadioLog';
 import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
-import { VehicleDamage } from '../vehicle/VehicleDamage';
 import { MountainHub } from '../world/MountainHub';
+import { RaiderSystem } from '../world/RaiderSystem';
 import { ObjectiveBeacon } from '../world/ObjectiveBeacon';
 import {
   AmbientTrafficSystem,
@@ -54,25 +49,13 @@ import { Sky } from '../world/Sky';
 import { GrassField } from '../world/GrassField';
 import { Terrain } from '../world/Terrain';
 import { Water } from '../world/Water';
+import { EnvironmentalClutter } from '../world/EnvironmentalClutter';
 import { WorldStreamer, type WorldStreamSnapshot } from '../world/WorldStreamer';
+import { AudioManager } from './AudioManager';
+import { EffectsCoordinator } from './EffectsCoordinator';
+import { ValleyFog } from '../world/ValleyFog';
 
 const PHYSICS_STEP_SECONDS = 1 / 60;
-const SLOPE_SKITTER_DEBRIS: DustConfig = {
-  size: 0.18,
-  growth: 0.1,
-  life: 0.84,
-  spread: 0.18,
-  lift: 0.08,
-  jitter: 0.16,
-};
-const TRAFFIC_IMPACT_DEBRIS: DustConfig = {
-  size: 0.3,
-  growth: 0.18,
-  life: 0.72,
-  spread: 0.34,
-  lift: 0.18,
-  jitter: 0.42,
-};
 const SCENARIO_IDS: ScenarioFixtureId[] = [
   'spawn',
   'sand',
@@ -94,21 +77,9 @@ export class PathGame {
   readonly #vehicle: Vehicle;
   readonly #controller: VehicleController;
   readonly #camera: ThirdPersonCamera;
-  readonly #engineAudio: EngineAudio;
-  #impactAudio: ImpactAudio | null = null;
-  #prevDamageHealth = 1;
-  #honkCooldown = 0;
-  #damageFlash = 0;
-  readonly #rainSystem: RainSystem;
-  readonly #dustSystem: DustSystem;
-  readonly #snowSpraySystem: DustSystem;
-  readonly #debrisSystem: DustSystem;
-  readonly #dustEmitter: DustEmitter;
-  readonly #splashSystem: SplashSystem;
-  readonly #mudSplashSystem: SplashSystem;
-  readonly #splashEmitter: SplashEmitter;
-  readonly #tireTrackSystem: TireTrackSystem;
-  readonly #windSystem: WindSystem;
+  readonly #audio: AudioManager;
+  readonly #effects: EffectsCoordinator;
+  readonly #damageHud: DamageHud;
   readonly #loop: FixedStepLoop;
   readonly #spawnPosition: THREE.Vector3;
   readonly #objectivePosition: THREE.Vector3;
@@ -119,22 +90,22 @@ export class PathGame {
   readonly #objectiveBeacon: ObjectiveBeacon;
   readonly #mountainHub: MountainHub;
   readonly #ambientTraffic: AmbientTrafficSystem;
+  readonly #raiders: RaiderSystem;
   readonly #reactiveProps: ReactiveWorldPropsSystem;
   readonly #sky: Sky;
+  readonly #valleyFog: ValleyFog;
   readonly #grassField: GrassField;
+  readonly #clutter: EnvironmentalClutter;
   readonly #mapDiscovery: MapDiscoverySystem;
   readonly #runSession: RunSession;
   readonly #scenarioFixtures: ScenarioFixtures;
   readonly #worldStreamer: WorldStreamer;
   readonly #weatherState: WeatherState;
+  readonly #achievements: AchievementSystem;
+  readonly #driverProfile: DriverProfile;
   readonly #debugPanel: DebugPanel;
-  readonly #debrisRandom = new SeededRandom(0x44454252);
-  readonly #debrisProbe = new THREE.Vector3();
-  readonly #debrisOrigin = new THREE.Vector3();
-  readonly #debrisDownhill = new THREE.Vector3();
-  readonly #debrisLateral = new THREE.Vector3();
-  readonly #debrisVelocity = new THREE.Vector3();
-  readonly #worldUp = new THREE.Vector3(0, 1, 0);
+  readonly #radioLog: RadioLog;
+  #damageFlash = 0;
   #mapVisible = false;
   #pauseVisible = false;
   #godModeActive = false;
@@ -143,6 +114,13 @@ export class PathGame {
   #checkpointBannerLabel = '';
   #activeScenario: ScenarioFixtureId = 'spawn';
   #renderDebugView: RenderDebugViewId = 'final';
+  #prevWeatherCondition: string = '';
+  #prevDamageHealth = 1;
+  #discoveredSurfaces = new Set<string>();
+  #seenRaiders = false;
+  #foundRoad = false;
+  #prevDiscoveryPercent = 0;
+  #trail: Array<{ x: number; z: number }> = [];
   #lastWeatherSnapshot: WeatherSnapshot;
   #lastWorldStreamSnapshot: WorldStreamSnapshot;
   #lastTrafficInteraction: AmbientTrafficPlayerInteraction = {
@@ -162,13 +140,6 @@ export class PathGame {
     correction: new THREE.Vector3(),
     impulse: new THREE.Vector3(),
   };
-  #slopeDebrisTimer = 0;
-  #ambientSkitterStrength = 0;
-  #recentTrafficImpactDebris = 0;
-  #lastTrafficCollisionSourceId: string | null = null;
-  readonly #handleAudioUnlockGesture = (): void => {
-    void this.#activateAudio();
-  };
 
   constructor(root: HTMLElement) {
     this.#shell = new AppShell(root);
@@ -179,8 +150,10 @@ export class PathGame {
 
     this.#sky = new Sky(this.#engine.scene);
     this.#terrain = new Terrain(this.#engine.scene);
+    this.#valleyFog = new ValleyFog(this.#engine.scene, this.#terrain);
     this.#water = new Water(this.#engine.scene, this.#terrain);
     this.#grassField = new GrassField(this.#engine.scene, this.#terrain);
+    this.#clutter = new EnvironmentalClutter(this.#engine.scene, this.#terrain);
     this.#spawnPosition = this.#terrain.getSpawnPosition();
     this.#outpostPositions = this.#terrain.getOutpostPositions();
     this.#objectivePosition =
@@ -211,6 +184,11 @@ export class PathGame {
       this.#terrain,
       this.#outpostPositions,
     );
+    this.#raiders = new RaiderSystem(
+      this.#engine.scene,
+      this.#terrain,
+      this.#outpostPositions,
+    );
     this.#reactiveProps = new ReactiveWorldPropsSystem(
       this.#engine.scene,
       this.#terrain,
@@ -220,6 +198,9 @@ export class PathGame {
     );
 
     this.#vehicle = new Vehicle(this.#engine.scene);
+    Vehicle.loadModel('/models/textured.glb').then((modelScene) => {
+      this.#vehicle.replaceBody(modelScene);
+    });
     this.#controller = new VehicleController(
       this.#terrain,
       this.#water,
@@ -231,43 +212,30 @@ export class PathGame {
       this.#terrain,
       this.#engine.renderer.domElement,
     );
-    this.#engineAudio = new EngineAudio();
-    this.#rainSystem = new RainSystem(this.#engine.scene, this.#terrain);
-    this.#dustSystem = new DustSystem(this.#engine.scene);
-    this.#snowSpraySystem = new DustSystem(this.#engine.scene, {
-      capacity: 280,
-      color: 0xf0f4fb,
-      opacity: 0.46,
-      gravity: -3.4,
-      drag: 0.92,
+
+    // Audio manager
+    this.#audio = new AudioManager({
+      getListenerPosition: () =>
+        this.#godModeActive
+          ? this.#engine.camera.position
+          : this.#controller.position,
+      getControllerState: () => this.#controller.state,
+      getObjectivePosition: () => this.#objectivePosition,
+      getLandmarkPosition: () => this.#landmarkPosition,
+      getOutpostPositions: () => this.#outpostPositions,
+      getRainDensity: () => this.#lastWeatherSnapshot.rainDensity,
+      getRouteActivity: () => this.#lastWorldStreamSnapshot.routeActivity,
+      getWindAudioMultiplier: () => this.#lastWeatherSnapshot.windAudioMultiplier,
+      getRelayAudioMultiplier: () => this.#lastWeatherSnapshot.relayAudioMultiplier,
+      isArrived: () => this.#runSession.mode === 'arrived',
     });
-    this.#debrisSystem = new DustSystem(this.#engine.scene, {
-      capacity: 180,
-      color: 0x8a755e,
-      opacity: 0.28,
-      gravity: -9.6,
-      drag: 0.88,
-      fade: (lifeFraction) => Math.pow(1 - lifeFraction, 1.3),
-    });
-    this.#dustEmitter = new DustEmitter(this.#dustSystem, {
-      terrain: this.#terrain,
-      snowSystem: this.#snowSpraySystem,
-      debrisSystem: this.#debrisSystem,
-    });
-    this.#splashSystem = new SplashSystem(this.#engine.scene);
-    this.#mudSplashSystem = new SplashSystem(this.#engine.scene, {
-      capacity: 180,
-      color: 0x66523f,
-      opacity: 0.5,
-      gravity: -8.8,
-      drag: 0.9,
-    });
-    this.#splashEmitter = new SplashEmitter(this.#splashSystem, {
-      terrain: this.#terrain,
-      mudSystem: this.#mudSplashSystem,
-    });
-    this.#tireTrackSystem = new TireTrackSystem(this.#engine.scene, this.#terrain);
-    this.#windSystem = new WindSystem(this.#engine.scene);
+
+    // Effects coordinator
+    this.#effects = new EffectsCoordinator(
+      this.#engine.scene,
+      this.#terrain,
+      this.#water,
+    );
 
     this.#mapDiscovery = new MapDiscoverySystem({
       worldSize: this.#terrain.size,
@@ -303,7 +271,7 @@ export class PathGame {
       this.#tuningStore.values,
       this.#terrain,
       this.#water,
-      this.#windSystem,
+      this.#effects.windSystem,
       this.#routeOutposts,
       this.#outpostPositions.slice(0, -1),
       this.#objectiveBeacon,
@@ -312,7 +280,7 @@ export class PathGame {
     this.#weatherState = new WeatherState(
       this.#tuningStore.values,
       this.#sky,
-      this.#rainSystem,
+      this.#effects.rainSystem,
     );
     this.#lastWeatherSnapshot = this.#weatherState.snapshot;
     this.#water.setWeatherState(
@@ -320,6 +288,26 @@ export class PathGame {
       this.#lastWeatherSnapshot.waterActivityMultiplier,
     );
     this.#lastWorldStreamSnapshot = this.#worldStreamer.snapshot;
+
+    this.#achievements = new AchievementSystem();
+    this.#achievements.onUnlock((def) => {
+      this.#shell.showAchievementToast(def.title, def.description, def.icon);
+    });
+
+    this.#driverProfile = new DriverProfile();
+    this.#shell.setTitleCareer(
+      this.#driverProfile.hasHistory
+        ? this.#driverProfile.fullLabel
+        : 'First run',
+    );
+
+    this.#damageHud = new DamageHud();
+    const hudPanel = this.#shell.elements.speed.closest('.hud-panel');
+    if (hudPanel) {
+      hudPanel.appendChild(this.#damageHud.element);
+    }
+
+    this.#radioLog = new RadioLog(this.#shell.elements.radioLog);
 
     this.#loop = new FixedStepLoop({
       stepSeconds: PHYSICS_STEP_SECONDS,
@@ -330,12 +318,13 @@ export class PathGame {
   }
 
   async boot(): Promise<void> {
+    await this.#engine.init();
     this.#shell.bindStart(() => this.start());
-    this.#shell.bindRestart(() => this.#restartRun());
-    this.#shell.bindPauseResume(() => this.#setPauseVisible(false));
-    this.#shell.bindPauseGodMode(() => this.#enterGodMode());
-    this.#shell.bindPauseRestart(() => this.#restartRun());
-    this.#installAudioUnlockListeners();
+    this.#shell.bindRestart(() => { this.#audio.uiAudio?.playConfirm(); this.#restartRun(); });
+    this.#shell.bindPauseResume(() => { this.#audio.uiAudio?.playClose(); this.#setPauseVisible(false); });
+    this.#shell.bindPauseGodMode(() => { this.#audio.uiAudio?.playTick(); this.#enterGodMode(); });
+    this.#shell.bindPauseRestart(() => { this.#audio.uiAudio?.playConfirm(); this.#restartRun(); });
+    this.#audio.installUnlockListeners();
     this.#shell.setLoadingVisible(false);
     this.#shell.setTitleVisible(true);
     this.#shell.setArrivalVisible(false);
@@ -354,24 +343,19 @@ export class PathGame {
 
   dispose(): void {
     this.#loop.stop();
-    this.#removeAudioUnlockListeners();
     this.#input.dispose();
     this.#camera.dispose();
-    this.#engineAudio.dispose();
-    this.#rainSystem.dispose();
-    this.#dustSystem.dispose();
-    this.#snowSpraySystem.dispose();
-    this.#debrisSystem.dispose();
-    this.#splashSystem.dispose();
-    this.#mudSplashSystem.dispose();
-    this.#tireTrackSystem.dispose();
+    this.#audio.dispose();
+    this.#effects.dispose();
     this.#grassField.dispose();
+    this.#clutter.dispose();
     this.#engine.dispose();
   }
 
   start(): void {
     if (this.#runSession.mode === 'driving') return;
-    void this.#activateAudio();
+    void this.#audio.activate();
+    this.#audio.uiAudio?.playConfirm();
     this.#activeScenario = 'spawn';
     this.#runSession.start();
     this.#enterDrivingPresentation();
@@ -413,39 +397,13 @@ export class PathGame {
   jumpToProps(): void {
     const encounter = this.#reactiveProps.getEncounterStart();
     if (!encounter) return;
-    const snapCamera = this.#godModeActive;
-    if (snapCamera) {
-      this.#godModeActive = false;
-      this.#camera.exitGodMode();
-    }
-
-    this.#activeScenario = 'spawn';
-    this.#controller.teleport(encounter.position, encounter.heading);
-    this.#vehicle.setPose(
-      this.#controller.pose.position,
-      this.#controller.pose.quaternion,
-    );
-    this.#runSession.restart();
-    this.#enterDrivingPresentation({ snapCamera });
+    this.#jumpToEncounter(encounter.position, encounter.heading);
   }
 
   jumpToTraffic(): void {
     const encounter = this.#ambientTraffic.getEncounterStart();
     if (!encounter) return;
-    const snapCamera = this.#godModeActive;
-    if (snapCamera) {
-      this.#godModeActive = false;
-      this.#camera.exitGodMode();
-    }
-
-    this.#activeScenario = 'spawn';
-    this.#controller.teleport(encounter.position, encounter.heading);
-    this.#vehicle.setPose(
-      this.#controller.pose.position,
-      this.#controller.pose.quaternion,
-    );
-    this.#runSession.restart();
-    this.#enterDrivingPresentation({ snapCamera });
+    this.#jumpToEncounter(encounter.position, encounter.heading);
   }
 
   jumpToFixture(fixtureId: string): void {
@@ -494,7 +452,7 @@ export class PathGame {
   }
 
   getAudioDebug(): ReturnType<EngineAudio['getDebugState']> {
-    return this.#engineAudio.getDebugState();
+    return this.#audio.engineAudio.getDebugState();
   }
 
   forceWeather(condition: WeatherCondition | null): WeatherSnapshot {
@@ -503,7 +461,7 @@ export class PathGame {
       this.#lastWeatherSnapshot.waterLevelOffset,
       this.#lastWeatherSnapshot.waterActivityMultiplier,
     );
-    this.#tireTrackSystem.setWetness(this.#lastWeatherSnapshot.rainDensity);
+    this.#effects.tireTrackSystem.setWetness(this.#lastWeatherSnapshot.rainDensity);
     this.#syncShell();
     return this.#lastWeatherSnapshot;
   }
@@ -571,6 +529,7 @@ export class PathGame {
     );
     const runSnapshot = this.#runSession.snapshot;
     const surfaceFeedback = this.#controller.surfaceFeedback;
+    const effectCounts = this.#effects.getDebugCounts();
 
     return JSON.stringify({
       mode: this.#godModeActive ? 'god' : runSnapshot.mode,
@@ -652,18 +611,18 @@ export class PathGame {
         waterLevelOffsetMeters: this.#water.levelOffset,
         trafficSpeedMultiplier: this.#lastWeatherSnapshot.trafficSpeedMultiplier,
         fogFar: this.#lastWeatherSnapshot.fogFar,
-        tireTracksActive: this.#tireTrackSystem.getActiveCount(),
+        tireTracksActive: this.#effects.tireTrackSystem.getActiveCount(),
         surfaceFx: {
-          dustParticles: this.#dustSystem.activeCount,
-          snowSprayParticles: this.#snowSpraySystem.activeCount,
-          debrisParticles: this.#debrisSystem.activeCount,
-          splashParticles: this.#splashSystem.activeCount,
-          mudSplashParticles: this.#mudSplashSystem.activeCount,
+          dustParticles: effectCounts.dust,
+          snowSprayParticles: effectCounts.snowSpray,
+          debrisParticles: effectCounts.debris,
+          splashParticles: effectCounts.splash,
+          mudSplashParticles: effectCounts.mudSplash,
           roadInfluence: Number(surfaceFeedback.roadInfluence.toFixed(2)),
           rutPullStrength: Number(surfaceFeedback.rutPullStrength.toFixed(2)),
           wetTrackStrength: Number(this.#lastWeatherSnapshot.rainDensity.toFixed(2)),
-          skitteringDebrisStrength: Number(this.#ambientSkitterStrength.toFixed(2)),
-          trafficImpactDebris: Number(this.#recentTrafficImpactDebris.toFixed(2)),
+          skitteringDebrisStrength: Number(this.#effects.ambientSkitterStrength.toFixed(2)),
+          trafficImpactDebris: Number(this.#effects.recentTrafficImpactDebris.toFixed(2)),
         },
         ambientTrafficCount: this.#ambientTraffic.count,
         ambientTrafficHeadlights: this.#ambientTraffic.count,
@@ -694,7 +653,7 @@ export class PathGame {
       debug: {
         panelVisible: this.#debugPanel.visible,
         activeScenario: this.#activeScenario,
-        audio: this.#engineAudio.getDebugState(),
+        audio: this.#audio.engineAudio.getDebugState(),
         camera: this.#camera.getDriveDebugState(),
         input: this.#input.getDebugState(),
         renderDebug: this.getRenderDebugState(),
@@ -703,6 +662,8 @@ export class PathGame {
       },
     });
   }
+
+  // ─── Game Loop ──────────────────────────────────────────────
 
   #step(dt: number): void {
     this.#terrain.flushHeightCache();
@@ -717,7 +678,12 @@ export class PathGame {
     }
 
     if (this.#input.consumePauseToggle() && canPause) {
-      this.#setPauseVisible(!this.#pauseVisible);
+      const willPause = !this.#pauseVisible;
+      this.#setPauseVisible(willPause);
+      if (this.#audio.uiAudio) {
+        if (willPause) this.#audio.uiAudio.playOpen();
+        else this.#audio.uiAudio.playClose();
+      }
       this.#syncShell();
       return;
     }
@@ -727,12 +693,7 @@ export class PathGame {
         this.#restartRun();
         return;
       }
-
-      this.#engineAudio.update(
-        this.#buildPausedDrivingState(),
-        'driving',
-        this.#buildAmbientAudioSnapshot(),
-      );
+      this.#audio.updatePaused(this.#buildPausedDrivingState());
       this.#syncShell();
       return;
     }
@@ -747,6 +708,11 @@ export class PathGame {
       }
     }
 
+    if (this.#input.consumeCameraToggle() && this.#runSession.mode === 'driving') {
+      this.#camera.toggleView();
+      this.#vehicle.mesh.visible = this.#camera.view !== 'cockpit';
+    }
+
     if (this.#input.consumeFullscreenToggle()) {
       void this.#toggleFullscreen();
     }
@@ -759,7 +725,6 @@ export class PathGame {
       if (this.#input.consumeRenderDebugPrevious()) {
         this.setRenderDebugView(cycleRenderDebugView(this.#renderDebugView, -1));
       }
-
       if (this.#input.consumeRenderDebugNext()) {
         this.setRenderDebugView(cycleRenderDebugView(this.#renderDebugView, 1));
       }
@@ -774,27 +739,38 @@ export class PathGame {
 
     if (this.#input.consumeMapToggle() && isDriving) {
       this.#mapVisible = !this.#mapVisible;
+      if (this.#audio.uiAudio) {
+        if (this.#mapVisible) this.#audio.uiAudio.playOpen();
+        else this.#audio.uiAudio.playClose();
+      }
     }
 
-    this.#controller.update(
-      dt,
-      this.#input,
-      isDriving,
-      this.#lastWeatherSnapshot,
-    );
-    this.#reactiveProps.update(
-      dt,
-      this.#controller.position,
-      this.#controller.velocity,
-    );
+    // Physics
+    this.#controller.update(dt, this.#input, isDriving, this.#lastWeatherSnapshot);
+    this.#reactiveProps.update(dt, this.#controller.position, this.#controller.velocity);
     this.#lastPropInteraction = this.#reactiveProps.playerInteraction;
     this.#controller.applyReactiveWorldInteraction(this.#lastPropInteraction);
 
-    if (isDriving) {
-      this.#mapDiscovery.reveal(
-        this.#controller.position.x,
-        this.#controller.position.z,
+    // Static clutter collision (wrecks, signs, debris)
+    this.#clutter.update(this.#controller.position, this.#controller.velocity);
+    const clutterInteraction = this.#clutter.playerInteraction;
+    if (clutterInteraction.collision) {
+      this.#controller.applyReactiveWorldInteraction(clutterInteraction);
+      this.#effects.emitCollisionSparks(
+        this.#controller.position,
+        this.#controller.velocity,
+        clutterInteraction.correction,
       );
+    }
+
+    if (isDriving) {
+      this.#mapDiscovery.reveal(this.#controller.position.x, this.#controller.position.z);
+      // Accumulate trail breadcrumbs (every ~5 m of travel)
+      const pos = this.#controller.position;
+      const lastTrail = this.#trail[this.#trail.length - 1];
+      if (!lastTrail || Math.hypot(pos.x - lastTrail.x, pos.z - lastTrail.z) > 5) {
+        this.#trail.push({ x: pos.x, z: pos.z });
+      }
       const nextCheckpointDistance =
         this.#getCheckpointDistance(this.#runSession.snapshot.nextCheckpointIndex);
       const runUpdate = this.#runSession.update(
@@ -814,6 +790,7 @@ export class PathGame {
       }
     }
 
+    // Traffic + raiders
     const pose = this.#controller.pose;
     this.#ambientTraffic.update(
       dt,
@@ -823,6 +800,22 @@ export class PathGame {
     );
     this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
     this.#controller.applyTrafficInteraction(this.#lastTrafficInteraction);
+    this.#raiders.update(dt, this.#controller.position, this.#controller.velocity);
+    const raiderInteraction = this.#raiders.playerInteraction;
+    if (raiderInteraction.collision) {
+      this.#controller.applyTrafficInteraction({
+        collision: true,
+        correction: raiderInteraction.correction,
+        impulse: raiderInteraction.impulse,
+      });
+      this.#effects.emitCollisionSparks(
+        this.#controller.position,
+        this.#controller.velocity,
+        raiderInteraction.correction,
+      );
+    }
+
+    // Vehicle visuals + damage
     this.#vehicle.setPose(pose.position, pose.quaternion);
     this.#vehicle.updateVisuals(dt, this.#controller.state);
 
@@ -836,65 +829,79 @@ export class PathGame {
       );
     }
     this.#vehicle.damage.update(dt, this.#controller.position.y - 1.2);
+    this.#damageHud.update(this.#vehicle.damage);
+    this.#effects.emitEngineSmoke(
+      dt,
+      this.#controller.position,
+      this.#controller.velocity,
+      this.#vehicle.damage.totalHealth,
+    );
 
-    // --- Impact audio triggers ---
-    if (this.#impactAudio) {
-      const currentHealth = this.#vehicle.damage.totalHealth;
-      if (currentHealth < this.#prevDamageHealth) {
-        this.#impactAudio.playPartDetach();
-      }
-      this.#prevDamageHealth = currentHealth;
+    this.#controller.setWheelAttached([
+      this.#vehicle.damage.isPartAttached('wheelFL'),
+      this.#vehicle.damage.isPartAttached('wheelFR'),
+      this.#vehicle.damage.isPartAttached('wheelRL'),
+      this.#vehicle.damage.isPartAttached('wheelRR'),
+    ]);
 
-      if (this.#controller.state.wasAirborne) {
-        const mag = Math.min(Math.abs(this.#controller.state.impactMagnitude) / 12, 1);
-        this.#impactAudio.playLanding(mag);
-        this.#dustEmitter.emitLandingBurst(this.#controller, this.#controller.state.impactMagnitude);
-      }
+    let aeroPenalty = 1;
+    if (!this.#vehicle.damage.isPartAttached('hood')) aeroPenalty += 0.18;
+    if (!this.#vehicle.damage.isPartAttached('windshield')) aeroPenalty += 0.14;
+    if (!this.#vehicle.damage.isPartAttached('doorLeft')) aeroPenalty += 0.08;
+    if (!this.#vehicle.damage.isPartAttached('doorRight')) aeroPenalty += 0.08;
+    this.#controller.setAeroDragPenalty(aeroPenalty);
 
-      if (
-        this.#controller.state.impactMagnitude > 1.5 &&
-        !this.#controller.state.wasAirborne
-      ) {
-        const mag = Math.min(this.#controller.state.impactMagnitude / 10, 1);
-        this.#impactAudio.playCollision(mag);
-      } else if (
-        this.#controller.state.impactMagnitude > 0.3 &&
-        this.#controller.state.impactMagnitude <= 1.5
-      ) {
-        this.#impactAudio.playScrape();
-      }
+    // Audio
+    const nearestHonkDistance = this.#ambientTraffic.getNearestHonkDistance(
+      this.#controller.position,
+    );
+    this.#audio.updateDriving(
+      dt,
+      this.#runSession.mode,
+      this.#controller.state,
+      this.#vehicle.damage.totalHealth,
+      nearestHonkDistance,
+    );
 
-      // Honk audio from NPCs
-      this.#honkCooldown = Math.max(0, this.#honkCooldown - dt);
-      if (this.#honkCooldown <= 0) {
-        const honkDist = this.#ambientTraffic.getNearestHonkDistance(this.#controller.position);
-        if (honkDist >= 0) {
-          this.#impactAudio.playHonk(honkDist);
-          this.#honkCooldown = 1.5; // Don't spam honks
-        }
-      }
+    // Landing burst (audio already handles landing sound)
+    if (this.#controller.state.wasAirborne) {
+      this.#effects.emitLandingBurst(this.#controller, this.#controller.state.impactMagnitude);
     }
 
-    // Screen effects — damage flash and speed vignette
+    // Radio breadcrumbs
+    this.#updateRadioBreadcrumbs(dt);
+
+    // Screen effects
     if (this.#controller.state.impactMagnitude > 2) {
       this.#damageFlash = Math.min(this.#controller.state.impactMagnitude / 8, 1);
     }
     this.#damageFlash *= Math.exp(-6 * dt);
     if (this.#damageFlash < 0.01) this.#damageFlash = 0;
     this.#engine.postProcess.setDamageFlash(this.#damageFlash);
-    this.#engine.postProcess.setSpeedIntensity(
-      Math.min(this.#controller.state.speed / 34, 1),
-    );
+    const speedNorm = Math.min(this.#controller.state.speed / 34, 1);
+    this.#engine.postProcess.setSpeedIntensity(speedNorm);
+    this.#engine.postProcess.setMotionBlurStrength(speedNorm * 0.6);
 
+    // Camera
     if (this.#runSession.mode === 'driving') {
-      this.#camera.updateDrive(
-        dt,
-        this.#engine.camera,
-        pose.position,
-        pose.quaternion,
-        this.#controller.state,
-        this.#getNextCheckpointPosition(),
-      );
+      if (this.#camera.view === 'cockpit') {
+        this.#camera.updateCockpit(
+          dt,
+          this.#engine.camera,
+          pose.position,
+          pose.quaternion,
+          this.#controller.state,
+        );
+      } else {
+        this.#camera.updateDrive(
+          dt,
+          this.#engine.camera,
+          pose.position,
+          pose.quaternion,
+          this.#controller.state,
+          this.#getNextCheckpointPosition(),
+        );
+      }
     } else if (this.#runSession.mode === 'arrived') {
       this.#camera.updateArrival(
         dt,
@@ -912,9 +919,8 @@ export class PathGame {
       );
     }
 
-    this.#lastWorldStreamSnapshot = this.#worldStreamer.update(
-      this.#engine.camera.position,
-    );
+    // World systems
+    this.#lastWorldStreamSnapshot = this.#worldStreamer.update(this.#engine.camera.position);
     this.#lastWeatherSnapshot = this.#weatherState.update(
       dt,
       this.#lastWorldStreamSnapshot.routeActivity,
@@ -923,37 +929,35 @@ export class PathGame {
       dt,
       this.#lastWorldStreamSnapshot.routeActivity,
       this.#lastWeatherSnapshot.rainDensity,
+      this.#controller.position,
     );
+    this.#valleyFog.setDayTime(this.#sky.dayTime);
+    this.#valleyFog.setWeather(this.#lastWeatherSnapshot.condition);
+    this.#valleyFog.update(dt, this.#engine.camera.position);
+    this.#sky.setValleyFogPush(this.#valleyFog.fogNearPush);
     this.#water.setWeatherState(
       this.#lastWeatherSnapshot.waterLevelOffset,
       this.#lastWeatherSnapshot.waterActivityMultiplier,
     );
-    this.#updateAmbientDebris(dt);
 
-    this.#dustEmitter.update(dt, this.#controller);
-    this.#dustSystem.update(dt);
-    this.#snowSpraySystem.update(dt);
-    this.#debrisSystem.update(dt);
-    this.#splashEmitter.update(dt, this.#controller, this.#water);
-    this.#splashSystem.update(dt);
-    this.#mudSplashSystem.update(dt);
-    this.#tireTrackSystem.setWetness(this.#lastWeatherSnapshot.rainDensity);
-    this.#tireTrackSystem.update(dt);
-    this.#tireTrackSystem.updateSource({
-      id: 'player',
-      state: this.#controller.state,
-      wheelWorldPositions: this.#controller.wheelWorldPositions,
-    }, dt);
-    for (const trackSource of this.#ambientTraffic.getTrackSources()) {
-      this.#tireTrackSystem.updateSource(trackSource, dt);
-    }
+    // Effects
+    this.#effects.update(
+      dt,
+      this.#controller,
+      this.#water,
+      this.#lastWeatherSnapshot,
+      this.#engine.camera.position,
+      this.#lastTrafficInteraction,
+      this.#ambientTraffic,
+      false,
+    );
+
+    // World visuals
     this.#objectiveBeacon.update(dt, this.#runSession.mode === 'arrived');
     for (const outpost of this.#routeOutposts) {
       outpost.update(dt, false);
     }
     this.#mountainHub.update(dt);
-    this.#windSystem.update(dt, this.#engine.camera.position);
-    this.#rainSystem.update(dt, this.#engine.camera.position);
     this.#water.update(dt, this.#engine.camera.position);
     this.#grassField.update(
       dt,
@@ -962,11 +966,47 @@ export class PathGame {
       this.#lastWeatherSnapshot.rainDensity,
       this.#lastWeatherSnapshot.condition,
     );
-    this.#engineAudio.update(
-      this.#controller.state,
-      this.#runSession.mode,
-      this.#buildAmbientAudioSnapshot(),
-    );
+
+    // Trample grass/dirt under wheels
+    const driveSurface = this.#controller.state.surface;
+    if (
+      this.#controller.state.isGrounded
+      && (driveSurface === 'grass' || driveSurface === 'dirt')
+      && this.#controller.state.speed > 0.8
+    ) {
+      const pos = this.#controller.position;
+      const yaw = this.#vehicle.mesh.rotation.y;
+      const radius = driveSurface === 'dirt' ? 2.8 : 3.4;
+      const strength = THREE.MathUtils.clamp(this.#controller.state.speed * 0.04, 0.02, 0.18);
+      this.#grassField.trample(pos.x, pos.z, radius, strength, yaw);
+    }
+
+    // Achievements + profile
+    if (this.#runSession.mode === 'driving') {
+      this.#achievements.update(
+        dt,
+        this.#controller.state,
+        this.#runSession.snapshot,
+        this.#vehicle.damage.totalHealth,
+        this.#vehicle.damage.detachedCount,
+        this.#mapDiscovery.getPercent(),
+        this.#lastWeatherSnapshot.rainDensity,
+        this.#sky.dayTime,
+        this.#camera.view,
+      );
+      this.#driverProfile.update(
+        dt,
+        this.#controller.state.speed,
+        this.#controller.state.speed * 3.6,
+        this.#controller.state.isDrifting,
+        this.#controller.state.isGrounded,
+        this.#controller.state.airborneTime,
+        this.#vehicle.damage.detachedCount,
+        this.#controller.state.impactMagnitude,
+        this.#controller.state.surface,
+      );
+    }
+
     this.#syncShell();
   }
 
@@ -989,7 +1029,6 @@ export class PathGame {
       if (this.#input.consumeRenderDebugPrevious()) {
         this.setRenderDebugView(cycleRenderDebugView(this.#renderDebugView, -1));
       }
-
       if (this.#input.consumeRenderDebugNext()) {
         this.setRenderDebugView(cycleRenderDebugView(this.#renderDebugView, 1));
       }
@@ -1009,19 +1048,14 @@ export class PathGame {
       this.#lastWeatherSnapshot,
     );
     this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
-    this.#reactiveProps.update(
-      dt,
-      this.#controller.position,
-      this.#controller.velocity,
-    );
+    this.#reactiveProps.update(dt, this.#controller.position, this.#controller.velocity);
     this.#lastPropInteraction = this.#reactiveProps.playerInteraction;
+    this.#raiders.update(dt, this.#controller.position, this.#controller.velocity);
     this.#vehicle.setPose(pose.position, pose.quaternion);
     this.#vehicle.updateVisuals(dt, pausedState);
     this.#camera.updateGodMode(dt, this.#engine.camera, this.#input);
 
-    this.#lastWorldStreamSnapshot = this.#worldStreamer.update(
-      this.#engine.camera.position,
-    );
+    this.#lastWorldStreamSnapshot = this.#worldStreamer.update(this.#engine.camera.position);
     this.#lastWeatherSnapshot = this.#weatherState.update(
       dt,
       this.#lastWorldStreamSnapshot.routeActivity,
@@ -1031,29 +1065,28 @@ export class PathGame {
       this.#lastWorldStreamSnapshot.routeActivity,
       this.#lastWeatherSnapshot.rainDensity,
     );
+    this.#valleyFog.setDayTime(this.#sky.dayTime);
+    this.#valleyFog.setWeather(this.#lastWeatherSnapshot.condition);
+    this.#valleyFog.update(dt, this.#engine.camera.position);
+    this.#sky.setValleyFogPush(this.#valleyFog.fogNearPush);
     this.#water.setWeatherState(
       this.#lastWeatherSnapshot.waterLevelOffset,
       this.#lastWeatherSnapshot.waterActivityMultiplier,
     );
-    this.#updateAmbientDebris(dt);
 
-    this.#dustSystem.update(dt);
-    this.#snowSpraySystem.update(dt);
-    this.#debrisSystem.update(dt);
-    this.#splashSystem.update(dt);
-    this.#mudSplashSystem.update(dt);
-    this.#tireTrackSystem.setWetness(this.#lastWeatherSnapshot.rainDensity);
-    this.#tireTrackSystem.update(dt);
-    for (const trackSource of this.#ambientTraffic.getTrackSources()) {
-      this.#tireTrackSystem.updateSource(trackSource, dt);
-    }
+    this.#effects.updateGodMode(
+      dt,
+      this.#lastWeatherSnapshot,
+      this.#engine.camera.position,
+      this.#lastTrafficInteraction,
+      this.#ambientTraffic,
+    );
+
     this.#objectiveBeacon.update(dt, false);
     for (const outpost of this.#routeOutposts) {
       outpost.update(dt, false);
     }
     this.#mountainHub.update(dt);
-    this.#windSystem.update(dt, this.#engine.camera.position);
-    this.#rainSystem.update(dt, this.#engine.camera.position);
     this.#water.update(dt, this.#engine.camera.position);
     this.#grassField.update(
       dt,
@@ -1062,155 +1095,178 @@ export class PathGame {
       this.#lastWeatherSnapshot.rainDensity,
       this.#lastWeatherSnapshot.condition,
     );
-    this.#engineAudio.update(pausedState, 'driving', this.#buildAmbientAudioSnapshot());
+    this.#audio.updatePaused(pausedState);
     this.#syncShell();
-  }
-
-  #updateAmbientDebris(dt: number): void {
-    this.#recentTrafficImpactDebris = Math.max(0, this.#recentTrafficImpactDebris - dt * 1.6);
-    this.#ambientSkitterStrength = Math.max(0, this.#ambientSkitterStrength - dt * 1.25);
-
-    if (
-      this.#lastTrafficInteraction.collision
-      && this.#lastTrafficInteraction.sourceId
-      && this.#lastTrafficInteraction.sourceId !== this.#lastTrafficCollisionSourceId
-    ) {
-      this.#emitTrafficImpactDebris();
-      this.#lastTrafficCollisionSourceId = this.#lastTrafficInteraction.sourceId;
-    } else if (!this.#lastTrafficInteraction.collision) {
-      this.#lastTrafficCollisionSourceId = null;
-    }
-
-    this.#slopeDebrisTimer += dt;
-    const spawnInterval = THREE.MathUtils.lerp(
-      0.42,
-      0.16,
-      this.#lastWeatherSnapshot.rainDensity,
-    );
-    if (this.#slopeDebrisTimer < spawnInterval) {
-      return;
-    }
-    this.#slopeDebrisTimer = 0;
-
-    const listenerPosition = this.#godModeActive
-      ? this.#engine.camera.position
-      : this.#controller.position;
-
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const angle = this.#debrisRandom.range(0, Math.PI * 2);
-      const distance = this.#debrisRandom.range(5, 16);
-      this.#debrisProbe.set(
-        listenerPosition.x + Math.sin(angle) * distance,
-        0,
-        listenerPosition.z + Math.cos(angle) * distance,
-      );
-      if (!this.#terrain.isWithinBounds(this.#debrisProbe.x, this.#debrisProbe.z)) continue;
-
-      const surface = this.#terrain.getSurfaceAt(this.#debrisProbe.x, this.#debrisProbe.z);
-      if (surface === 'sand') continue;
-
-      this.#debrisDownhill.copy(
-        this.#terrain.getNormalAt(this.#debrisProbe.x, this.#debrisProbe.z),
-      );
-      this.#debrisDownhill.set(-this.#debrisDownhill.x, 0, -this.#debrisDownhill.z);
-      const downhillStrength = this.#debrisDownhill.length();
-      const roadInfluence = this.#terrain.getRoadInfluence(
-        this.#debrisProbe.x,
-        this.#debrisProbe.z,
-      );
-      const slopeStrength = THREE.MathUtils.clamp(
-        (downhillStrength - 0.18) / 0.38,
-        0,
-        1,
-      );
-      if (slopeStrength < 0.22) continue;
-
-      this.#debrisDownhill.normalize();
-      this.#debrisLateral.crossVectors(this.#worldUp, this.#debrisDownhill).normalize();
-      if (this.#debrisLateral.lengthSq() < 0.0001) {
-        this.#debrisLateral.set(1, 0, 0);
-      }
-
-      this.#debrisOrigin.set(
-        this.#debrisProbe.x,
-        this.#terrain.getHeightAt(this.#debrisProbe.x, this.#debrisProbe.z) + 0.08,
-        this.#debrisProbe.z,
-      );
-      const travelSpeed =
-        this.#debrisRandom.range(1.6, 3.8)
-        * THREE.MathUtils.lerp(0.82, 1.4, slopeStrength)
-        * THREE.MathUtils.lerp(1, 1.28, this.#lastWeatherSnapshot.rainDensity);
-      this.#debrisVelocity
-        .copy(this.#debrisDownhill)
-        .multiplyScalar(travelSpeed)
-        .addScaledVector(this.#debrisLateral, this.#debrisRandom.signed() * 0.55)
-        .setY(this.#debrisRandom.range(0.05, 0.16));
-
-      const count =
-        surface === 'rock'
-          ? 2
-          : roadInfluence > 0.24 || this.#lastWeatherSnapshot.rainDensity > 0.72
-            ? 2
-            : 1;
-      this.#debrisSystem.emit(
-        this.#debrisOrigin,
-        this.#debrisVelocity,
-        SLOPE_SKITTER_DEBRIS,
-        count,
-      );
-      this.#ambientSkitterStrength = Math.max(
-        this.#ambientSkitterStrength,
-        slopeStrength * travelSpeed,
-      );
-      break;
-    }
-  }
-
-  #emitTrafficImpactDebris(): void {
-    const sourcePosition = this.#lastTrafficInteraction.sourcePosition;
-    if (!sourcePosition) return;
-
-    this.#debrisOrigin
-      .copy(this.#controller.position)
-      .lerp(sourcePosition, 0.52);
-    this.#debrisOrigin.y = Math.max(this.#controller.position.y, sourcePosition.y) + 0.45;
-
-    this.#debrisVelocity.copy(this.#lastTrafficInteraction.impulse).setY(0);
-    if (this.#debrisVelocity.lengthSq() < 0.0001) {
-      this.#debrisVelocity
-        .copy(this.#controller.position)
-        .sub(sourcePosition)
-        .setY(0);
-    }
-    if (this.#debrisVelocity.lengthSq() < 0.0001) {
-      this.#debrisVelocity.set(1, 0, 0);
-    }
-    this.#debrisVelocity.normalize();
-    this.#debrisLateral
-      .crossVectors(this.#worldUp, this.#debrisVelocity)
-      .normalize();
-    if (this.#debrisLateral.lengthSq() < 0.0001) {
-      this.#debrisLateral.set(0, 0, 1);
-    }
-
-    const impactStrength = Math.max(1, this.#lastTrafficInteraction.impulse.length());
-    const launchSpeed = THREE.MathUtils.clamp(impactStrength * 2.4, 2.6, 5.2);
-    this.#debrisVelocity
-      .multiplyScalar(launchSpeed)
-      .addScaledVector(this.#debrisLateral, this.#debrisRandom.signed() * 1.2)
-      .setY(this.#debrisRandom.range(0.18, 0.42));
-
-    this.#debrisSystem.emit(
-      this.#debrisOrigin,
-      this.#debrisVelocity,
-      TRAFFIC_IMPACT_DEBRIS,
-      8,
-    );
-    this.#recentTrafficImpactDebris = 1;
   }
 
   #render(frameSeconds: number): void {
     this.#engine.render(frameSeconds);
+  }
+
+  // ─── State Transitions ─────────────────────────────────────
+
+  #jumpToEncounter(position: THREE.Vector3, heading: number): void {
+    const snapCamera = this.#godModeActive;
+    if (snapCamera) {
+      this.#godModeActive = false;
+      this.#camera.exitGodMode();
+    }
+    this.#activeScenario = 'spawn';
+    this.#controller.teleport(position, heading);
+    this.#vehicle.setPose(
+      this.#controller.pose.position,
+      this.#controller.pose.quaternion,
+    );
+    this.#runSession.restart();
+    this.#enterDrivingPresentation({ snapCamera });
+  }
+
+  #enterDrivingPresentation(options?: { snapCamera?: boolean }): void {
+    this.#setPauseVisible(false);
+    this.#godModeActive = false;
+    this.#mapVisible = false;
+    this.#checkpointBannerTime = 0;
+    this.#checkpointBannerLabel = '';
+    this.#lastTrafficInteraction = {
+      nearestDistanceMeters: 999,
+      nearMiss: false,
+      blocking: false,
+      collision: false,
+      sourceId: null,
+      sourcePosition: null,
+      correction: new THREE.Vector3(),
+      impulse: new THREE.Vector3(),
+    };
+    this.#lastPropInteraction = {
+      nearestDistanceMeters: 999,
+      collision: false,
+      sourceId: null,
+      correction: new THREE.Vector3(),
+      impulse: new THREE.Vector3(),
+    };
+    this.#effects.resetDebris();
+    this.#effects.clearTracks();
+    this.#reactiveProps.reset();
+    this.#camera.resetDriveMotion();
+    this.#camera.resetArrivalSequence();
+    if (options?.snapCamera) {
+      this.#camera.snapToDrive(
+        this.#engine.camera,
+        this.#controller.pose.position,
+        this.#controller.pose.quaternion,
+        this.#controller.state,
+        this.#getNextCheckpointPosition(),
+      );
+    }
+    this.#mapDiscovery.reset(
+      this.#controller.position.x,
+      this.#controller.position.z,
+    );
+    this.#shell.setMode(this.#runSession.mode);
+    this.#shell.setTitleVisible(false);
+    this.#shell.setArrivalVisible(false);
+    this.#shell.setMapVisible(false);
+    void this.#audio.activate();
+  }
+
+  #setPauseVisible(visible: boolean): void {
+    const shouldPause =
+      visible && this.#runSession.mode === 'driving' && !this.#godModeActive;
+    this.#pauseVisible = shouldPause;
+    if (shouldPause) {
+      this.#mapVisible = false;
+    }
+    this.#shell.setPauseVisible(shouldPause);
+  }
+
+  #enterGodMode(): void {
+    if (this.#runSession.mode !== 'driving') return;
+    this.#godModeActive = true;
+    this.#mapVisible = false;
+    this.#setPauseVisible(false);
+    this.#controller.halt();
+    this.#vehicle.setPose(
+      this.#controller.pose.position,
+      this.#controller.pose.quaternion,
+    );
+    this.#camera.enterGodMode(this.#engine.camera);
+  }
+
+  #exitGodMode(): void {
+    if (!this.#godModeActive) return;
+    this.#godModeActive = false;
+    this.#camera.exitGodMode();
+    this.#camera.snapToDrive(
+      this.#engine.camera,
+      this.#controller.pose.position,
+      this.#controller.pose.quaternion,
+      this.#controller.state,
+      this.#getNextCheckpointPosition(),
+    );
+  }
+
+  #restartRun(): void {
+    const wasGodMode = this.#godModeActive;
+    if (wasGodMode) {
+      this.#godModeActive = false;
+      this.#camera.exitGodMode();
+    }
+    if (this.#camera.view === 'cockpit') {
+      this.#camera.toggleView();
+      this.#vehicle.mesh.visible = true;
+    }
+    this.#controller.reset();
+    this.#vehicle.damage.reset();
+    this.#audio.resetDamageTracking();
+    this.#achievements.resetTracking();
+    this.#driverProfile.resetTracking();
+    this.#driverProfile.save();
+    this.#shell.setTitleCareer(
+      this.#driverProfile.hasHistory
+        ? this.#driverProfile.fullLabel
+        : 'First run',
+    );
+    this.#vehicle.setPose(
+      this.#controller.pose.position,
+      this.#controller.pose.quaternion,
+    );
+    this.#activeScenario = 'spawn';
+    this.#radioLog.clear();
+    this.#prevWeatherCondition = '';
+    this.#prevDamageHealth = 1;
+    this.#discoveredSurfaces.clear();
+    this.#seenRaiders = false;
+    this.#foundRoad = false;
+    this.#prevDiscoveryPercent = 0;
+    this.#trail = [];
+    this.#runSession.restart();
+    this.#enterDrivingPresentation({ snapCamera: wasGodMode });
+    this.#shell.updateArrival(this.#buildArrivalSnapshot());
+  }
+
+  #completeRun(): void {
+    if (this.#godModeActive) {
+      this.#godModeActive = false;
+      this.#camera.exitGodMode();
+    }
+    if (this.#camera.view === 'cockpit') {
+      this.#camera.toggleView();
+      this.#vehicle.mesh.visible = true;
+    }
+    if (this.#runSession.mode !== 'arrived') {
+      this.#runSession.complete();
+    }
+    this.#setPauseVisible(false);
+    this.#mapVisible = false;
+    this.#controller.halt();
+    this.#achievements.onRunComplete(this.#runSession.snapshot);
+    this.#driverProfile.onRunComplete(this.#runSession.snapshot.elapsedSeconds);
+    this.#camera.beginArrivalSequence();
+    this.#audio.engineAudio.triggerArrivalCue();
+    this.#shell.setMode(this.#runSession.mode);
+    this.#shell.setArrivalVisible(true);
+    this.#shell.setMapVisible(false);
+    this.#shell.updateArrival(this.#buildArrivalSnapshot());
   }
 
   async #toggleFullscreen(): Promise<void> {
@@ -1219,18 +1275,47 @@ export class PathGame {
         await document.exitFullscreen();
         return;
       }
-
       await this.#shell.elements.canvasMount.requestFullscreen();
     } catch (error) {
       console.error('Fullscreen toggle failed.', error);
     }
   }
 
+  // ─── UI Snapshots ──────────────────────────────────────────
+
+  #syncShell(): void {
+    this.#shell.setTitleWeather(this.#buildTitleWeatherLabel());
+    this.#shell.setTitleAudio(this.#buildTitleAudioLabel());
+    this.#shell.updateHud(this.#buildHudSnapshot());
+    this.#shell.setMapVisible(
+      this.#mapVisible
+        && this.#runSession.mode === 'driving'
+        && !this.#pauseVisible
+        && !this.#godModeActive,
+    );
+    this.#shell.updateMap(this.#buildMapRuntimeSnapshot());
+    this.#debugPanel.updateTelemetry(this.#buildDebugTelemetrySnapshot());
+  }
+
+  #buildPausedDrivingState() {
+    return {
+      ...this.#controller.state,
+      throttle: 0,
+      speed: 0,
+      forwardSpeed: 0,
+      lateralSpeed: 0,
+      verticalSpeed: 0,
+      isBoosting: false,
+      isDrifting: false,
+      isBraking: false,
+    };
+  }
+
   #buildHudSnapshot(): HudSnapshot {
     const state = this.#controller.state;
     const runSnapshot = this.#runSession.snapshot;
     const nextCheckpoint = this.#getCheckpointTarget(runSnapshot.nextCheckpointIndex);
-    const audioReady = this.#engineAudio.getDebugState().contextState === 'running';
+    const audioReady = this.#audio.engineAudio.getDebugState().contextState === 'running';
     const routeCore =
       this.#godModeActive
         ? `God mode • ${this.#input.activeSourceLabel} • W/S move • A/D strafe • Space/Shift rise • Esc return`
@@ -1240,7 +1325,7 @@ export class PathGame {
         ? `Relay line secured • ${this.#input.activeSourceLabel}`
       : nextCheckpoint
         ? `CP ${nextCheckpoint.index + 1}/${runSnapshot.checkpointCount} • ${this.#input.activeSourceLabel}`
-        : `Route to summit relay • ${this.#input.activeSourceLabel}`;
+        : `${this.#getContextualRouteHint()} • ${this.#input.activeSourceLabel}`;
 
     return {
       speedLabel: `${Math.round(state.speed * 3.6)} km/h`,
@@ -1310,6 +1395,10 @@ export class PathGame {
       mappedLabel: `${mappedPercent}%`,
       relayLabel: `${runSnapshot.checkpointsReached}/${runSnapshot.checkpointCount} relay splits banked`,
       weatherLabel: `${this.#lastWeatherSnapshot.label}, ridge beacon hot`,
+      achievementsLabel: `${this.#achievements.unlockedCount} / ${this.#achievements.totalCount}`,
+      profileLabel: this.#driverProfile.fullLabel,
+      signatureLabel: this.#driverProfile.arrivalLabel,
+      distanceLabel: `${this.#driverProfile.distanceLabel} driven`,
     };
   }
 
@@ -1332,185 +1421,6 @@ export class PathGame {
     };
   }
 
-  #setPauseVisible(visible: boolean): void {
-    const shouldPause =
-      visible && this.#runSession.mode === 'driving' && !this.#godModeActive;
-    this.#pauseVisible = shouldPause;
-    if (shouldPause) {
-      this.#mapVisible = false;
-    }
-    this.#shell.setPauseVisible(shouldPause);
-  }
-
-  #syncShell(): void {
-    this.#shell.setTitleWeather(this.#buildTitleWeatherLabel());
-    this.#shell.setTitleAudio(this.#buildTitleAudioLabel());
-    this.#shell.updateHud(this.#buildHudSnapshot());
-    this.#shell.setMapVisible(
-      this.#mapVisible
-        && this.#runSession.mode === 'driving'
-        && !this.#pauseVisible
-        && !this.#godModeActive,
-    );
-    this.#shell.updateMap(this.#buildMapRuntimeSnapshot());
-    this.#debugPanel.updateTelemetry(this.#buildDebugTelemetrySnapshot());
-  }
-
-  #buildPausedDrivingState() {
-    return {
-      ...this.#controller.state,
-      throttle: 0,
-      speed: 0,
-      forwardSpeed: 0,
-      lateralSpeed: 0,
-      verticalSpeed: 0,
-      isBoosting: false,
-      isDrifting: false,
-      isBraking: false,
-    };
-  }
-
-  #enterGodMode(): void {
-    if (this.#runSession.mode !== 'driving') return;
-    this.#godModeActive = true;
-    this.#mapVisible = false;
-    this.#setPauseVisible(false);
-    this.#controller.halt();
-    this.#vehicle.setPose(
-      this.#controller.pose.position,
-      this.#controller.pose.quaternion,
-    );
-    this.#camera.enterGodMode(this.#engine.camera);
-  }
-
-  #exitGodMode(): void {
-    if (!this.#godModeActive) return;
-    this.#godModeActive = false;
-    this.#camera.exitGodMode();
-    this.#camera.snapToDrive(
-      this.#engine.camera,
-      this.#controller.pose.position,
-      this.#controller.pose.quaternion,
-      this.#controller.state,
-      this.#getNextCheckpointPosition(),
-    );
-  }
-
-  #restartRun(): void {
-    const wasGodMode = this.#godModeActive;
-    if (wasGodMode) {
-      this.#godModeActive = false;
-      this.#camera.exitGodMode();
-    }
-    this.#controller.reset();
-    this.#vehicle.damage.reset();
-    this.#prevDamageHealth = 1;
-    this.#vehicle.setPose(
-      this.#controller.pose.position,
-      this.#controller.pose.quaternion,
-    );
-    this.#activeScenario = 'spawn';
-    this.#runSession.restart();
-    this.#enterDrivingPresentation({ snapCamera: wasGodMode });
-    this.#shell.updateArrival(this.#buildArrivalSnapshot());
-  }
-
-  #completeRun(): void {
-    if (this.#godModeActive) {
-      this.#godModeActive = false;
-      this.#camera.exitGodMode();
-    }
-    if (this.#runSession.mode !== 'arrived') {
-      this.#runSession.complete();
-    }
-    this.#setPauseVisible(false);
-    this.#mapVisible = false;
-    this.#controller.halt();
-    this.#camera.beginArrivalSequence();
-    this.#engineAudio.triggerArrivalCue();
-    this.#shell.setMode(this.#runSession.mode);
-    this.#shell.setArrivalVisible(true);
-    this.#shell.setMapVisible(false);
-    this.#shell.updateArrival(this.#buildArrivalSnapshot());
-  }
-
-  #enterDrivingPresentation(options?: { snapCamera?: boolean }): void {
-    this.#setPauseVisible(false);
-    this.#godModeActive = false;
-    this.#mapVisible = false;
-    this.#checkpointBannerTime = 0;
-    this.#checkpointBannerLabel = '';
-    this.#lastTrafficInteraction = {
-      nearestDistanceMeters: 999,
-      nearMiss: false,
-      blocking: false,
-      collision: false,
-      sourceId: null,
-      sourcePosition: null,
-      correction: new THREE.Vector3(),
-      impulse: new THREE.Vector3(),
-    };
-    this.#lastPropInteraction = {
-      nearestDistanceMeters: 999,
-      collision: false,
-      sourceId: null,
-      correction: new THREE.Vector3(),
-      impulse: new THREE.Vector3(),
-    };
-    this.#ambientSkitterStrength = 0;
-    this.#recentTrafficImpactDebris = 0;
-    this.#lastTrafficCollisionSourceId = null;
-    this.#slopeDebrisTimer = 0;
-    this.#tireTrackSystem.clear();
-    this.#reactiveProps.reset();
-    this.#camera.resetDriveMotion();
-    this.#camera.resetArrivalSequence();
-    if (options?.snapCamera) {
-      this.#camera.snapToDrive(
-        this.#engine.camera,
-        this.#controller.pose.position,
-        this.#controller.pose.quaternion,
-        this.#controller.state,
-        this.#getNextCheckpointPosition(),
-      );
-    }
-    this.#mapDiscovery.reset(
-      this.#controller.position.x,
-      this.#controller.position.z,
-    );
-    this.#shell.setMode(this.#runSession.mode);
-    this.#shell.setTitleVisible(false);
-    this.#shell.setArrivalVisible(false);
-    this.#shell.setMapVisible(false);
-    void this.#activateAudio();
-  }
-
-  async #activateAudio(): Promise<void> {
-    const unlocked = await this.#engineAudio.activate();
-    if (unlocked) {
-      this.#removeAudioUnlockListeners();
-      // Create ImpactAudio once audio is unlocked, connected to the shared compressor
-      if (!this.#impactAudio) {
-        const ctx = this.#engineAudio.audioContext;
-        const dest = this.#engineAudio.compressorNode;
-        if (ctx && dest) {
-          this.#impactAudio = new ImpactAudio(ctx, dest);
-        }
-      }
-    }
-    this.#syncShell();
-  }
-
-  #installAudioUnlockListeners(): void {
-    window.addEventListener('pointerdown', this.#handleAudioUnlockGesture);
-    window.addEventListener('keydown', this.#handleAudioUnlockGesture);
-  }
-
-  #removeAudioUnlockListeners(): void {
-    window.removeEventListener('pointerdown', this.#handleAudioUnlockGesture);
-    window.removeEventListener('keydown', this.#handleAudioUnlockGesture);
-  }
-
   #buildMapLayoutSnapshot(): MapLayoutSnapshot {
     const halfSize = this.#terrain.size * 0.5;
     const pathPoints: Array<{ x: number; z: number }> = [];
@@ -1519,6 +1429,20 @@ export class PathGame {
         x: this.#terrain.getPathCenterX(z),
         z,
       });
+    }
+
+    // Sample terrain grid for topo map rendering (high-res for 352×320 canvas)
+    const topoColumns = 96;
+    const topoRows = 86;
+    const terrainHeights: number[] = [];
+    const terrainSurfaces: string[] = [];
+    for (let row = 0; row < topoRows; row++) {
+      for (let col = 0; col < topoColumns; col++) {
+        const wx = -halfSize + (col + 0.5) * (this.#terrain.size / topoColumns);
+        const wz = -halfSize + (row + 0.5) * (this.#terrain.size / topoRows);
+        terrainHeights.push(this.#terrain.getHeightAt(wx, wz));
+        terrainSurfaces.push(this.#terrain.getSurfaceAt(wx, wz));
+      }
     }
 
     return {
@@ -1549,6 +1473,12 @@ export class PathGame {
         x: this.#cityCenterPosition.x,
         z: this.#cityCenterPosition.z,
       },
+      terrainGrid: {
+        columns: topoColumns,
+        rows: topoRows,
+        heights: terrainHeights,
+        surfaces: terrainSurfaces,
+      },
     };
   }
 
@@ -1578,7 +1508,22 @@ export class PathGame {
         z: this.#controller.position.z,
         heading: this.#controller.heading,
       },
+      trail: this.#trail,
+      trailDistanceMeters: this.#computeTrailDistance(),
+      raiders: this.#seenRaiders ? this.#raiders.getPositions() : [],
     };
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────
+
+  #computeTrailDistance(): number {
+    let dist = 0;
+    for (let i = 1; i < this.#trail.length; i++) {
+      const a = this.#trail[i - 1]!;
+      const b = this.#trail[i]!;
+      dist += Math.hypot(b.x - a.x, b.z - a.z);
+    }
+    return dist;
   }
 
   #getObjectiveDistance(): number {
@@ -1587,19 +1532,6 @@ export class PathGame {
       position.x - this.#objectivePosition.x,
       position.z - this.#objectivePosition.z,
     );
-  }
-
-  #getNearestRelayDistance(): number {
-    const position = this.#controller.position;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const outpost of this.#outpostPositions) {
-      const distance = Math.hypot(
-        position.x - outpost.x,
-        position.z - outpost.z,
-      );
-      nearestDistance = Math.min(nearestDistance, distance);
-    }
-    return nearestDistance;
   }
 
   #getCheckpointDistance(index: number | null): number | null {
@@ -1648,64 +1580,6 @@ export class PathGame {
     return this.#getCheckpointTarget(index);
   }
 
-  #buildAmbientAudioSnapshot(): AmbientAudioState {
-    const listenerPosition = this.#godModeActive
-      ? this.#engine.camera.position
-      : this.#controller.position;
-    const objectiveDistance = Math.hypot(
-      listenerPosition.x - this.#objectivePosition.x,
-      listenerPosition.z - this.#objectivePosition.z,
-    );
-    let relayDistance = Number.POSITIVE_INFINITY;
-    for (const outpost of this.#outpostPositions) {
-      relayDistance = Math.min(
-        relayDistance,
-        Math.hypot(
-          listenerPosition.x - outpost.x,
-          listenerPosition.z - outpost.z,
-        ),
-      );
-    }
-    const landmarkDistance = Math.hypot(
-      listenerPosition.x - this.#landmarkPosition.x,
-      listenerPosition.z - this.#landmarkPosition.z,
-    );
-    const mountainProximity = THREE.MathUtils.clamp(
-      1 - landmarkDistance / 320,
-      0,
-      1,
-    );
-    const relayProximity = THREE.MathUtils.clamp(
-      1 - relayDistance / 92,
-      0,
-      1,
-    );
-    const summitProximity = THREE.MathUtils.clamp(
-      1 - objectiveDistance / 120,
-      0,
-      1,
-    );
-    const windExposure = THREE.MathUtils.clamp(
-      0.22
-      + mountainProximity * 0.72
-      + Math.abs(this.#controller.state.verticalSpeed) * 0.08
-      + Math.min(this.#controller.state.speed / 26, 1) * 0.12,
-      0,
-      1.35,
-    );
-
-    return {
-      rainDensity: this.#lastWeatherSnapshot.rainDensity,
-      routeActivity: this.#lastWorldStreamSnapshot.routeActivity,
-      windExposure,
-      weatherWindMix: this.#lastWeatherSnapshot.windAudioMultiplier,
-      weatherRelayMix: this.#lastWeatherSnapshot.relayAudioMultiplier,
-      relayProximity,
-      summitProximity,
-      arrivalPulse: this.#runSession.mode === 'arrived' ? 1 : 0,
-    };
-  }
-
   #resolveScenarioId(fixtureId: string): ScenarioFixtureId | null {
     return SCENARIO_IDS.includes(fixtureId as ScenarioFixtureId)
       ? (fixtureId as ScenarioFixtureId)
@@ -1727,7 +1601,7 @@ export class PathGame {
   }
 
   #buildTitleAudioLabel(): string {
-    const audioDebug = this.#engineAudio.getDebugState();
+    const audioDebug = this.#audio.engineAudio.getDebugState();
     if (audioDebug.contextState === 'running') {
       return 'Web Audio live';
     }
@@ -1750,5 +1624,191 @@ export class PathGame {
       y: Number(vector.y.toFixed(2)),
       z: Number(vector.z.toFixed(2)),
     };
+  }
+
+  // ─── Radio Breadcrumbs ────────────────────────────────────
+
+  #updateRadioBreadcrumbs(dt: number): void {
+    const isDriving = this.#runSession.mode === 'driving';
+    this.#radioLog.setVisible(isDriving && !this.#pauseVisible && !this.#godModeActive);
+    this.#radioLog.update(dt);
+
+    if (!isDriving || this.#pauseVisible) return;
+
+    const pos = this.#controller.position;
+    const state = this.#controller.state;
+    const speed = state.speed * 3.6; // km/h
+
+    // Proximity: outposts
+    for (let i = 0; i < this.#outpostPositions.length - 1; i += 1) {
+      const op = this.#outpostPositions[i];
+      if (!op) continue;
+      const dist = Math.hypot(pos.x - op.x, pos.z - op.z);
+      if (dist < 80) {
+        const msgs = [
+          'relay echo — outpost signal, weak',
+          'structure ahead — watch for raiders',
+          'outpost ping — proceed with caution',
+        ];
+        this.#radioLog.push(msgs[i % msgs.length] ?? msgs[0]!, 'outpost');
+        break;
+      }
+    }
+
+    // Proximity: objective
+    const objDist = this.#getObjectiveDistance();
+    if (objDist < 150) {
+      const msg = objDist < 60
+        ? 'ridge beacon hot — almost there'
+        : 'signal spike — summit relay close';
+      this.#radioLog.push(msg, 'objective', 'alert');
+    }
+
+    // Proximity: raiders
+    const raiderDist = this.#raiders.getNearestDistance(pos);
+    if (raiderDist < 60) {
+      const msg = raiderDist < 25
+        ? 'hostile contact — evade'
+        : 'movement on the road — not friendly';
+      this.#radioLog.push(msg, 'raider', 'alert');
+      // Discovery: first raider sighting
+      if (!this.#seenRaiders) {
+        this.#seenRaiders = true;
+        this.#shell.showDiscoveryToast('Hostile contact');
+      }
+    }
+
+    // Water entry
+    if (state.surface === 'water' && !this.#discoveredSurfaces.has('water')) {
+      this.#radioLog.push('water crossing — hold steady', 'water');
+    }
+
+    // Weather change
+    const currentCondition = this.#lastWeatherSnapshot.condition;
+    if (this.#prevWeatherCondition && currentCondition !== this.#prevWeatherCondition) {
+      const msg = currentCondition === 'rainy'
+        ? 'front moving in — grip will drop'
+        : currentCondition === 'sunny'
+          ? 'skies clearing'
+          : 'weather shifting';
+      this.#radioLog.push(msg, 'weather');
+    }
+    this.#prevWeatherCondition = currentCondition;
+
+    // Speed warning
+    if (speed > 100) {
+      this.#radioLog.push('running hot', 'speed');
+    }
+
+    // Damage taken
+    const currentHealth = this.#vehicle.damage.totalHealth;
+    if (currentHealth < this.#prevDamageHealth - 0.08) {
+      const msg = currentHealth < 0.4
+        ? 'vehicle critical — slow down'
+        : currentHealth < 0.7
+          ? 'panel loose — taking hits'
+          : 'took a hit';
+      this.#radioLog.push(msg, 'damage', currentHealth < 0.4 ? 'alert' : 'info');
+    }
+    this.#prevDamageHealth = currentHealth;
+
+    // Checkpoint reached
+    if (this.#checkpointBannerTime > 2.0) {
+      this.#radioLog.push('relay banked — keep moving', 'checkpoint', 'alert');
+    }
+
+    // Discovery: new surface
+    if (state.isGrounded && state.surface !== 'dirt') {
+      if (!this.#discoveredSurfaces.has(state.surface)) {
+        this.#discoveredSurfaces.add(state.surface);
+        const surfaceName = state.surface.charAt(0).toUpperCase() + state.surface.slice(1);
+        this.#shell.showDiscoveryToast(`New surface: ${surfaceName}`);
+        this.#radioLog.push(`terrain change — ${state.surface}`, 'discovery');
+      }
+    }
+
+    // Discovery: map milestones
+    const discoveryPercent = this.#mapDiscovery.getPercent();
+    if (
+      discoveryPercent >= 25
+      && this.#prevDiscoveryPercent < 25
+    ) {
+      this.#radioLog.push('new terrain mapped — 25% scanned', 'discovery', 'alert');
+      this.#shell.showDiscoveryToast('25% mapped');
+    } else if (
+      discoveryPercent >= 50
+      && this.#prevDiscoveryPercent < 50
+    ) {
+      this.#radioLog.push('sector halfway scanned', 'discovery', 'alert');
+      this.#shell.showDiscoveryToast('50% mapped');
+    } else if (
+      discoveryPercent >= 75
+      && this.#prevDiscoveryPercent < 75
+    ) {
+      this.#radioLog.push('most of the basin mapped', 'discovery', 'alert');
+      this.#shell.showDiscoveryToast('75% mapped');
+    }
+    this.#prevDiscoveryPercent = discoveryPercent;
+
+    // Discovery: found the road
+    if (!this.#foundRoad && this.#controller.surfaceFeedback.roadInfluence > 0.5) {
+      this.#foundRoad = true;
+      this.#shell.showDiscoveryToast('Route found');
+      this.#radioLog.push('road surface detected', 'discovery');
+    }
+
+    // Idle chatter
+    if (this.#radioLog.idleTime > 25) {
+      const idleMsgs = [
+        'static...',
+        'signal lost',
+        '...',
+        'interference — keep moving',
+        'nothing on the wire',
+        'frequency dead',
+      ];
+      const pick = idleMsgs[Math.floor(Math.random() * idleMsgs.length)] ?? 'static...';
+      this.#radioLog.push(pick, 'idle', 'ambient');
+    }
+  }
+
+  #getContextualRouteHint(): string {
+    const pos = this.#controller.position;
+    const objDist = this.#getObjectiveDistance();
+
+    // Near objective
+    if (objDist < 120) {
+      return `Summit relay — ${Math.round(objDist)}m`;
+    }
+
+    // Near outpost
+    for (let i = 0; i < this.#outpostPositions.length - 1; i += 1) {
+      const op = this.#outpostPositions[i];
+      if (!op) continue;
+      const dist = Math.hypot(pos.x - op.x, pos.z - op.z);
+      if (dist < 70) {
+        return `Outpost ahead — ${Math.round(dist)}m`;
+      }
+    }
+
+    // Near raiders
+    const raiderDist = this.#raiders.getNearestDistance(pos);
+    if (raiderDist < 50) {
+      return `Hostile patrol — ${Math.round(raiderDist)}m`;
+    }
+
+    // On road
+    if (this.#controller.surfaceFeedback.roadInfluence > 0.4) {
+      return 'On route';
+    }
+
+    // Default
+    if (this.#controller.state.surface === 'water') {
+      return 'Water crossing';
+    }
+
+    return objDist < 300
+      ? `Summit relay — ${Math.round(objDist)}m`
+      : 'Open terrain';
   }
 }

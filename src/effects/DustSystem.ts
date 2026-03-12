@@ -18,6 +18,7 @@ interface DustSystemOptions {
   gravity?: number;
   drag?: number;
   fade?: (lifeFraction: number) => number;
+  blending?: THREE.Blending;
 }
 
 export class DustSystem {
@@ -25,14 +26,16 @@ export class DustSystem {
   readonly #random = new SeededRandom(0x44555354);
 
   constructor(scene: THREE.Scene, options: DustSystemOptions = {}) {
-    this.#field = new SpriteParticleField(scene, {
+    const fieldOptions = {
       capacity: options.capacity ?? 360,
       color: options.color ?? 0xd7c0a0,
       opacity: options.opacity ?? 0.34,
       gravity: options.gravity ?? -2.8,
       drag: options.drag ?? 0.94,
-      fade: options.fade ?? ((lifeFraction) => Math.pow(1 - lifeFraction, 1.8)),
-    });
+      fade: options.fade ?? ((lifeFraction: number) => Math.pow(1 - lifeFraction, 1.8)),
+      ...(options.blending != null ? { blending: options.blending } : {}),
+    };
+    this.#field = new SpriteParticleField(scene, fieldOptions);
   }
 
   get activeCount(): number {

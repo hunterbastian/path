@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { expLerp } from '../core/math';
 import { DrivingState } from './DrivingState';
 import { VehicleDamage } from './VehicleDamage';
@@ -629,5 +630,61 @@ export class Vehicle {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
+  }
+
+  /**
+   * Load a GLB model and replace the procedural body with it.
+   * Keeps wheels, lights, speed lines, and physics intact.
+   */
+  static async loadModel(url: string): Promise<THREE.Group> {
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync(url);
+    return gltf.scene;
+  }
+
+  /**
+   * Replace the procedural box body with a loaded GLB model.
+   * Hides procedural geometry + wheels, adds model to bodyVisual.
+   */
+  replaceBody(modelScene: THREE.Group): void {
+    const model = modelScene.clone();
+
+    // Compute bounding box to auto-scale to match procedural vehicle (~4.8m long)
+    const bbox = new THREE.Box3().setFromObject(model);
+    const modelSize = bbox.getSize(new THREE.Vector3());
+    const modelCenter = bbox.getCenter(new THREE.Vector3());
+
+    // Scale longest axis to ~4.8 units
+    const longestAxis = Math.max(modelSize.x, modelSize.y, modelSize.z);
+    const autoScale = 4.8 / longestAxis;
+    model.scale.setScalar(autoScale);
+
+    // Center horizontally, sit bottom at Y≈-0.3 (wheel contact height)
+    model.position.set(
+      -modelCenter.x * autoScale,
+      -bbox.min.y * autoScale - 0.3,
+      -modelCenter.z * autoScale,
+    );
+
+    // Enable shadows on all meshes
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    // Hide all existing procedural body children
+    for (const child of this.#bodyVisual.children) {
+      child.visible = false;
+    }
+
+    // Hide procedural wheels (model has its own)
+    for (const mount of this.#wheelMounts) {
+      mount.visible = false;
+    }
+
+    // Add the GLB model
+    this.#bodyVisual.add(model);
   }
 }

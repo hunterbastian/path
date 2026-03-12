@@ -10,7 +10,7 @@ export type SurfaceType = 'sand' | 'dirt' | 'grass' | 'rock' | 'snow';
 export class Terrain {
   readonly mesh: THREE.Mesh;
   readonly size = 920;
-  readonly segments = 220;
+  readonly segments = 160;
   readonly landmarkCenter = new THREE.Vector2(44, 360);
   readonly cityCenter: THREE.Vector2;
   readonly objectiveCenter: THREE.Vector2;
@@ -130,10 +130,17 @@ export class Terrain {
     );
   }
 
-  /** Call once per frame to clear the height cache. */
+  /**
+   * Call once per frame to advance the cache generation.
+   * Heights are stable within a frame — the cache persists across frames
+   * and only evicts entries older than 2 frames to handle movement.
+   */
   flushHeightCache(): void {
-    this.#heightCache.clear();
     this.#cacheFrame++;
+    // Evict stale entries every 120 frames (~2s) instead of every frame
+    if (this.#cacheFrame % 120 === 0) {
+      this.#heightCache.clear();
+    }
   }
 
   getHeightAt(x: number, z: number): number {
@@ -343,12 +350,47 @@ export class Terrain {
   #buildServiceRoadPaths(): THREE.Vector2[][] {
     const outpostA = this.outpostCenters[0] ?? new THREE.Vector2(this.getPathCenterX(84) + 20, 84);
     const outpostB = this.outpostCenters[1] ?? new THREE.Vector2(this.getPathCenterX(176) + 48, 176);
+
+    // Western return route — closes the loop so the road wraps around the map
+    const westA = new THREE.Vector2(-110, this.objectiveCenter.y + 20);
+    const westB = new THREE.Vector2(-155, (this.objectiveCenter.y + outpostB.y) * 0.5);
+    const westC = new THREE.Vector2(-140, (outpostB.y + outpostA.y) * 0.5 - 10);
+    const westD = new THREE.Vector2(-90, outpostA.y * 0.4);
+    const spawnReturn = new THREE.Vector2(this.getPathCenterX(-20), -20);
+
     return [
       this.#createServiceRoad(52, outpostA, 0.42),
       this.#createServiceRoad(144, outpostB, -0.34),
       this.#createServiceRoad(this.cityCenter.y - 62, this.cityCenter, 0.56),
       this.#createConnectorRoad(this.cityCenter, this.objectiveCenter, -0.28),
+      // Loop road — western return route
+      [this.objectiveCenter.clone(), westA, westB],
+      [westB, westC, westD],
+      [westD, spawnReturn, new THREE.Vector2(this.getPathCenterX(0), 0)],
     ];
+  }
+
+  /** Full loop road waypoints for raider patrols — clockwise circuit. */
+  getLoopRoadWaypoints(): THREE.Vector3[] {
+    const waypoints: THREE.Vector3[] = [];
+    const addWaypoint = (x: number, z: number) => {
+      waypoints.push(new THREE.Vector3(x, this.getHeightAt(x, z) + VEHICLE_CLEARANCE, z));
+    };
+
+    // Main path — south to north
+    for (let z = -20; z <= this.objectiveCenter.y; z += 32) {
+      addWaypoint(this.getPathCenterX(z), z);
+    }
+    addWaypoint(this.objectiveCenter.x, this.objectiveCenter.y);
+
+    // Western return — north to south
+    addWaypoint(-110, this.objectiveCenter.y + 20);
+    addWaypoint(-155, (this.objectiveCenter.y + 130) * 0.5);
+    addWaypoint(-140, 100);
+    addWaypoint(-90, 30);
+    addWaypoint(this.getPathCenterX(-20), -20);
+
+    return waypoints;
   }
 
   #findRouteOutpostCenter(targetZ: number, lateralOffset: number): THREE.Vector2 {
