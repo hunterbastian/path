@@ -35,7 +35,7 @@ export class GrassField {
   readonly #hiddenMatrix = new THREE.Matrix4().makeScale(0.0001, 0.0001, 0.0001);
   /** Spatial grid: each cell holds patch indices for fast neighborhood lookup. */
   readonly #gridCells: number[][];
-  readonly #gridSize = 6;
+  readonly #gridSize = 8;
   readonly #cellSize: number;
   readonly #halfWorld: number;
   /** Cells that were active last frame — used to hide patches when leaving range. */
@@ -207,8 +207,8 @@ export class GrassField {
       const dz = camZ - patch.position.z;
       const distSq = dx * dx + dz * dz;
 
-      // 160 = 18 + 142 (max visible distance), squared = 25600
-      if (distSq > 25600) {
+      // 190 = 18 + 172 (max visible distance), squared = 36100
+      if (distSq > 36100) {
         if (!this.#patchHidden[index]) {
           this.#meshA.setMatrixAt(index, this.#hiddenMatrix);
           this.#meshB.setMatrixAt(index, this.#hiddenMatrix);
@@ -220,7 +220,7 @@ export class GrassField {
 
       const distance = Math.sqrt(distSq);
       const visibility = THREE.MathUtils.clamp(
-        1 - (distance - 18) / 142,
+        1 - (distance - 18) / 172,
         0,
         1,
       );
@@ -341,7 +341,7 @@ export class GrassField {
     const cityCenter = this.#terrain.getCityCenterPosition();
     const outposts = this.#terrain.getOutpostPositions();
 
-    for (let attempt = 0; attempt < 4800 && patches.length < 320; attempt += 1) {
+    for (let attempt = 0; attempt < 7000 && patches.length < 480; attempt += 1) {
       const x = random.range(-halfSize, halfSize);
       const z = random.range(-halfSize, halfSize);
       if (!this.#terrain.isWithinBounds(x, z)) continue;
@@ -396,7 +396,7 @@ export class GrassField {
         if (!existing) continue;
         const pdx = existing.position.x - x;
         const pdz = existing.position.z - z;
-        if (pdx * pdx + pdz * pdz < 7.5) {
+        if (pdx * pdx + pdz * pdz < 5.0) {
           tooClose = true;
           break;
         }
@@ -451,21 +451,29 @@ export class GrassField {
         .lerp(new THREE.Color(0x8ee062), random.range(0.10, 0.48))
         .lerp(new THREE.Color(0x3a8838), random.range(0, 0.20));
 
-      // Biome affects height — meadow is taller and dreamier, desert is short and scrubby
-      const heightMin = biome === 'meadow' ? 0.88 : biome === 'desert' ? 0.42 : 0.72;
-      const heightMax = biome === 'meadow' ? 1.72 : biome === 'desert' ? 0.88 : 1.42;
-      // Meadow sways more gently, hollow is still
-      const swayMin = biome === 'meadow' ? 0.10 : biome === 'hollow' ? 0.04 : 0.08;
-      const swayMax = biome === 'meadow' ? 0.24 : biome === 'hollow' ? 0.12 : 0.19;
+      // Biome affects height — meadow is chest-height Ghibli fields
+      const heightMin = biome === 'meadow' ? 1.8 : biome === 'desert' ? 0.36 : biome === 'hollow' ? 0.9 : 0.7;
+      const heightMax = biome === 'meadow' ? 3.2 : biome === 'desert' ? 0.72 : biome === 'hollow' ? 1.6 : 1.4;
+      // Meadow sways in long lazy waves, hollow barely moves
+      const swayMin = biome === 'meadow' ? 0.12 : biome === 'hollow' ? 0.03 : 0.07;
+      const swayMax = biome === 'meadow' ? 0.28 : biome === 'hollow' ? 0.10 : 0.18;
+      // Meadow blades are wider and more lush
+      const widthMin = biome === 'meadow' ? 0.52 : 0.34;
+      const widthMax = biome === 'meadow' ? 1.1 : biome === 'hollow' ? 0.72 : 0.68;
+
+      // Golden tip tint for meadow — blades lighten at the top (baked into tint)
+      if (biome === 'meadow' && biomeStr > 0.3) {
+        tint.lerp(new THREE.Color(0xd8e848), random.range(0.05, 0.18));
+      }
 
       patches.push({
         position,
         yaw: random.range(0, Math.PI * 2),
-        width: random.range(0.34, biome === 'meadow' ? 0.82 : 0.72),
+        width: random.range(widthMin, widthMax),
         height: random.range(heightMin, heightMax),
         phase: random.range(0, Math.PI * 2),
         swayAmplitude: random.range(swayMin, swayMax),
-        lean: random.range(-0.02, 0.03),
+        lean: random.range(-0.03, 0.04),
         tint,
         trample: 0,
         trampleYaw: 0,
@@ -477,36 +485,38 @@ export class GrassField {
 
   #createMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0x58d848,
+      color: 0x50e040,
       map: this.#texture,
       alphaMap: this.#texture,
-      alphaTest: 0.30,
+      alphaTest: 0.26,
       transparent: true,
       vertexColors: true,
       side: THREE.DoubleSide,
-      roughness: 0.82,
+      roughness: 0.78,
       metalness: 0,
-      emissive: 0x308828,
-      emissiveIntensity: 0.38,
+      emissive: 0x288820,
+      emissiveIntensity: 0.42,
       flatShading: true,
       depthWrite: false,
     });
   }
 
   #createBladeGeometry(): THREE.PlaneGeometry {
-    const geometry = new THREE.PlaneGeometry(1, 1, 1, 6);
+    const geometry = new THREE.PlaneGeometry(1, 1, 1, 8);
     geometry.translate(0, 0.5, 0);
 
     const positions = geometry.attributes.position as THREE.BufferAttribute;
     for (let index = 0; index < positions.count; index += 1) {
       const x = positions.getX(index);
       const y = positions.getY(index);
-      // Graceful taper — wider base, thinner tip
-      const taper = THREE.MathUtils.lerp(0.88, 0.06, Math.pow(y, 1.35));
-      // Gentle S-curve — blade arcs forward then tips back
-      const curve = Math.sin(y * Math.PI) * 0.05 - Math.sin(y * Math.PI * 2) * 0.015;
+      // Graceful taper — wide lush base, thin wispy tip
+      const taper = THREE.MathUtils.lerp(0.92, 0.04, Math.pow(y, 1.5));
+      // Strong S-curve — blade leans forward, arcs, then tips droop at top
+      const lean = y * y * 0.08;  // progressive forward lean
+      const arc = Math.sin(y * Math.PI) * 0.07;
+      const droop = Math.pow(Math.max(y - 0.7, 0) / 0.3, 2) * -0.04; // tip droops
       positions.setX(index, x * taper);
-      positions.setZ(index, curve);
+      positions.setZ(index, lean + arc + droop);
     }
 
     positions.needsUpdate = true;
@@ -526,11 +536,13 @@ export class GrassField {
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     const blade = context.createLinearGradient(48, 0, 48, 256);
-    blade.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    blade.addColorStop(0.06, 'rgba(255, 255, 245, 0.72)');  // luminous tip
-    blade.addColorStop(0.16, 'rgba(255, 255, 255, 0.96)');
-    blade.addColorStop(0.68, 'rgba(255, 255, 255, 0.92)');
-    blade.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    blade.addColorStop(0, 'rgba(255, 255, 220, 0)');         // transparent tip
+    blade.addColorStop(0.04, 'rgba(255, 255, 200, 0.65)');   // golden glow at very tip
+    blade.addColorStop(0.10, 'rgba(255, 255, 230, 0.85)');   // luminous upper
+    blade.addColorStop(0.22, 'rgba(255, 255, 255, 0.96)');   // full opacity
+    blade.addColorStop(0.65, 'rgba(255, 255, 255, 0.94)');   // sustain
+    blade.addColorStop(0.88, 'rgba(240, 255, 240, 0.72)');   // fade toward base
+    blade.addColorStop(1, 'rgba(220, 240, 220, 0)');
     context.fillStyle = blade;
 
     context.beginPath();
