@@ -154,9 +154,9 @@ const POST_SHADER = {
 
       float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
 
-      // Warm color grade — golden hour push
-      vec3 graded = mix(mapped, vec3(luma) * vec3(1.08, 1.03, 0.92), 0.06);
-      graded = mix(vec3(luma), graded, 1.14);
+      // Color grade — subtle warmth, vivid saturation
+      vec3 graded = mix(mapped, vec3(luma) * vec3(1.04, 1.02, 0.96), 0.04);
+      graded = mix(vec3(luma), graded, 1.18);
 
       // Speed desaturation — subtle wash at high effectScale (driven externally)
       float speedDesatBlend = (1.0 - uEffectScale) * 0.12;

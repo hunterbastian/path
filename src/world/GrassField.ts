@@ -477,17 +477,17 @@ export class GrassField {
 
   #createMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0x6cc858,
+      color: 0x58d848,
       map: this.#texture,
       alphaMap: this.#texture,
-      alphaTest: 0.32,
+      alphaTest: 0.30,
       transparent: true,
       vertexColors: true,
       side: THREE.DoubleSide,
-      roughness: 0.88,
+      roughness: 0.82,
       metalness: 0,
-      emissive: 0x3a7830,
-      emissiveIntensity: 0.34,
+      emissive: 0x308828,
+      emissiveIntensity: 0.38,
       flatShading: true,
       depthWrite: false,
     });

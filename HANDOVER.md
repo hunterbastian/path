@@ -1,53 +1,53 @@
 # Session Handover
-Last updated: 2026-03-17 evening
+Last updated: 2026-03-17 late night
 
 ## Project
-PATH — Three.js arcade driving game, post-apocalyptic theme, Crossout-style controls
+PATH — Three.js arcade driving game, transitioning from post-apocalyptic to Ghibli aesthetic
 Directory: ~/Desktop/code/PATH
+Deployed: https://drive-path.vercel.app
 
 ## What Was Built This Session
-- Fixed EnvironmentalClutter material merge bug (rust/dark parts now render correctly)
-- Extracted Terrain `#cacheKey` helper (deduplicated 3x)
-- Bloom threshold dynamically tracks Sky.sunIntensity (night glow, no midday over-bloom)
-- Hidden clutter colliders skipped via groupIndex (no collision math on LOD-hidden groups)
-- Grass spatial grid (4x4, only iterates 3x3 neighborhood around camera)
-- NetworkManager.disconnect() called on dispose (WebSocket leak fixed)
-- Dead mist computations removed from Sky.update()
-- Missing dispose calls added: Water, DirtRoads, ValleyFog, GhostPlayerSystem
-- EnvironmentalClutter.dispose() now disposes merged geometries
-- AmbientTrafficSystem tumble: eliminated per-frame Vector3 allocations
-- TireTrackSystem: eliminated per-frame Vector3 allocation in #projectWheelToGround
-- Engine toneMapping: toggle on state transition only (was recompiling shaders per-frame)
-- DriftScoreSystem: new gameplay system — scores drifts, HUD popup, run stats
+- 15+ performance/stability fixes (material merge, dispose leaks, vector allocs, toneMapping state machine)
+- DriftScoreSystem with live HUD counter and per-run stats
+- Biome system (meadow/desert/hollow) — surface, vertex colors, grass, fog all biome-aware
+- Mountain range — 5 ranges, peaks to 200m, snow caps, atmospheric perspective
+- 4 nature POIs with discovery persistence
+- Nighttime overhaul — headlights/beacons scale with darkness
+- HUD: drift, mapped, achievements, players, timer, surface colors, speed glow
+- Radial speed blur, deeper vignette, intensity-scaled smoke
+- Valley fog per-biome tinting and density
+- Ghibli color palette shift — vivid greens/blues replacing dusty post-apoc
+- PollenSystem — ambient floating particles (pollen by day, fireflies by night)
+- Dreamy grass — biome colors, S-curve blades, 3-layer wind, luminous tips
 
 ## Current State
-- What works: driving, drifting with score popups, day/night cycle, weather, multiplayer ghosts, checkpoints, arrival, map discovery, achievements, damage system, all particle effects
+- What works: all driving, drifting, scoring, biomes, mountains, POIs, night, particles
 - What's broken: nothing known
-- What it looks like: post-apocalyptic valley with wrecked vehicles, road signs, debris. Dynamic sky with sun orbit. Gold drift score popups appear center-bottom on drift end
+- Visual direction: SHIFTING toward Ghibli (reference image provided — lush meadow, billowing clouds, tall grass, pine trees, warm colors). Palette and pollen done, but trees and tall grass not yet started
 
-## Next Steps
-1. Polish drift score — test in Dia, tune thresholds/formula, maybe add combo multiplier
-2. Arrival summary card — show run stats (drift total, distance, map %, surfaces) on arrival screen
-3. Audio layer — wind/surface/ambient sounds (EngineAudio exists but world is silent)
-4. Photo mode or ghost replay (both have existing infrastructure)
+## Next Steps (Ghibli Vision)
+1. **Trees** — pine/spruce models from geometry (CylinderGeometry trunk + ConeGeometry canopy layers). Place along ridges and meadow biome. Instanced for performance
+2. **Taller grass** — vehicle should wade through chest-height grass like the reference. Increase blade height to 2-3m in meadow biome, add grass parting effect as vehicle pushes through
+3. **Volumetric clouds** — the reference has massive billowing cumulus. Current sky is a 2D gradient texture. Could add 3D cloud sprites or a cloud plane shader
+4. **Rounded boulders** — replace angular BoxGeometry rocks with SphereGeometry-based rounded boulders with moss tint
+5. **Island terrain** — user wants the land to be an island with ocean, beach ring, red rock biome, lush green biome
 
-## Key Files
-- `src/gameplay/DriftScoreSystem.ts` — NEW: drift scoring + run exploration stats
-- `src/render/GritPostProcess.ts` — bloom threshold now uniform-driven, setBloomThreshold()
-- `src/core/Engine.ts` — toneMapping state transition fix, #bypassPostProcess flag
-- `src/world/EnvironmentalClutter.ts` — material merge fix, collider groupIndex, geometry dispose
-- `src/world/Terrain.ts` — #cacheKey helper
-- `src/world/Sky.ts` — sunIntensity getter, dead mist code removed
-- `src/world/GrassField.ts` — spatial grid (#gridCells, #activeCells)
-- `src/effects/TireTrackSystem.ts` — reusable #groundPoint vector
-- `src/world/AmbientTrafficSystem.ts` — reuses #forward/#right for tumble seeding
-- `src/app/PathGame.ts` — drift score wiring, all missing dispose calls added
-- `src/core/AppShell.ts` — drift score popup element + showDriftScore/clearDriftScore
-- `src/styles/app.css` — .drift-score-popup styles
+## Key Files Changed
+- `src/world/Terrain.ts` — biomes, mountains, palette, atmospheric perspective, snow thresholds
+- `src/world/Sky.ts` — Ghibli sky keyframes, env texture 1024x512, fog color
+- `src/world/ValleyFog.ts` — biome fog tinting and density
+- `src/world/GrassField.ts` — biome-aware colors, dreamy animation, 320 patches
+- `src/effects/PollenSystem.ts` — NEW: ambient pollen/firefly particles
+- `src/gameplay/DriftScoreSystem.ts` — NEW: drift scoring
+- `src/world/PointsOfInterest.ts` — NEW: discoverable landmarks
+- `src/render/GritPostProcess.ts` — radial blur, vivid grade, dynamic bloom/grain
+- `src/vehicle/Vehicle.ts` — nighttime headlight/brake scaling
+- `src/core/AppShell.ts` — HUD stats, drift popup
+- All dispose chains completed
 
 ## Decisions Made
-- Drift score formula: abs(lateralSpeed) x forwardSpeed x dt — naturally rewards fast aggressive slides
-- Min thresholds: 8 points AND 0.4s to filter micro-slides
-- No combo multiplier yet — kept simple for first pass
-- VehicleController.reset() was already comprehensive (review agent false positive)
-- getNormalAt shared vector: all callers are safe, no fix needed (documented)
+- Ghibli aesthetic direction confirmed via reference image
+- Biome system uses Gaussian spatial fields — no hard boundaries
+- Mountains use additive Gaussian contributions (same pattern as existing landmark)
+- Pollen switches to firefly mode at night (warm yellow-green, blink animation)
+- Color grade shifted from golden-hour warm to vivid-natural saturated

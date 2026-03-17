@@ -740,26 +740,27 @@ export class Terrain {
     const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
 
-    const sand = new THREE.Color(0xf0d88a);
-    const sandLight = new THREE.Color(0xf8e8b8);
-    const dirt = new THREE.Color(0xb87850);
-    const dirtDark = new THREE.Color(0x8a5038);
-    const grass = new THREE.Color(0x5bba5e);
-    const grassLight = new THREE.Color(0x8ad86e);
-    const rock = new THREE.Color(0x8a8e90);
-    const rockDark = new THREE.Color(0x5e6468);
-    const rockLight = new THREE.Color(0xa0a6a8);
-    const snow = new THREE.Color(0xe5e8f2);
-    const skyTint = new THREE.Color(0xaed4f5);
-    const sunsetTint = new THREE.Color(0xffc490);
+    // Ghibli-saturated palette — vivid greens, warm earth, clean sky
+    const sand = new THREE.Color(0xecd47a);
+    const sandLight = new THREE.Color(0xf4e4a8);
+    const dirt = new THREE.Color(0x9a7048);
+    const dirtDark = new THREE.Color(0x6e4830);
+    const grass = new THREE.Color(0x4cc448);
+    const grassLight = new THREE.Color(0x7ae858);
+    const rock = new THREE.Color(0x808888);
+    const rockDark = new THREE.Color(0x546060);
+    const rockLight = new THREE.Color(0x98a4a0);
+    const snow = new THREE.Color(0xeef2fa);
+    const skyTint = new THREE.Color(0x88c8f0);
+    const sunsetTint = new THREE.Color(0xffb878);
 
-    // Biome tint colors
-    const meadowGrass = new THREE.Color(0x48c85a);
-    const meadowDirt = new THREE.Color(0x7a9068);
-    const desertSand = new THREE.Color(0xe8b868);
-    const desertRock = new THREE.Color(0x9a7858);
-    const hollowGrass = new THREE.Color(0x2a7a3e);
-    const hollowDirt = new THREE.Color(0x4a3830);
+    // Biome tint colors — vivid and distinct
+    const meadowGrass = new THREE.Color(0x40d850);
+    const meadowDirt = new THREE.Color(0x68a058);
+    const desertSand = new THREE.Color(0xe0b050);
+    const desertRock = new THREE.Color(0xa07048);
+    const hollowGrass = new THREE.Color(0x208838);
+    const hollowDirt = new THREE.Color(0x3a3028);
     const biomeColor = new THREE.Color();
 
     for (let index = 0; index < positions.count; index += 1) {

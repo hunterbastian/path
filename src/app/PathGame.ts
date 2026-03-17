@@ -35,6 +35,7 @@ import { DamageHud } from '../ui/DamageHud';
 import { RadioLog } from '../ui/RadioLog';
 import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
+import { PollenSystem } from '../effects/PollenSystem';
 import { DirtRoads } from '../world/DirtRoads';
 import { PointsOfInterest } from '../world/PointsOfInterest';
 import { MountainHub } from '../world/MountainHub';
@@ -110,6 +111,7 @@ export class PathGame {
   readonly #weatherState: WeatherState;
   readonly #achievements: AchievementSystem;
   readonly #driftScore = new DriftScoreSystem();
+  #pollen: PollenSystem | null = null;
   readonly #driverProfile: DriverProfile;
   readonly #debugPanel: DebugPanel;
   readonly #radioLog: RadioLog;
@@ -163,6 +165,7 @@ export class PathGame {
     this.#grassField = new GrassField(this.#engine.scene, this.#terrain);
     this.#clutter = new EnvironmentalClutter(this.#engine.scene, this.#terrain);
     this.#pois = new PointsOfInterest(this.#engine.scene, this.#terrain);
+    this.#pollen = new PollenSystem(this.#engine.scene);
     this.#pois.onDiscover((name) => {
       this.#radioLog.push(`landmark found: ${name.toLowerCase()}`, 'discovery', 'alert');
     });
@@ -376,6 +379,7 @@ export class PathGame {
     this.#water.dispose();
     this.#dirtRoads.dispose();
     this.#pois.dispose();
+    this.#pollen?.dispose();
     this.#valleyFog.dispose();
     this.#ghostPlayers.dispose();
     this.#engine.dispose();
@@ -982,6 +986,7 @@ export class PathGame {
 
     // World visuals
     const sunI = this.#sky.sunIntensity;
+    this.#pollen?.update(dt, this.#engine.camera.position, sunI);
     this.#objectiveBeacon.update(dt, this.#runSession.mode === 'arrived', sunI);
     for (const outpost of this.#routeOutposts) {
       outpost.update(dt, false, sunI);
