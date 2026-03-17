@@ -392,11 +392,10 @@ export class ThirdPersonCamera {
     this.#speedPullBack = expLerp(this.#speedPullBack, targetPullBack, 3.5, dt);
     this.#speedLiftUp = expLerp(this.#speedLiftUp, targetLiftUp, 3.5, dt);
 
-    // 3. Drift follow — offset camera to outside of turn when drifting
+    // 3. Drift follow — computed later with velocity-tracking camera
     const targetDriftOffset = state.isDrifting
       ? THREE.MathUtils.clamp(-state.steering * 1.6, -1.8, 1.8)
       : 0;
-    this.#driftOffset = expLerp(this.#driftOffset, targetDriftOffset, 4.0, dt);
 
     // 4. Tumble camera — pull back and raise when tumbling
     const targetTumbleDist = state.isTumbling ? chaseDistance * 0.45 : 0;
@@ -420,6 +419,20 @@ export class ThirdPersonCamera {
     this.#landingCompression = expDecay(this.#landingCompression, 6.5, dt);
 
     // --- End camera juice calculations ---
+
+    // Forza-style: camera tracks velocity direction, not heading
+    // This means during drifts the car slides across the frame naturally
+    const velocityHeading = speed > 2
+      ? Math.atan2(state.forwardSpeed > 0 ? -state.lateralSpeed : state.lateralSpeed, Math.abs(state.forwardSpeed))
+      : 0;
+    // Smoothly blend the velocity yaw offset (stiff spring for responsive feel)
+    const targetVelocityYaw = THREE.MathUtils.clamp(velocityHeading * 0.35, -0.4, 0.4);
+    this.#driftOffset = expLerp(this.#driftOffset, targetVelocityYaw + targetDriftOffset * 0.3, 4.5, dt);
+
+    // FOV scales subtly with speed (Forza-style velocity sensation)
+    const speedFov = 60 + speedFraction * 8; // 60 → 68 at max speed
+    camera.fov = THREE.MathUtils.lerp(camera.fov, speedFov, 1 - Math.exp(-2.5 * dt));
+    camera.updateProjectionMatrix();
 
     const localOffset = this.#localOffset.set(
       lateralOffset
@@ -466,7 +479,8 @@ export class ThirdPersonCamera {
       this.#initialized = true;
     }
 
-    this.#currentPosition.lerp(resolvedDesiredPosition, 1 - Math.exp(-4.2 * dt));
+    // Stiff spring follow (Forza-style: responsive but not rigid)
+    this.#currentPosition.lerp(resolvedDesiredPosition, 1 - Math.exp(-6.0 * dt));
     this.#currentPosition.y = Math.max(
       this.#currentPosition.y,
       this.#getTerrainFloor(this.#currentPosition) + terrainClearance * 0.92,
