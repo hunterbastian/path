@@ -1,53 +1,68 @@
 # Session Handover
-Last updated: 2026-03-17 late night
+Last updated: 2026-03-18 late night
 
 ## Project
-PATH — Three.js arcade driving game, transitioning from post-apocalyptic to Ghibli aesthetic
+PATH — Three.js arcade driving game, Ghibli aesthetic
 Directory: ~/Desktop/code/PATH
 Deployed: https://drive-path.vercel.app
 
-## What Was Built This Session
-- 15+ performance/stability fixes (material merge, dispose leaks, vector allocs, toneMapping state machine)
+## What Was Built This Session (massive)
+
+### Performance & Stability (15 fixes)
+- Material merge, cache key dedup, bloom threshold, hidden collider skip
+- Grass spatial grid, network disconnect, dead mist removal, 4 missing disposes
+- Vector allocation fixes (2), toneMapping state machine
+- RadioLog timeout cleanup, MapDiscovery distanceSq
+
+### Gameplay (3 new systems)
 - DriftScoreSystem with live HUD counter and per-run stats
-- Biome system (meadow/desert/hollow) — surface, vertex colors, grass, fog all biome-aware
-- Mountain range — 5 ranges, peaks to 200m, snow caps, atmospheric perspective
-- 4 nature POIs with discovery persistence
-- Nighttime overhaul — headlights/beacons scale with darkness
-- HUD: drift, mapped, achievements, players, timer, surface colors, speed glow
-- Radial speed blur, deeper vignette, intensity-scaled smoke
-- Valley fog per-biome tinting and density
-- Ghibli color palette shift — vivid greens/blues replacing dusty post-apoc
-- PollenSystem — ambient floating particles (pollen by day, fireflies by night)
-- Dreamy grass — biome colors, S-curve blades, 3-layer wind, luminous tips
+- Biome system (meadow/desert/hollow) — surface, vertex colors, grass, fog
+- Points of interest (4 nature landmarks with discovery + persistence)
+
+### Visual (20+ changes)
+- Mountain range (5 ranges, peaks to 200m, snow caps, atmospheric perspective)
+- Ghibli color palette — vivid greens, minimal brown, lush earth tones
+- Ghibli tall grass — 1.8-3.2m meadow blades, golden tips, dense sea
+- Instanced pine trees (220, biome-aware, LOD culled)
+- Ambient birds (5 circling silhouettes) + wildflower patches (400, 8 colors)
+- Pollen/firefly particles (80 ambient specks)
+- Nighttime overhaul — headlights/beacons/brakes scale with darkness
+- Radial speed blur, deeper vignette, speed desaturation, dynamic grain
+- Biome valley fog (amber desert, green hollow, white meadow)
+- Water mineral palette, 4x env texture, intensity-scaled smoke
+- Vivid sky keyframes (Ghibli blue)
+
+### Camera
+- Forza-style velocity tracking (car slides across frame during drifts)
+- Speed FOV (60° → 68°), stiffer spring (6.0), pulled back (12/15m)
+
+### HUD (7 new elements)
+- Drift total, mapped %, achievements, players, timer, surface colors, speed glow
 
 ## Current State
-- What works: all driving, drifting, scoring, biomes, mountains, POIs, night, particles
-- What's broken: nothing known
-- Visual direction: SHIFTING toward Ghibli (reference image provided — lush meadow, billowing clouds, tall grass, pine trees, warm colors). Palette and pollen done, but trees and tall grass not yet started
+- What works: everything — driving, drifting, scoring, biomes, mountains, POIs, trees, birds, flowers, pollen, night, particles
+- What's broken: user reports Vercel may be serving cached old version. Try hard refresh
+- Visual: Ghibli green world with tall grass, pine trees, mountains, flowers, birds
 
-## Next Steps (Ghibli Vision)
-1. **Trees** — pine/spruce models from geometry (CylinderGeometry trunk + ConeGeometry canopy layers). Place along ridges and meadow biome. Instanced for performance
-2. **Taller grass** — vehicle should wade through chest-height grass like the reference. Increase blade height to 2-3m in meadow biome, add grass parting effect as vehicle pushes through
-3. **Volumetric clouds** — the reference has massive billowing cumulus. Current sky is a 2D gradient texture. Could add 3D cloud sprites or a cloud plane shader
-4. **Rounded boulders** — replace angular BoxGeometry rocks with SphereGeometry-based rounded boulders with moss tint
-5. **Island terrain** — user wants the land to be an island with ocean, beach ring, red rock biome, lush green biome
+## Next Steps
+1. **Remove AI traffic cars** — user wants them gone for now
+2. **Hard refresh / Vercel cache** — verify latest deploy is serving
+3. **Cloud sprites** — billowing cumulus against blue sky
+4. **Island terrain** — ocean border, beach ring, new biomes
+5. **Arrival summary card** — show run stats
+6. **Audio** — wind, surface crunch, ambient
+7. **Combo drift multiplier**
 
-## Key Files Changed
-- `src/world/Terrain.ts` — biomes, mountains, palette, atmospheric perspective, snow thresholds
-- `src/world/Sky.ts` — Ghibli sky keyframes, env texture 1024x512, fog color
-- `src/world/ValleyFog.ts` — biome fog tinting and density
-- `src/world/GrassField.ts` — biome-aware colors, dreamy animation, 320 patches
-- `src/effects/PollenSystem.ts` — NEW: ambient pollen/firefly particles
-- `src/gameplay/DriftScoreSystem.ts` — NEW: drift scoring
+## Key Files
+- `src/world/Terrain.ts` — biomes, mountains, green palette, atmospheric perspective
+- `src/world/GrassField.ts` — tall Ghibli grass, biome colors, 480 patches
+- `src/world/TreeSystem.ts` — NEW: instanced pine trees
+- `src/world/WildflowerField.ts` — NEW: wildflower patches
 - `src/world/PointsOfInterest.ts` — NEW: discoverable landmarks
-- `src/render/GritPostProcess.ts` — radial blur, vivid grade, dynamic bloom/grain
-- `src/vehicle/Vehicle.ts` — nighttime headlight/brake scaling
-- `src/core/AppShell.ts` — HUD stats, drift popup
-- All dispose chains completed
-
-## Decisions Made
-- Ghibli aesthetic direction confirmed via reference image
-- Biome system uses Gaussian spatial fields — no hard boundaries
-- Mountains use additive Gaussian contributions (same pattern as existing landmark)
-- Pollen switches to firefly mode at night (warm yellow-green, blink animation)
-- Color grade shifted from golden-hour warm to vivid-natural saturated
+- `src/effects/BirdSystem.ts` — NEW: ambient bird silhouettes
+- `src/effects/PollenSystem.ts` — NEW: pollen/firefly particles
+- `src/gameplay/DriftScoreSystem.ts` — NEW: drift scoring
+- `src/camera/ThirdPersonCamera.ts` — Forza velocity camera
+- `src/render/GritPostProcess.ts` — radial blur, vivid grade
+- `src/world/Sky.ts` — Ghibli sky, 1024x512 env texture
+- `src/world/ValleyFog.ts` — biome fog tinting
