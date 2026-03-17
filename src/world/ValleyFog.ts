@@ -137,10 +137,10 @@ const MIN_FOG_SIZE = 80;
 
 // Biome fog tint colors
 const BIOME_FOG_TINTS: Record<BiomeType, THREE.Color> = {
-  default: new THREE.Color(0xd6d9d2),
-  meadow: new THREE.Color(0xe2e8de),   // soft white-green
-  desert: new THREE.Color(0xdcc8a0),   // warm amber haze
-  hollow: new THREE.Color(0xa8b8b0),   // dark blue-green mist
+  default: new THREE.Color(0xc8dcc8),   // green-tinted mist
+  meadow: new THREE.Color(0xd8e8d4),   // soft green-white
+  desert: new THREE.Color(0xd8c8a0),   // warm amber haze
+  hollow: new THREE.Color(0x98b8a8),   // deep green mist
 };
 
 export class ValleyFog {

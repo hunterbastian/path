@@ -740,27 +740,27 @@ export class Terrain {
     const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
 
-    // Ghibli-saturated palette — vivid greens, warm earth, clean sky
-    const sand = new THREE.Color(0xecd47a);
-    const sandLight = new THREE.Color(0xf4e4a8);
-    const dirt = new THREE.Color(0x9a7048);
-    const dirtDark = new THREE.Color(0x6e4830);
-    const grass = new THREE.Color(0x4cc448);
-    const grassLight = new THREE.Color(0x7ae858);
-    const rock = new THREE.Color(0x808888);
-    const rockDark = new THREE.Color(0x546060);
-    const rockLight = new THREE.Color(0x98a4a0);
-    const snow = new THREE.Color(0xeef2fa);
-    const skyTint = new THREE.Color(0x88c8f0);
-    const sunsetTint = new THREE.Color(0xffb878);
+    // Ghibli palette — lush greens dominate, minimal brown
+    const sand = new THREE.Color(0xe8d888);
+    const sandLight = new THREE.Color(0xf0e4a8);
+    const dirt = new THREE.Color(0x78a060);      // green-earth instead of brown
+    const dirtDark = new THREE.Color(0x588848);   // mossy dark instead of brown
+    const grass = new THREE.Color(0x40d040);      // vivid green
+    const grassLight = new THREE.Color(0x68f050);  // bright lime
+    const rock = new THREE.Color(0x78888a);
+    const rockDark = new THREE.Color(0x4a5c5a);
+    const rockLight = new THREE.Color(0x98a8a4);
+    const snow = new THREE.Color(0xf0f4fc);
+    const skyTint = new THREE.Color(0x78c4f8);
+    const sunsetTint = new THREE.Color(0xffb070);
 
-    // Biome tint colors — vivid and distinct
-    const meadowGrass = new THREE.Color(0x40d850);
-    const meadowDirt = new THREE.Color(0x68a058);
-    const desertSand = new THREE.Color(0xe0b050);
-    const desertRock = new THREE.Color(0xa07048);
-    const hollowGrass = new THREE.Color(0x208838);
-    const hollowDirt = new THREE.Color(0x3a3028);
+    // Biome tint colors — lush and vivid
+    const meadowGrass = new THREE.Color(0x38e050);
+    const meadowDirt = new THREE.Color(0x58b850);   // green, not brown
+    const desertSand = new THREE.Color(0xd8b048);
+    const desertRock = new THREE.Color(0x988858);
+    const hollowGrass = new THREE.Color(0x188830);
+    const hollowDirt = new THREE.Color(0x2a5828);    // dark green, not dark brown
     const biomeColor = new THREE.Color();
 
     for (let index = 0; index < positions.count; index += 1) {
@@ -789,7 +789,7 @@ export class Terrain {
       if (surface === 'sand') {
         color.copy(sand).lerp(sandLight, detail * 0.6);
       } else if (surface === 'grass') {
-        color.copy(grass).lerp(grassLight, detail * 0.42 + moisture * 0.18);
+        color.copy(grass).lerp(grassLight, detail * 0.48 + moisture * 0.22);
       } else if (surface === 'rock') {
         // Height-based grey: darker at base, lighter at peaks
         const heightBlend = THREE.MathUtils.clamp((height - 40) / 120, 0, 1);
@@ -812,9 +812,10 @@ export class Terrain {
           color.offsetHSL(0, -glacialBlend * 0.5, glacialBlend);
         }
       } else {
-        color.copy(dirt).lerp(dirtDark, (1 - detail) * 0.24);
-        color.lerp(sand, THREE.MathUtils.clamp((0.3 - moisture) * 0.2, 0, 0.12));
-        color.lerp(grass, THREE.MathUtils.clamp((moisture - 0.48) * 0.24, 0, 0.13));
+        // Dirt — green-earth base, blends heavily toward grass
+        color.copy(dirt).lerp(dirtDark, (1 - detail) * 0.2);
+        color.lerp(sand, THREE.MathUtils.clamp((0.3 - moisture) * 0.14, 0, 0.08));
+        color.lerp(grass, THREE.MathUtils.clamp((moisture - 0.3) * 0.32, 0, 0.22));
       }
 
       // Biome color tinting
@@ -840,9 +841,8 @@ export class Terrain {
       }
 
       if (roadInfluence > 0.08 && surface !== 'rock') {
-        color
-          .lerp(dirtDark, roadInfluence * 0.34)
-          .lerp(sand, roadInfluence * 0.06);
+        // Subtle road darkening — paths are worn but still green-tinted
+        color.lerp(dirtDark, roadInfluence * 0.22);
       }
 
       if (snowCoverage > 0.02 && surface !== 'rock') {
