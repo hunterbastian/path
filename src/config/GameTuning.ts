@@ -270,10 +270,10 @@ export const DEFAULT_GAME_TUNING: GameTuning = {
   },
   camera: {
     drive: {
-      closeDistance: 10.5,
-      farDistance: 13.5,
-      closeHeight: 4.8,
-      farHeight: 5.8,
+      closeDistance: 12.0,
+      farDistance: 15.0,
+      closeHeight: 5.2,
+      farHeight: 6.2,
       speedReference: 28,
       lookAhead: 5.6,
       lookHeight: 1.8,
