@@ -8,6 +8,11 @@ export interface HudSnapshot {
   weatherLabel: string;
   weatherCondition: 'cloudy' | 'rainy' | 'sunny';
   routeLabel: string;
+  driftTotalLabel: string;
+  mappedLabel: string;
+  achievementsLabel: string;
+  playersLabel: string;
+  timerLabel: string;
 }
 
 export interface ArrivalSnapshot {
@@ -52,7 +57,6 @@ export interface MapRuntimeSnapshot {
   vehicle: { x: number; z: number; heading: number };
   trail: Array<{ x: number; z: number }>;
   trailDistanceMeters: number;
-  raiders: Array<{ x: number; z: number; behavior: string }>;
 }
 
 export type ShellMode = 'title' | 'driving' | 'arrived';
@@ -62,6 +66,7 @@ interface AppShellElements {
   loading: HTMLDivElement;
   title: HTMLDivElement;
   startButton: HTMLButtonElement;
+  playerNameInput: HTMLInputElement;
   arrival: HTMLDivElement;
   restartButton: HTMLButtonElement;
   pause: HTMLDivElement;
@@ -94,7 +99,13 @@ interface AppShellElements {
   mapCanvas: HTMLCanvasElement;
   mapStatus: HTMLSpanElement;
   error: HTMLDivElement;
+  driftTotal: HTMLSpanElement;
+  mappedPercent: HTMLSpanElement;
+  achievements: HTMLSpanElement;
+  players: HTMLSpanElement;
+  timer: HTMLSpanElement;
   radioLog: HTMLDivElement;
+  driftScorePopup: HTMLDivElement;
 }
 
 // ── Topo map palette ──
@@ -128,15 +139,17 @@ export class AppShell {
   readonly #fogContext: CanvasRenderingContext2D;
   #mapLayout: MapLayoutSnapshot | null = null;
   #achievementToastContainer: HTMLDivElement | null = null;
+  #crosshairLockHandler: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
       <div class="app-shell">
         <div class="game-stage" id="game-stage"></div>
+        <div id="crosshair" class="crosshair" aria-hidden="true"></div>
 
         <div id="loading" class="screen loading-screen" aria-live="polite">
           <div class="loading-card">
-            <div class="loading-title">Path</div>
+            <div class="loading-title">PATH</div>
             <div class="loading-copy">loading terrain / weather / relay feed</div>
           </div>
         </div>
@@ -148,12 +161,12 @@ export class AppShell {
         >
           <div class="title-card">
             <div class="title-topline">
-              <div class="title-kicker">Path</div>
+              <div class="title-kicker">PATH</div>
             </div>
             <div class="title-hero">
               <div class="title-copy-block">
                 <div class="title-region">tower basin / live weather cycle</div>
-                <div class="title-name">Path</div>
+                <div class="title-name">PATH</div>
                 <div class="title-rule"></div>
                 <p class="title-copy">
                   Drive the last dirt line below Tower Mountain and bring the
@@ -184,6 +197,18 @@ export class AppShell {
               </div>
             </div>
             <div class="title-actions">
+              <div class="title-name-input-row">
+                <label for="player-name-input" class="title-name-label">Driver name</label>
+                <input
+                  id="player-name-input"
+                  class="player-name-input"
+                  type="text"
+                  maxlength="24"
+                  placeholder="Anonymous"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
               <button id="start-button" class="start-button" type="button">
                 Enter Route
               </button>
@@ -197,16 +222,16 @@ export class AppShell {
                   <strong>WASD or arrow keys</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Brake / boost</span>
-                  <strong>S brakes first, Shift slide-brakes, Space boosts</strong>
+                  <span>Handbrake / Boost</span>
+                  <strong>Space handbrake (drift), Shift boost</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>Map / menu</span>
-                  <strong>M map, Esc menu, R reset</strong>
+                  <span>Camera</span>
+                  <strong>Click to freelook, auto-returns behind you</strong>
                 </div>
                 <div class="title-control-item">
-                  <span>View</span>
-                  <strong>Drag to orbit, double-click to center, god mode free-flies</strong>
+                  <span>Menu</span>
+                  <strong>M map, Esc pause, R reset</strong>
                 </div>
                 <div class="title-control-item">
                   <span>Gamepad</span>
@@ -317,6 +342,7 @@ export class AppShell {
           </div>
         </section>
 
+        <div id="fps-counter" class="fps-counter">-- fps</div>
         <aside id="hud" class="hud" aria-live="polite">
           <div class="hud-panel">
             <div class="hud-main">
@@ -351,36 +377,45 @@ export class AppShell {
                 <span class="status-label status-label--icon"><span id="status-weather-glyph" class="hud-glyph hud-glyph--weather" data-condition="cloudy" aria-hidden="true"></span>Weather</span>
                 <span id="status-weather" class="status-value">Cloudy</span>
               </div>
+              <div class="hud-stack">
+                <span class="status-label">Drift</span>
+                <span id="status-drift-total" class="status-value" data-tone="stable">0</span>
+              </div>
+              <div class="hud-stack">
+                <span class="status-label">Mapped</span>
+                <span id="status-mapped" class="status-value" data-tone="stable">0%</span>
+              </div>
+              <div class="hud-stack">
+                <span class="status-label">Unlocked</span>
+                <span id="status-achievements" class="status-value" data-tone="stable">0/22</span>
+              </div>
+              <div class="hud-stack">
+                <span class="status-label">Players</span>
+                <span id="status-players" class="status-value" data-tone="stable">offline</span>
+              </div>
+              <div class="hud-stack hud-stack-timer">
+                <span class="status-label">Time</span>
+                <span id="status-timer" class="status-value" data-tone="stable">0:00</span>
+              </div>
             </div>
           </div>
         </aside>
 
+        <div id="drift-score-popup" class="drift-score-popup" aria-hidden="true"></div>
+
         <aside id="map-device" class="map-device" aria-hidden="true" hidden>
           <div class="map-shell">
-            <div class="map-topline">
-              <div class="map-led"></div>
-              <div class="map-brand">Path</div>
-            </div>
             <div class="map-screen-wrap">
               <canvas
                 id="map-canvas"
                 class="map-screen"
-                width="352"
-                height="340"
+                width="700"
+                height="700"
               ></canvas>
             </div>
             <div class="map-footer">
               <span id="map-status" class="map-status">Summit relay 0 m away</span>
-              <span class="map-meta">M or Y closes</span>
-            </div>
-            <div class="map-controls">
-              <div class="map-dpad">
-                <span></span><span></span><span></span><span></span>
-              </div>
-              <div class="map-buttons">
-                <span>A</span>
-                <span>B</span>
-              </div>
+              <span class="map-meta">M to close</span>
             </div>
           </div>
         </aside>
@@ -397,6 +432,7 @@ export class AppShell {
       loading: this.#query(root, '#loading'),
       title: this.#query(root, '#title-screen'),
       startButton: this.#query(root, '#start-button'),
+      playerNameInput: this.#query(root, '#player-name-input'),
       arrival: this.#query(root, '#arrival-screen'),
       restartButton: this.#query(root, '#restart-button'),
       pause: this.#query(root, '#pause-screen'),
@@ -429,7 +465,13 @@ export class AppShell {
       mapCanvas: this.#query(root, '#map-canvas'),
       mapStatus: this.#query(root, '#map-status'),
       error: this.#query(root, '.error-banner'),
+      driftTotal: this.#query(root, '#status-drift-total'),
+      mappedPercent: this.#query(root, '#status-mapped'),
+      achievements: this.#query(root, '#status-achievements'),
+      players: this.#query(root, '#status-players'),
+      timer: this.#query(root, '#status-timer'),
       radioLog: this.#query(root, '#radio-log'),
+      driftScorePopup: this.#query(root, '#drift-score-popup'),
     };
 
     const mapContext = this.elements.mapCanvas.getContext('2d');
@@ -445,6 +487,15 @@ export class AppShell {
     this.#fogContext = fogCtx;
     this.#drawMap(null);
     this.#achievementToastContainer = root.querySelector('#achievement-toasts');
+
+    // Toggle crosshair visibility based on pointer lock
+    const crosshair = root.querySelector('#crosshair');
+    if (crosshair) {
+      this.#crosshairLockHandler = () => {
+        crosshair.classList.toggle('visible', !!document.pointerLockElement);
+      };
+      document.addEventListener('pointerlockchange', this.#crosshairLockHandler);
+    }
   }
 
   showAchievementToast(title: string, description: string, icon: string): void {
@@ -559,7 +610,29 @@ export class AppShell {
   }
 
   bindStart(handler: () => void): void {
+    // Load saved player name from localStorage
+    const savedName = localStorage.getItem('path-player-name') ?? '';
+    this.elements.playerNameInput.value = savedName;
+
+    // Save name on change
+    this.elements.playerNameInput.addEventListener('input', () => {
+      localStorage.setItem('path-player-name', this.elements.playerNameInput.value.trim());
+    });
+
+    // Prevent game input capture while typing name
+    this.elements.playerNameInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        this.elements.playerNameInput.blur();
+        handler();
+      }
+    });
+
     this.elements.startButton.addEventListener('click', handler);
+  }
+
+  getPlayerName(): string {
+    return this.elements.playerNameInput.value.trim() || 'Anonymous';
   }
 
   bindRestart(handler: () => void): void {
@@ -588,11 +661,23 @@ export class AppShell {
     this.elements.weather.textContent = snapshot.weatherLabel;
     this.elements.weatherGlyph.dataset.condition = snapshot.weatherCondition;
     this.elements.routeLabel.textContent = snapshot.routeLabel;
+    this.elements.driftTotal.textContent = snapshot.driftTotalLabel;
+    this.elements.mappedPercent.textContent = snapshot.mappedLabel;
+    this.elements.achievements.textContent = snapshot.achievementsLabel;
+    this.elements.players.textContent = snapshot.playersLabel;
+    this.elements.timer.textContent = snapshot.timerLabel;
 
+    const speedKmh = Number.parseInt(snapshot.speedLabel, 10);
+    this.elements.speed.dataset.intensity =
+      speedKmh > 95 ? 'high' : '';
     this.elements.traction.dataset.tone =
       snapshot.tractionLabel === 'Airborne' ? 'warn' : 'stable';
     this.elements.surface.dataset.tone =
-      snapshot.surfaceLabel === 'Water' ? 'cool' : 'stable';
+      snapshot.surfaceLabel === 'Water' ? 'cool'
+        : snapshot.surfaceLabel === 'Snow' ? 'cool'
+        : snapshot.surfaceLabel === 'Sand' ? 'sand'
+        : snapshot.surfaceLabel === 'Rock' ? 'rock'
+        : 'stable';
     this.elements.drive.dataset.tone =
       snapshot.driveLabel === 'Arrived'
         ? 'goal'
@@ -621,6 +706,12 @@ export class AppShell {
         : snapshot.weatherLabel.startsWith('Sunny')
           ? 'boost'
           : 'stable';
+    this.elements.driftTotal.dataset.tone =
+      snapshot.driftTotalLabel !== '0' ? 'active' : 'stable';
+    this.elements.players.dataset.tone =
+      snapshot.playersLabel === 'offline' ? 'stable'
+        : snapshot.playersLabel === 'solo' ? 'stable'
+        : 'cool';
   }
 
   setTitleWeather(label: string): void {
@@ -633,6 +724,49 @@ export class AppShell {
 
   setTitleAudio(label: string): void {
     this.elements.titleAudio.textContent = label;
+  }
+
+  #driftScoreTimer = 0;
+
+  /** Show live accumulating points during an active drift. */
+  updateActiveDrift(points: number): void {
+    const el = this.elements.driftScorePopup;
+    el.textContent = `drift ${points}`;
+    el.classList.remove('drift-score-popup--fade');
+    el.classList.add('drift-score-popup--active');
+    el.hidden = false;
+    el.ariaHidden = 'false';
+    clearTimeout(this.#driftScoreTimer);
+  }
+
+  /** Flash the final scored drift and fade out. */
+  showDriftScore(points: number, duration: number): void {
+    const el = this.elements.driftScorePopup;
+    const label = duration > 2.5 ? 'DRIFT' : 'drift';
+    el.textContent = `${label} +${points}`;
+    el.classList.remove('drift-score-popup--active');
+    el.classList.remove('drift-score-popup--fade');
+    el.hidden = false;
+    el.ariaHidden = 'false';
+    // Force reflow so the transition restarts
+    void el.offsetWidth;
+    this.#driftScoreTimer = window.setTimeout(() => {
+      el.classList.add('drift-score-popup--fade');
+      window.setTimeout(() => {
+        el.hidden = true;
+        el.ariaHidden = 'true';
+      }, 600);
+    }, 1200);
+  }
+
+  /** Hide any active drift display immediately. */
+  clearDriftScore(): void {
+    clearTimeout(this.#driftScoreTimer);
+    const el = this.elements.driftScorePopup;
+    el.hidden = true;
+    el.ariaHidden = 'true';
+    el.classList.remove('drift-score-popup--active');
+    el.classList.remove('drift-score-popup--fade');
   }
 
   updateArrival(snapshot: ArrivalSnapshot): void {
@@ -908,22 +1042,6 @@ export class AppShell {
     const [objX, objY] = project(layout.objective.x, layout.objective.z);
     const objPulse = snapshot ? 0.55 + 0.45 * Math.sin(snapshot.pulse * 4.4) : 0.5;
     this.#drawTopoObjective(ctx, objX, objY, objPulse);
-
-    // ── 6b. Raider dots (color-coded by behavior) ──
-    if (snapshot) {
-      for (const r of snapshot.raiders) {
-        const [rx, ry] = project(r.x, r.z);
-        ctx.fillStyle =
-          r.behavior === 'chase' ? '#e83318' :
-          r.behavior === 'seek_water' ? '#3088c8' :
-          r.behavior === 'explore' ? '#48a848' :
-          r.behavior === 'stunned' ? '#884422' :
-          '#c83028';
-        ctx.beginPath();
-        ctx.arc(rx, ry, r.behavior === 'chase' ? 4 : 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
 
     // ── 7. Player trail (rendered AFTER fog so it's always visible) ──
     if (snapshot && snapshot.trail.length > 1) {

@@ -17,11 +17,15 @@ export class ThirdPersonCamera {
   #pointerId = -1;
   #yawOrbit = 0;
   #yawOrbitTarget = 0;
-  #yawOrbitMomentum = 0;
   #pitchOrbit = 0.16;
   #pitchOrbitTarget = 0.16;
-  #pitchOrbitMomentum = 0;
   #lastPointerTime = 0;
+  #pointerLocked = false;
+  #mouseIdleTime = 0;
+  /** How long mouse must be idle before camera auto-returns behind vehicle (seconds). */
+  readonly #autoReturnDelay = 1.2;
+  /** Speed at which camera returns behind vehicle when mouse is idle. */
+  readonly #autoReturnSpeed = 2.8;
   #currentPosition = new THREE.Vector3();
   #currentLookTarget = new THREE.Vector3();
   #worldUp = new THREE.Vector3(0, 1, 0);
@@ -111,6 +115,8 @@ export class ThirdPersonCamera {
     canvas.addEventListener('pointercancel', this.#handlePointerUp);
     canvas.addEventListener('dblclick', this.#handleDoubleClick);
     canvas.addEventListener('contextmenu', this.#handleContextMenu);
+    document.addEventListener('pointerlockchange', this.#handlePointerLockChange);
+    document.addEventListener('mousemove', this.#handleMouseMove);
   }
 
   get view(): CameraView {
@@ -128,6 +134,11 @@ export class ThirdPersonCamera {
     this.#canvas.removeEventListener('pointercancel', this.#handlePointerUp);
     this.#canvas.removeEventListener('dblclick', this.#handleDoubleClick);
     this.#canvas.removeEventListener('contextmenu', this.#handleContextMenu);
+    document.removeEventListener('pointerlockchange', this.#handlePointerLockChange);
+    document.removeEventListener('mousemove', this.#handleMouseMove);
+    if (document.pointerLockElement === this.#canvas) {
+      document.exitPointerLock();
+    }
   }
 
   beginArrivalSequence(): void {
@@ -147,8 +158,6 @@ export class ThirdPersonCamera {
     this.#driveOcclusionPull = 0;
     this.#yawOrbitTarget = this.#yawOrbit;
     this.#pitchOrbitTarget = this.#pitchOrbit;
-    this.#yawOrbitMomentum = 0;
-    this.#pitchOrbitMomentum = 0;
     this.#lookInitialized = false;
     // Reset camera juice state
     this.#shakeAmplitude = 0;
@@ -346,9 +355,9 @@ export class ThirdPersonCamera {
     if (state.wasAirborne || state.impactMagnitude > 0) {
       const impactStrength = Math.max(
         state.wasAirborne
-          ? THREE.MathUtils.clamp(Math.abs(state.verticalSpeed) * 0.12 + 0.3, 0.3, 1.4)
+          ? THREE.MathUtils.clamp(Math.abs(state.verticalSpeed) * 0.06 + 0.1, 0.1, 0.7)
           : 0,
-        THREE.MathUtils.clamp(state.impactMagnitude * 0.06, 0, 1.2),
+        THREE.MathUtils.clamp(state.impactMagnitude * 0.04, 0, 0.8),
       );
       if (impactStrength > this.#shakeAmplitude) {
         this.#shakeAmplitude = impactStrength;
@@ -363,17 +372,17 @@ export class ThirdPersonCamera {
         }
       }
     }
-    this.#shakePhase += dt * 38; // high frequency oscillation
-    this.#shakeAmplitude = expDecay(this.#shakeAmplitude, 7.2, dt); // ~0.35s decay
+    this.#shakePhase += dt * 28; // oscillation frequency
+    this.#shakeAmplitude = expDecay(this.#shakeAmplitude, 9, dt); // faster decay = less lingering
     const shakeWave = Math.sin(this.#shakePhase);
     const shakeWave2 = Math.cos(this.#shakePhase * 1.3 + 1.0);
-    // Translational shake
-    this.#shakeOffsetX = this.#shakeAmplitude * (shakeWave * 0.18 + this.#shakeDirectionX * 0.3);
-    this.#shakeOffsetY = this.#shakeAmplitude * shakeWave2 * 0.25;
-    this.#shakeOffsetZ = this.#shakeAmplitude * (shakeWave2 * 0.12 + this.#shakeDirectionZ * 0.25);
-    // Angular shake
-    this.#shakeRollOffset = this.#shakeAmplitude * shakeWave * 0.018;
-    this.#shakePitchOffset = this.#shakeAmplitude * shakeWave2 * 0.012;
+    // Translational shake (reduced amplitudes)
+    this.#shakeOffsetX = this.#shakeAmplitude * (shakeWave * 0.10 + this.#shakeDirectionX * 0.18);
+    this.#shakeOffsetY = this.#shakeAmplitude * shakeWave2 * 0.14;
+    this.#shakeOffsetZ = this.#shakeAmplitude * (shakeWave2 * 0.07 + this.#shakeDirectionZ * 0.14);
+    // Angular shake (reduced)
+    this.#shakeRollOffset = this.#shakeAmplitude * shakeWave * 0.010;
+    this.#shakePitchOffset = this.#shakeAmplitude * shakeWave2 * 0.007;
 
     // 2. Speed pull-back — camera retreats as speed increases
     const maxSpeed = 34;
@@ -402,13 +411,13 @@ export class ThirdPersonCamera {
     // 6. Landing compression — briefly compress camera closer on landing, then spring back
     if (state.wasAirborne) {
       const compressionStrength = THREE.MathUtils.clamp(
-        Math.abs(state.verticalSpeed) * 0.08 + 0.2,
-        0.2,
-        0.8,
+        Math.abs(state.verticalSpeed) * 0.04 + 0.08,
+        0.08,
+        0.4,
       );
       this.#landingCompression = Math.max(this.#landingCompression, compressionStrength);
     }
-    this.#landingCompression = expDecay(this.#landingCompression, 5.5, dt); // spring back ~0.4s
+    this.#landingCompression = expDecay(this.#landingCompression, 6.5, dt);
 
     // --- End camera juice calculations ---
 
@@ -419,16 +428,16 @@ export class ThirdPersonCamera {
         + this.#shakeOffsetX,
       chaseHeight
         + this.#driveHeave
-        + Math.min(state.airborneTime * 0.42, 0.34)
-        - this.#driveImpact * 0.24
+        + Math.min(state.airborneTime * 0.2, 0.18)
+        - this.#driveImpact * 0.14
         + Math.sin(this.#driveMotionTime * 3.4) * shakeAmount
         + this.#speedLiftUp
         + this.#tumbleHeightExtra
         + this.#shakeOffsetY,
       -chaseDistance
-        - this.#driveImpact * 0.52
-        - (state.isBoosting ? 0.36 : 0)
-        - Math.min(state.airborneTime * 1.8, 0.9)
+        - this.#driveImpact * 0.3
+        - (state.isBoosting ? 0.2 : 0)
+        - Math.min(state.airborneTime * 0.8, 0.4)
         + Math.cos(this.#driveMotionTime * 2.2) * shakeAmount * 0.34
         - this.#speedPullBack
         - this.#tumbleDistExtra
@@ -457,7 +466,7 @@ export class ThirdPersonCamera {
       this.#initialized = true;
     }
 
-    this.#currentPosition.lerp(resolvedDesiredPosition, 1 - Math.exp(-5.4 * dt));
+    this.#currentPosition.lerp(resolvedDesiredPosition, 1 - Math.exp(-4.2 * dt));
     this.#currentPosition.y = Math.max(
       this.#currentPosition.y,
       this.#getTerrainFloor(this.#currentPosition) + terrainClearance * 0.92,
@@ -832,6 +841,11 @@ export class ThirdPersonCamera {
 
   #handlePointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
+    // Request pointer lock on click for freelook camera
+    if (!this.#pointerLocked && !this.#godModeActive) {
+      this.#canvas.requestPointerLock();
+      return;
+    }
     this.#isDragging = true;
     this.#pointerId = event.pointerId;
     if (this.#godModeActive) {
@@ -839,14 +853,9 @@ export class ThirdPersonCamera {
       this.#godPitchTarget = this.#godPitch;
       this.#godYawMomentum = 0;
       this.#godPitchMomentum = 0;
-    } else {
-      this.#yawOrbitTarget = this.#yawOrbit;
-      this.#pitchOrbitTarget = this.#pitchOrbit;
-      this.#yawOrbitMomentum = 0;
-      this.#pitchOrbitMomentum = 0;
+      this.#lastPointerTime = event.timeStamp;
+      this.#canvas.setPointerCapture(event.pointerId);
     }
-    this.#lastPointerTime = event.timeStamp;
-    this.#canvas.setPointerCapture(event.pointerId);
   };
 
   #handlePointerUp = (event: PointerEvent): void => {
@@ -859,8 +868,44 @@ export class ThirdPersonCamera {
     }
   };
 
+  #handlePointerLockChange = (): void => {
+    this.#pointerLocked = document.pointerLockElement === this.#canvas;
+    if (this.#pointerLocked) {
+      this.#mouseIdleTime = 0;
+    }
+  };
+
+  /** Freelook: mouse movement always orbits camera when pointer is locked. */
+  #handleMouseMove = (event: MouseEvent): void => {
+    if (!this.#pointerLocked) return;
+    this.#mouseIdleTime = 0;
+
+    const deltaYaw = -event.movementX * 0.0028;
+    const deltaPitch = event.movementY * 0.0024;
+
+    if (this.#godModeActive) {
+      const godTuning = this.#tuning.camera.god;
+      this.#godYawTarget += deltaYaw;
+      this.#godPitchTarget = THREE.MathUtils.clamp(
+        this.#godPitchTarget + deltaPitch,
+        godTuning.pitchMin,
+        godTuning.pitchMax,
+      );
+      return;
+    }
+
+    this.#yawOrbitTarget += deltaYaw;
+    this.#pitchOrbitTarget = THREE.MathUtils.clamp(
+      this.#pitchOrbitTarget + deltaPitch,
+      -0.12,
+      0.8,
+    );
+  };
+
   #handlePointerMove = (event: PointerEvent): void => {
+    // Only used for god mode drag (non-pointer-lock fallback)
     if (!this.#isDragging || event.pointerId !== this.#pointerId) return;
+    if (!this.#godModeActive) return;
     const elapsedMs = THREE.MathUtils.clamp(
       event.timeStamp - (this.#lastPointerTime || event.timeStamp - 16),
       8,
@@ -872,49 +917,25 @@ export class ThirdPersonCamera {
     const seconds = elapsedMs / 1000;
     const yawVelocity = THREE.MathUtils.clamp(deltaYaw / seconds, -6.4, 6.4);
     const pitchVelocity = THREE.MathUtils.clamp(deltaPitch / seconds, -4.2, 4.2);
-    if (this.#godModeActive) {
-      const godTuning = this.#tuning.camera.god;
-      this.#godYawTarget += deltaYaw;
-      this.#godPitchTarget = THREE.MathUtils.clamp(
-        this.#godPitchTarget + deltaPitch,
-        godTuning.pitchMin,
-        godTuning.pitchMax,
-      );
-      if (this.#prefersReducedMotion) {
-        this.#godYawMomentum = 0;
-        this.#godPitchMomentum = 0;
-        return;
-      }
-      this.#godYawMomentum = THREE.MathUtils.lerp(
-        this.#godYawMomentum,
-        yawVelocity,
-        0.42,
-      );
-      this.#godPitchMomentum = THREE.MathUtils.lerp(
-        this.#godPitchMomentum,
-        pitchVelocity,
-        0.42,
-      );
-      return;
-    }
-    this.#yawOrbitTarget += deltaYaw;
-    this.#pitchOrbitTarget = THREE.MathUtils.clamp(
-      this.#pitchOrbitTarget + deltaPitch,
-      -0.12,
-      0.8,
+    const godTuning = this.#tuning.camera.god;
+    this.#godYawTarget += deltaYaw;
+    this.#godPitchTarget = THREE.MathUtils.clamp(
+      this.#godPitchTarget + deltaPitch,
+      godTuning.pitchMin,
+      godTuning.pitchMax,
     );
     if (this.#prefersReducedMotion) {
-      this.#yawOrbitMomentum = 0;
-      this.#pitchOrbitMomentum = 0;
+      this.#godYawMomentum = 0;
+      this.#godPitchMomentum = 0;
       return;
     }
-    this.#yawOrbitMomentum = THREE.MathUtils.lerp(
-      this.#yawOrbitMomentum,
+    this.#godYawMomentum = THREE.MathUtils.lerp(
+      this.#godYawMomentum,
       yawVelocity,
       0.42,
     );
-    this.#pitchOrbitMomentum = THREE.MathUtils.lerp(
-      this.#pitchOrbitMomentum,
+    this.#godPitchMomentum = THREE.MathUtils.lerp(
+      this.#godPitchMomentum,
       pitchVelocity,
       0.42,
     );
@@ -925,38 +946,29 @@ export class ThirdPersonCamera {
   };
 
   #handleDoubleClick = (): void => {
+    // Double-click resets camera to behind vehicle
     if (this.#godModeActive) return;
     this.#yawOrbitTarget = 0;
     this.#pitchOrbitTarget = 0.16;
-    this.#yawOrbitMomentum = 0;
-    this.#pitchOrbitMomentum = 0;
-    if (this.#prefersReducedMotion) {
-      this.#yawOrbit = 0;
-      this.#pitchOrbit = 0.16;
-    }
+    this.#mouseIdleTime = this.#autoReturnDelay + 1; // trigger immediate return
   };
 
   #updateOrbitDrag(dt: number): void {
-    if (!this.#isDragging) {
-      if (!this.#prefersReducedMotion) {
-        this.#yawOrbitTarget += this.#yawOrbitMomentum * dt * 0.24;
-        this.#pitchOrbitTarget = THREE.MathUtils.clamp(
-          this.#pitchOrbitTarget + this.#pitchOrbitMomentum * dt * 0.18,
-          -0.12,
-          0.8,
-        );
-        this.#yawOrbitMomentum = expDecay(this.#yawOrbitMomentum, 9.5, dt);
-        this.#pitchOrbitMomentum = expDecay(this.#pitchOrbitMomentum, 9.5, dt);
-      }
+    // Track mouse idle time for auto-return
+    this.#mouseIdleTime += dt;
+
+    // Auto-return: when mouse is idle, smoothly return camera behind vehicle
+    if (this.#mouseIdleTime > this.#autoReturnDelay && !this.#isDragging) {
+      const returnBlend = 1 - Math.exp(-this.#autoReturnSpeed * dt);
+      this.#yawOrbitTarget *= 1 - returnBlend;
+      this.#pitchOrbitTarget = THREE.MathUtils.lerp(
+        this.#pitchOrbitTarget,
+        0.16,
+        returnBlend,
+      );
     }
 
-    const response = this.#prefersReducedMotion
-      ? this.#isDragging
-        ? 24
-        : 14
-      : this.#isDragging
-        ? 16
-        : 8.5;
+    const response = this.#pointerLocked ? 12 : this.#isDragging ? 16 : 8.5;
     this.#yawOrbit = expLerp(this.#yawOrbit, this.#yawOrbitTarget, response, dt);
     this.#pitchOrbit = expLerp(this.#pitchOrbit, this.#pitchOrbitTarget, response, dt);
   }

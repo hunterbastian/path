@@ -32,7 +32,7 @@ const DEFAULTS: Record<
 };
 
 export function applyProceduralParallax(
-  material: THREE.MeshStandardMaterial,
+  material: THREE.Material,
   options: ProceduralParallaxOptions,
 ): void {
   const defaults = DEFAULTS[options.kind];
@@ -181,7 +181,7 @@ float parallaxNoise(vec2 p) {
 float parallaxFbm(vec2 p) {
   float value = 0.0;
   float amplitude = 0.5;
-  for (int i = 0; i < 4; i += 1) {
+  for (int i = 0; i < 3; i += 1) {
     value += amplitude * parallaxNoise(p);
     p = p * 2.03 + vec2(17.13, -11.72);
     amplitude *= 0.5;

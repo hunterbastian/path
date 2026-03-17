@@ -6,6 +6,7 @@ import { RainSystem } from '../effects/RainSystem';
 import { SplashEmitter } from '../effects/SplashEmitter';
 import { SplashSystem } from '../effects/SplashSystem';
 import { TireTrackSystem } from '../effects/TireTrackSystem';
+import { TireSmokeSystem } from '../effects/TireSmokeSystem';
 import { WindSystem } from '../effects/WindSystem';
 import { SeededRandom } from '../core/SeededRandom';
 import type { Terrain } from '../world/Terrain';
@@ -65,6 +66,7 @@ export class EffectsCoordinator {
   readonly #smokeSystem: DustSystem;
   readonly #fireSystem: DustSystem;
   readonly #fireLight: THREE.PointLight;
+  readonly #tireSmokeSystem: TireSmokeSystem;
   readonly #windSystem: WindSystem;
   readonly #terrain: Terrain;
 
@@ -152,6 +154,7 @@ export class EffectsCoordinator {
     this.#fireLight = new THREE.PointLight(0xff6611, 0, 8, 2);
     this.#fireLight.castShadow = false;
     scene.add(this.#fireLight);
+    this.#tireSmokeSystem = new TireSmokeSystem(scene);
     this.#tireTrackSystem = new TireTrackSystem(scene, terrain);
     this.#windSystem = new WindSystem(scene);
   }
@@ -208,6 +211,7 @@ export class EffectsCoordinator {
     );
 
     this.#dustEmitter.update(dt, controller);
+    this.#tireSmokeSystem.update(dt, controller);
     this.#dustSystem.update(dt);
     this.#snowSpraySystem.update(dt);
     this.#debrisSystem.update(dt);
@@ -438,10 +442,14 @@ export class EffectsCoordinator {
       );
       if (slopeStrength < 0.22) continue;
 
-      this.#debrisDownhill.normalize();
-      this.#debrisLateral.crossVectors(this.#worldUp, this.#debrisDownhill).normalize();
+      if (this.#debrisDownhill.lengthSq() > 0.0001) {
+        this.#debrisDownhill.normalize();
+      }
+      this.#debrisLateral.crossVectors(this.#worldUp, this.#debrisDownhill);
       if (this.#debrisLateral.lengthSq() < 0.0001) {
         this.#debrisLateral.set(1, 0, 0);
+      } else {
+        this.#debrisLateral.normalize();
       }
 
       this.#debrisOrigin.set(
@@ -499,11 +507,11 @@ export class EffectsCoordinator {
       this.#debrisVelocity.set(1, 0, 0);
     }
     this.#debrisVelocity.normalize();
-    this.#debrisLateral
-      .crossVectors(this.#worldUp, this.#debrisVelocity)
-      .normalize();
+    this.#debrisLateral.crossVectors(this.#worldUp, this.#debrisVelocity);
     if (this.#debrisLateral.lengthSq() < 0.0001) {
       this.#debrisLateral.set(0, 0, 1);
+    } else {
+      this.#debrisLateral.normalize();
     }
 
     const impactStrength = Math.max(1, trafficInteraction.impulse.length());
@@ -532,6 +540,7 @@ export class EffectsCoordinator {
     this.#fireSystem.dispose();
     this.#splashSystem.dispose();
     this.#mudSplashSystem.dispose();
+    this.#tireSmokeSystem.dispose();
     this.#tireTrackSystem.dispose();
   }
 }

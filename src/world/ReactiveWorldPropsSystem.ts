@@ -226,25 +226,18 @@ export class ReactiveWorldPropsSystem {
       prop.hitCooldown = 0.34;
     }
 
-    this.#playerInteraction = {
-      nearestDistanceMeters: Number(
-        (Number.isFinite(nearestDistanceMeters) ? nearestDistanceMeters : 999).toFixed(2),
-      ),
-      collision,
-      sourceId,
-      correction: this.#interactionCorrection.clone(),
-      impulse: this.#interactionImpulse.clone(),
-    };
+    this.#playerInteraction.nearestDistanceMeters = Number(
+      (Number.isFinite(nearestDistanceMeters) ? nearestDistanceMeters : 999).toFixed(2),
+    );
+    this.#playerInteraction.collision = collision;
+    this.#playerInteraction.sourceId = sourceId;
+    this.#playerInteraction.correction.copy(this.#interactionCorrection);
+    this.#playerInteraction.impulse.copy(this.#interactionImpulse);
   }
 
+  /** Returns the interaction state. Callers should NOT mutate the returned vectors. */
   get playerInteraction(): ReactivePropInteraction {
-    return {
-      nearestDistanceMeters: this.#playerInteraction.nearestDistanceMeters,
-      collision: this.#playerInteraction.collision,
-      sourceId: this.#playerInteraction.sourceId,
-      correction: this.#playerInteraction.correction.clone(),
-      impulse: this.#playerInteraction.impulse.clone(),
-    };
+    return this.#playerInteraction;
   }
 
   getDebugState(): ReactivePropDebugState {
@@ -278,13 +271,11 @@ export class ReactiveWorldPropsSystem {
   }
 
   reset(): void {
-    this.#playerInteraction = {
-      nearestDistanceMeters: 999,
-      collision: false,
-      sourceId: null,
-      correction: new THREE.Vector3(),
-      impulse: new THREE.Vector3(),
-    };
+    this.#playerInteraction.nearestDistanceMeters = 999;
+    this.#playerInteraction.collision = false;
+    this.#playerInteraction.sourceId = null;
+    this.#playerInteraction.correction.set(0, 0, 0);
+    this.#playerInteraction.impulse.set(0, 0, 0);
     for (const prop of this.#props) {
       prop.position.copy(prop.anchorPosition);
       prop.velocity.set(0, 0, 0);
@@ -543,59 +534,43 @@ export class ReactiveWorldPropsSystem {
   }
 
   #createMaterials(): {
-    concrete: THREE.MeshStandardMaterial;
-    steel: THREE.MeshStandardMaterial;
-    darkSteel: THREE.MeshStandardMaterial;
-    marker: THREE.MeshStandardMaterial;
-    crate: THREE.MeshStandardMaterial;
-    crateLight: THREE.MeshStandardMaterial;
-    sign: THREE.MeshStandardMaterial;
-    window: THREE.MeshStandardMaterial;
+    concrete: THREE.MeshLambertMaterial;
+    steel: THREE.MeshLambertMaterial;
+    darkSteel: THREE.MeshLambertMaterial;
+    marker: THREE.MeshLambertMaterial;
+    crate: THREE.MeshLambertMaterial;
+    crateLight: THREE.MeshLambertMaterial;
+    sign: THREE.MeshLambertMaterial;
+    window: THREE.MeshLambertMaterial;
   } {
     return {
-      concrete: new THREE.MeshStandardMaterial({
+      concrete: new THREE.MeshLambertMaterial({
         color: 0x7b746c,
-        roughness: 0.98,
-        metalness: 0.03,
       }),
-      steel: new THREE.MeshStandardMaterial({
+      steel: new THREE.MeshLambertMaterial({
         color: 0x51575b,
-        roughness: 0.68,
-        metalness: 0.56,
       }),
-      darkSteel: new THREE.MeshStandardMaterial({
+      darkSteel: new THREE.MeshLambertMaterial({
         color: 0x242b30,
-        roughness: 0.52,
-        metalness: 0.42,
       }),
-      marker: new THREE.MeshStandardMaterial({
+      marker: new THREE.MeshLambertMaterial({
         color: 0xf0c27e,
         emissive: new THREE.Color(0x7b4d20),
         emissiveIntensity: 0.35,
-        roughness: 0.32,
-        metalness: 0.04,
       }),
-      crate: new THREE.MeshStandardMaterial({
+      crate: new THREE.MeshLambertMaterial({
         color: 0x705742,
-        roughness: 0.92,
-        metalness: 0.04,
       }),
-      crateLight: new THREE.MeshStandardMaterial({
+      crateLight: new THREE.MeshLambertMaterial({
         color: 0x917458,
-        roughness: 0.88,
-        metalness: 0.04,
       }),
-      sign: new THREE.MeshStandardMaterial({
+      sign: new THREE.MeshLambertMaterial({
         color: 0xddd3bf,
-        roughness: 0.86,
-        metalness: 0.02,
       }),
-      window: new THREE.MeshStandardMaterial({
+      window: new THREE.MeshLambertMaterial({
         color: 0xffe8bb,
         emissive: new THREE.Color(0xffc777),
         emissiveIntensity: 1.1,
-        roughness: 0.24,
-        metalness: 0.04,
       }),
     };
   }

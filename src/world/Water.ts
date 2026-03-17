@@ -19,6 +19,8 @@ export interface WaterPool {
 }
 
 const WATER_VERTEX_SHADER = /* glsl */ `
+  #include <fog_pars_vertex>
+
   uniform float uTime;
 
   varying vec2 vUv;
@@ -27,20 +29,28 @@ const WATER_VERTEX_SHADER = /* glsl */ `
   void main() {
     vUv = uv;
     vec3 transformed = position;
+    // Two wave layers — slow broad swell + faster chop
     transformed.y += sin((position.x + uTime * 6.0) * 0.08) * 0.06;
     transformed.y += cos((position.z - uTime * 4.0) * 0.12) * 0.04;
+    transformed.y += sin((position.x * 0.18 - position.z * 0.12 + uTime * 3.2)) * 0.025;
 
     vec4 worldPos = modelMatrix * vec4(transformed, 1.0);
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
     vWorldPos = worldPos.xyz;
     gl_Position = projectionMatrix * mvPosition;
+
+    #include <fog_vertex>
   }
 `;
 
 const WATER_FRAGMENT_SHADER = /* glsl */ `
+  #include <fog_pars_fragment>
+
   uniform vec3 uDeepColor;
   uniform vec3 uShallowColor;
+  uniform vec3 uFoamColor;
   uniform vec3 uCameraPos;
+  uniform vec3 uSunDirection;
   uniform float uTime;
   uniform float uOpacity;
 
@@ -48,16 +58,42 @@ const WATER_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vWorldPos;
 
   void main() {
-    float ripple = sin((vWorldPos.x + vWorldPos.z) * 0.22 + uTime * 2.2);
-    float band = floor((ripple * 0.5 + 0.5) * 4.0) / 4.0;
+    // Two ripple layers at different scales for organic pattern
+    float rippleA = sin((vWorldPos.x + vWorldPos.z) * 0.22 + uTime * 2.2);
+    float rippleB = sin((vWorldPos.x * 0.7 - vWorldPos.z * 0.5) * 0.34 + uTime * 1.6);
+    float combined = rippleA * 0.6 + rippleB * 0.4;
+    float band = floor((combined * 0.5 + 0.5) * 5.0) / 5.0;
     vec3 color = mix(uDeepColor, uShallowColor, band);
 
-    vec3 viewDir = normalize(uCameraPos - vWorldPos);
-    float fresnel = pow(1.0 - max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0), 2.4);
-    color = mix(color, vec3(0.88, 0.93, 0.94), fresnel * 0.38);
+    // Perturbed normal from wave motion (approximate)
+    float nx = cos((vWorldPos.x + uTime * 6.0) * 0.08) * 0.06
+             + cos((vWorldPos.x * 0.18 - vWorldPos.z * 0.12 + uTime * 3.2)) * 0.025;
+    float nz = sin((vWorldPos.z - uTime * 4.0) * 0.12) * 0.04;
+    vec3 waveNormal = normalize(vec3(-nx, 1.0, -nz));
 
-    float edge = 1.0 - smoothstep(0.74, 1.0, length(vUv - 0.5) * 1.9);
-    gl_FragColor = vec4(color, edge * 0.72 * uOpacity);
+    vec3 viewDir = normalize(uCameraPos - vWorldPos);
+    float fresnel = pow(1.0 - max(dot(viewDir, waveNormal), 0.0), 2.4);
+    color = mix(color, vec3(0.82, 0.88, 0.84), fresnel * 0.34);
+
+    // Sun specular — bright glint on water surface
+    vec3 halfVec = normalize(viewDir + uSunDirection);
+    float specular = pow(max(dot(waveNormal, halfVec), 0.0), 48.0);
+    color += vec3(1.0, 0.96, 0.88) * specular * 0.28;
+
+    // Edge fade + shore foam
+    float edgeDist = length(vUv - 0.5) * 1.9;
+    float edge = 1.0 - smoothstep(0.74, 1.0, edgeDist);
+    float foam = smoothstep(0.62, 0.82, edgeDist) * (1.0 - smoothstep(0.82, 1.0, edgeDist));
+    // Animated foam breakup
+    float foamNoise = sin(vWorldPos.x * 1.8 + uTime * 3.0) * cos(vWorldPos.z * 2.1 - uTime * 2.4);
+    foam *= smoothstep(-0.1, 0.3, foamNoise);
+    color = mix(color, uFoamColor, foam * 0.6);
+
+    vec4 finalColor = vec4(color, edge * 0.72 * uOpacity);
+
+    #include <fog_fragment>
+
+    gl_FragColor = finalColor;
   }
 `;
 
@@ -97,10 +133,11 @@ export class Water {
     }
   }
 
-  update(dt: number, cameraPosition: THREE.Vector3): void {
+  update(dt: number, cameraPosition: THREE.Vector3, sunPosition?: THREE.Vector3): void {
     const uniforms = this.#material.uniforms as {
       uTime: { value: number };
       uCameraPos: { value: THREE.Vector3 };
+      uSunDirection: { value: THREE.Vector3 };
       uOpacity: { value: number };
     };
     const effectiveActivity = THREE.MathUtils.clamp(
@@ -110,6 +147,9 @@ export class Water {
     );
     uniforms.uTime.value += dt * THREE.MathUtils.lerp(0.4, 1, effectiveActivity);
     uniforms.uCameraPos.value.copy(cameraPosition);
+    if (sunPosition) {
+      uniforms.uSunDirection.value.copy(sunPosition).normalize();
+    }
     uniforms.uOpacity.value = THREE.MathUtils.lerp(0.22, 1, effectiveActivity);
   }
 
@@ -560,21 +600,32 @@ export class Water {
     return mesh;
   }
 
+  dispose(): void {
+    this.#material.dispose();
+    if (this.#mesh) {
+      this.#mesh.geometry.dispose();
+      this.#mesh.removeFromParent();
+    }
+  }
+
   #createMaterial(): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({
       vertexShader: WATER_VERTEX_SHADER,
       fragmentShader: WATER_FRAGMENT_SHADER,
       uniforms: {
+        ...THREE.UniformsLib.fog,
         uTime: { value: 0 },
-        uDeepColor: { value: new THREE.Color(0x2f7186) },
-        uShallowColor: { value: new THREE.Color(0x8fe5df) },
+        uDeepColor: { value: new THREE.Color(0x2a6858) },
+        uShallowColor: { value: new THREE.Color(0x4ab890) },
+        uFoamColor: { value: new THREE.Color(0xe8f0ec) },
         uCameraPos: { value: new THREE.Vector3() },
+        uSunDirection: { value: new THREE.Vector3(0.5, 0.7, 0.3).normalize() },
         uOpacity: { value: 1 },
       },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
-      fog: false,
+      fog: true,
     });
   }
 }

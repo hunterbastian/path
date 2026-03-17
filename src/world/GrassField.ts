@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { WeatherCondition } from '../config/GameTuning';
 import { SeededRandom } from '../core/SeededRandom';
-import { Terrain } from './Terrain';
+import { Terrain, type BiomeType } from './Terrain';
 
 interface GrassPatch {
   position: THREE.Vector3;
@@ -30,8 +30,16 @@ export class GrassField {
   readonly #patchHidden: boolean[];
   readonly #dummy = new THREE.Object3D();
   readonly #windDirection = new THREE.Vector3(-1, 0, 0.35).normalize();
-  readonly #trampledTint = new THREE.Color(0x8a7e48); // yellowed/dried
+  readonly #trampledTint = new THREE.Color(0xa89850); // yellowed/dried
   readonly #tempColor = new THREE.Color();
+  readonly #hiddenMatrix = new THREE.Matrix4().makeScale(0.0001, 0.0001, 0.0001);
+  /** Spatial grid: each cell holds patch indices for fast neighborhood lookup. */
+  readonly #gridCells: number[][];
+  readonly #gridSize = 6;
+  readonly #cellSize: number;
+  readonly #halfWorld: number;
+  /** Cells that were active last frame — used to hide patches when leaving range. */
+  #activeCells = new Set<number>();
   #time = 0;
   #colorsDirty = false;
   #visibleCount = 0;
@@ -44,6 +52,21 @@ export class GrassField {
     this.#geometry = this.#createBladeGeometry();
     this.#patches = this.#buildPatches();
     this.#patchHidden = new Array(this.#patches.length).fill(false);
+
+    // Build spatial grid for fast neighborhood iteration
+    this.#halfWorld = terrain.size * 0.5;
+    this.#cellSize = terrain.size / this.#gridSize;
+    this.#gridCells = Array.from({ length: this.#gridSize * this.#gridSize }, () => []);
+    for (let i = 0; i < this.#patches.length; i++) {
+      const p = this.#patches[i]!;
+      const cx = THREE.MathUtils.clamp(
+        Math.floor((p.position.x + this.#halfWorld) / this.#cellSize), 0, this.#gridSize - 1,
+      );
+      const cz = THREE.MathUtils.clamp(
+        Math.floor((p.position.z + this.#halfWorld) / this.#cellSize), 0, this.#gridSize - 1,
+      );
+      this.#gridCells[cz * this.#gridSize + cx]!.push(i);
+    }
 
     this.#materialA = this.#createMaterial();
     this.#materialB = this.#createMaterial();
@@ -84,7 +107,9 @@ export class GrassField {
   trample(worldX: number, worldZ: number, radius: number, strength: number, directionYaw: number): void {
     const rSq = radius * radius;
     for (const patch of this.#patches) {
+      // Cheap axis-aligned check before squared distance
       const dx = patch.position.x - worldX;
+      if (dx * dx > rSq) continue;
       const dz = patch.position.z - worldZ;
       const distSq = dx * dx + dz * dz;
       if (distSq > rSq) continue;
@@ -133,7 +158,47 @@ export class GrassField {
     let swaySum = 0;
     let anyVisible = false;
 
-    for (let index = 0; index < this.#patches.length; index += 1) {
+    // Determine active grid cells (3x3 around camera)
+    const playerCellX = THREE.MathUtils.clamp(
+      Math.floor((camX + this.#halfWorld) / this.#cellSize), 0, this.#gridSize - 1,
+    );
+    const playerCellZ = THREE.MathUtils.clamp(
+      Math.floor((camZ + this.#halfWorld) / this.#cellSize), 0, this.#gridSize - 1,
+    );
+    const newActiveCells = new Set<number>();
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = playerCellX + dx;
+        const cz = playerCellZ + dz;
+        if (cx >= 0 && cx < this.#gridSize && cz >= 0 && cz < this.#gridSize) {
+          newActiveCells.add(cz * this.#gridSize + cx);
+        }
+      }
+    }
+
+    // Hide patches in cells that are no longer active
+    for (const cellIdx of this.#activeCells) {
+      if (!newActiveCells.has(cellIdx)) {
+        const indices = this.#gridCells[cellIdx];
+        if (!indices) continue;
+        for (const index of indices) {
+          if (!this.#patchHidden[index]) {
+            this.#meshA.setMatrixAt(index, this.#hiddenMatrix);
+            this.#meshB.setMatrixAt(index, this.#hiddenMatrix);
+            this.#patchHidden[index] = true;
+            anyVisible = true;
+          }
+        }
+      }
+    }
+    this.#activeCells = newActiveCells;
+
+    // Only iterate patches in active cells
+    for (const cellIdx of newActiveCells) {
+      const indices = this.#gridCells[cellIdx];
+      if (!indices) continue;
+      for (const index of indices) {
+
       const patch = this.#patches[index];
       if (!patch) continue;
 
@@ -142,39 +207,36 @@ export class GrassField {
       const dz = camZ - patch.position.z;
       const distSq = dx * dx + dz * dz;
 
-      // 232 = 18 + 214 (max visible distance), squared = 53824
-      if (distSq > 53824) {
-        // Only zero out if it was previously visible (avoid redundant uploads)
+      // 160 = 18 + 142 (max visible distance), squared = 25600
+      if (distSq > 25600) {
         if (!this.#patchHidden[index]) {
-          this.#dummy.position.copy(patch.position);
-          this.#dummy.scale.setScalar(0.0001);
-          this.#dummy.updateMatrix();
-          this.#meshA.setMatrixAt(index, this.#dummy.matrix);
-          this.#meshB.setMatrixAt(index, this.#dummy.matrix);
+          this.#meshA.setMatrixAt(index, this.#hiddenMatrix);
+          this.#meshB.setMatrixAt(index, this.#hiddenMatrix);
           this.#patchHidden[index] = true;
-          anyVisible = true; // need to flag update
+          anyVisible = true;
+        }
+        continue;
+      }
+
+      const distance = Math.sqrt(distSq);
+      const visibility = THREE.MathUtils.clamp(
+        1 - (distance - 18) / 142,
+        0,
+        1,
+      );
+
+      if (visibility <= 0.01) {
+        if (!this.#patchHidden[index]) {
+          this.#meshA.setMatrixAt(index, this.#hiddenMatrix);
+          this.#meshB.setMatrixAt(index, this.#hiddenMatrix);
+          this.#patchHidden[index] = true;
+          anyVisible = true;
         }
         continue;
       }
 
       this.#patchHidden[index] = false;
       anyVisible = true;
-
-      const distance = Math.sqrt(distSq);
-      const visibility = THREE.MathUtils.clamp(
-        1 - (distance - 18) / 214,
-        0,
-        1,
-      );
-
-      if (visibility <= 0.01) {
-        this.#dummy.position.copy(patch.position);
-        this.#dummy.scale.setScalar(0.0001);
-        this.#dummy.updateMatrix();
-        this.#meshA.setMatrixAt(index, this.#dummy.matrix);
-        this.#meshB.setMatrixAt(index, this.#dummy.matrix);
-        continue;
-      }
 
       visibleCount += 1;
 
@@ -186,14 +248,16 @@ export class GrassField {
       const trample = patch.trample;
 
       const phase = patch.phase;
+      // Layered wind — slow rolling waves + medium gusts + fast shimmer
       const gust =
-        0.64
-        + Math.sin(time * 0.72 + phase * 0.6) * 0.28
-        + Math.sin(time * 1.48 + phase * 1.2) * 0.22;
+        0.58
+        + Math.sin(time * 0.42 + phase * 0.4) * 0.24   // slow rolling wave
+        + Math.sin(time * 0.88 + phase * 0.8) * 0.18    // medium gust
+        + Math.sin(time * 1.74 + phase * 1.4) * 0.10;   // fast shimmer
       // Trampled grass sways less
       const swayDamp = 1 - trample * 0.85;
       const sway =
-        Math.sin(time * (1.1 + windDensity * 0.9) + phase)
+        Math.sin(time * (0.8 + windDensity * 0.7) + phase)
         * patch.swayAmplitude
         * windStrength
         * gust
@@ -235,7 +299,8 @@ export class GrassField {
         this.#meshB.setColorAt(index, this.#tempColor);
         this.#colorsDirty = true;
       }
-    }
+    } // for index of indices
+    } // for cellIdx of newActiveCells
 
     // Only upload instance matrices when something changed
     if (anyVisible || visibleCount > 0) {
@@ -276,7 +341,7 @@ export class GrassField {
     const cityCenter = this.#terrain.getCityCenterPosition();
     const outposts = this.#terrain.getOutpostPositions();
 
-    for (let attempt = 0; attempt < 3600 && patches.length < 320; attempt += 1) {
+    for (let attempt = 0; attempt < 4800 && patches.length < 320; attempt += 1) {
       const x = random.range(-halfSize, halfSize);
       const z = random.range(-halfSize, halfSize);
       if (!this.#terrain.isWithinBounds(x, z)) continue;
@@ -329,7 +394,9 @@ export class GrassField {
       for (let index = patches.length - 1; index >= Math.max(0, patches.length - 42); index -= 1) {
         const existing = patches[index];
         if (!existing) continue;
-        if (existing.position.distanceToSquared(new THREE.Vector3(x, existing.position.y, z)) < 7.5) {
+        const pdx = existing.position.x - x;
+        const pdz = existing.position.z - z;
+        if (pdx * pdx + pdz * pdz < 7.5) {
           tooClose = true;
           break;
         }
@@ -341,18 +408,63 @@ export class GrassField {
         this.#terrain.getHeightAt(x, z) + 0.03,
         z,
       );
-      const tintBase = surface === 'grass' ? new THREE.Color(0x6c9b58) : new THREE.Color(0x7d8f52);
+      // Biome-aware color palette
+      const { biome, influence: biomeStr } = this.#terrain.getBiomeAt(x, z);
+      const colorRoll = random.next();
+      let tintBase: THREE.Color;
+
+      if (biome === 'meadow' && biomeStr > 0.2) {
+        // Meadow: luminous warm greens, golden highlights
+        tintBase = colorRoll < 0.15
+          ? new THREE.Color(0xb8e048)  // golden-green
+          : colorRoll < 0.35
+            ? new THREE.Color(0x68d860)  // bright lime
+            : new THREE.Color(0x58c050);  // vivid green
+      } else if (biome === 'desert' && biomeStr > 0.2) {
+        // Desert: sun-bleached straw, sparse dry tufts
+        tintBase = colorRoll < 0.4
+          ? new THREE.Color(0xc8a848)  // dry straw
+          : colorRoll < 0.7
+            ? new THREE.Color(0xa89040)  // faded amber
+            : new THREE.Color(0x8a9050);  // olive-brown
+      } else if (biome === 'hollow' && biomeStr > 0.2) {
+        // Hollow: deep emerald, mossy, mysterious
+        tintBase = colorRoll < 0.2
+          ? new THREE.Color(0x1a5830)  // deep forest
+          : colorRoll < 0.45
+            ? new THREE.Color(0x2a7040)  // dark emerald
+            : new THREE.Color(0x3a6838);  // moss
+      } else {
+        // Default palette
+        tintBase = colorRoll < 0.08 && surface === 'dirt'
+          ? new THREE.Color(0xc8a84a)
+          : colorRoll < 0.18
+            ? new THREE.Color(0x7a9868)
+            : colorRoll < 0.28
+              ? new THREE.Color(0x2e6040)
+              : surface === 'grass'
+                ? new THREE.Color(0x52b050)
+                : new THREE.Color(0x6ea050);
+      }
+
       const tint = tintBase
-        .lerp(new THREE.Color(0xa6c378), random.range(0.14, 0.64))
-        .lerp(new THREE.Color(0x4f7441), random.range(0, 0.28));
+        .lerp(new THREE.Color(0x8ee062), random.range(0.10, 0.48))
+        .lerp(new THREE.Color(0x3a8838), random.range(0, 0.20));
+
+      // Biome affects height — meadow is taller and dreamier, desert is short and scrubby
+      const heightMin = biome === 'meadow' ? 0.88 : biome === 'desert' ? 0.42 : 0.72;
+      const heightMax = biome === 'meadow' ? 1.72 : biome === 'desert' ? 0.88 : 1.42;
+      // Meadow sways more gently, hollow is still
+      const swayMin = biome === 'meadow' ? 0.10 : biome === 'hollow' ? 0.04 : 0.08;
+      const swayMax = biome === 'meadow' ? 0.24 : biome === 'hollow' ? 0.12 : 0.19;
 
       patches.push({
         position,
         yaw: random.range(0, Math.PI * 2),
-        width: random.range(0.34, 0.72),
-        height: random.range(0.72, 1.42),
+        width: random.range(0.34, biome === 'meadow' ? 0.82 : 0.72),
+        height: random.range(heightMin, heightMax),
         phase: random.range(0, Math.PI * 2),
-        swayAmplitude: random.range(0.08, 0.19),
+        swayAmplitude: random.range(swayMin, swayMax),
         lean: random.range(-0.02, 0.03),
         tint,
         trample: 0,
@@ -365,32 +477,34 @@ export class GrassField {
 
   #createMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0x8ab26a,
+      color: 0x6cc858,
       map: this.#texture,
       alphaMap: this.#texture,
-      alphaTest: 0.36,
+      alphaTest: 0.32,
       transparent: true,
       vertexColors: true,
       side: THREE.DoubleSide,
-      roughness: 0.94,
+      roughness: 0.88,
       metalness: 0,
-      emissive: 0x355128,
-      emissiveIntensity: 0.24,
+      emissive: 0x3a7830,
+      emissiveIntensity: 0.34,
       flatShading: true,
       depthWrite: false,
     });
   }
 
   #createBladeGeometry(): THREE.PlaneGeometry {
-    const geometry = new THREE.PlaneGeometry(1, 1, 1, 4);
+    const geometry = new THREE.PlaneGeometry(1, 1, 1, 6);
     geometry.translate(0, 0.5, 0);
 
     const positions = geometry.attributes.position as THREE.BufferAttribute;
     for (let index = 0; index < positions.count; index += 1) {
       const x = positions.getX(index);
       const y = positions.getY(index);
-      const taper = THREE.MathUtils.lerp(0.82, 0.12, Math.pow(y, 1.22));
-      const curve = Math.sin(y * Math.PI) * 0.03;
+      // Graceful taper — wider base, thinner tip
+      const taper = THREE.MathUtils.lerp(0.88, 0.06, Math.pow(y, 1.35));
+      // Gentle S-curve — blade arcs forward then tips back
+      const curve = Math.sin(y * Math.PI) * 0.05 - Math.sin(y * Math.PI * 2) * 0.015;
       positions.setX(index, x * taper);
       positions.setZ(index, curve);
     }
@@ -413,8 +527,9 @@ export class GrassField {
 
     const blade = context.createLinearGradient(48, 0, 48, 256);
     blade.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    blade.addColorStop(0.14, 'rgba(255, 255, 255, 0.96)');
-    blade.addColorStop(0.72, 'rgba(255, 255, 255, 0.92)');
+    blade.addColorStop(0.06, 'rgba(255, 255, 245, 0.72)');  // luminous tip
+    blade.addColorStop(0.16, 'rgba(255, 255, 255, 0.96)');
+    blade.addColorStop(0.68, 'rgba(255, 255, 255, 0.92)');
     blade.addColorStop(1, 'rgba(255, 255, 255, 0)');
     context.fillStyle = blade;
 

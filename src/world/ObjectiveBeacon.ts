@@ -39,8 +39,8 @@ export class ObjectiveBeacon {
   readonly #isObjective: boolean;
   readonly #beamMaterial: THREE.MeshBasicMaterial | null;
   readonly #ringMaterial: THREE.MeshBasicMaterial | null;
-  readonly #windowMaterial: THREE.MeshStandardMaterial;
-  readonly #lanternMaterial: THREE.MeshStandardMaterial;
+  readonly #windowMaterial: THREE.MeshLambertMaterial;
+  readonly #lanternMaterial: THREE.MeshLambertMaterial;
   readonly #pulseRing: THREE.Mesh | null;
   readonly #light: THREE.PointLight;
   readonly #auxLights: AuxiliaryLight[] = [];
@@ -61,30 +61,20 @@ export class ObjectiveBeacon {
     const accent = new THREE.Color(
       options.accentColor ?? (this.#isObjective ? 0xffbd78 : 0xf0d39a),
     );
-    const concreteMaterial = new THREE.MeshStandardMaterial({
+    const concreteMaterial = new THREE.MeshLambertMaterial({
       color: 0x76716b,
-      roughness: 0.98,
-      metalness: 0.03,
     });
-    const heavyConcreteMaterial = new THREE.MeshStandardMaterial({
+    const heavyConcreteMaterial = new THREE.MeshLambertMaterial({
       color: 0x5f5a54,
-      roughness: 0.96,
-      metalness: 0.02,
     });
-    const steelMaterial = new THREE.MeshStandardMaterial({
+    const steelMaterial = new THREE.MeshLambertMaterial({
       color: 0x444a4d,
-      roughness: 0.7,
-      metalness: 0.66,
     });
-    const weatheredSteelMaterial = new THREE.MeshStandardMaterial({
+    const weatheredSteelMaterial = new THREE.MeshLambertMaterial({
       color: 0x2a2f33,
-      roughness: 0.58,
-      metalness: 0.48,
     });
-    const darkPanelMaterial = new THREE.MeshStandardMaterial({
+    const darkPanelMaterial = new THREE.MeshLambertMaterial({
       color: 0x171b1e,
-      roughness: 0.5,
-      metalness: 0.36,
     });
     applyProceduralParallax(concreteMaterial, {
       kind: 'concrete',
@@ -116,19 +106,15 @@ export class ObjectiveBeacon {
       scale: 0.48,
       secondaryScale: 2.2,
     });
-    this.#windowMaterial = new THREE.MeshStandardMaterial({
+    this.#windowMaterial = new THREE.MeshLambertMaterial({
       color: 0xffefcf,
       emissive: accent.clone().multiplyScalar(0.72),
       emissiveIntensity: this.#isObjective ? 1.55 : 1.08,
-      roughness: 0.32,
-      metalness: 0.08,
     });
-    this.#lanternMaterial = new THREE.MeshStandardMaterial({
+    this.#lanternMaterial = new THREE.MeshLambertMaterial({
       color: 0xfff1c8,
       emissive: accent,
       emissiveIntensity: this.#isObjective ? 2.6 : 1.7,
-      roughness: 0.2,
-      metalness: 0.06,
     });
 
     const box = (
@@ -451,12 +437,16 @@ export class ObjectiveBeacon {
     scene.add(this.group);
   }
 
-  update(dt: number, completed: boolean): void {
+  update(dt: number, completed: boolean, sunIntensity = 2.0): void {
     this.#time += dt;
     this.#completionTime = completed ? this.#completionTime + dt : 0;
 
     const activity = THREE.MathUtils.clamp(this.#streamingActivity, 0, 1.2);
     this.group.visible = activity > 0.03;
+
+    // Beacons glow brighter at night — they're navigation aids
+    const darkness = 1 - Math.min(sunIntensity / 2.0, 1);
+    const nightBoost = 1 + darkness * 1.4;
 
     const pulse = 0.5 + 0.5 * Math.sin(this.#time * (this.#isObjective ? 1.8 : 1.1));
     const shimmer = 0.5 + 0.5 * Math.sin(this.#time * 2.7 + this.group.position.x * 0.04);
@@ -469,16 +459,16 @@ export class ObjectiveBeacon {
 
     this.#windowMaterial.emissiveIntensity =
       ((this.#isObjective ? 1.42 : 0.98) + pulse * 0.55 + hum * 0.12 + completionBurst * 0.7)
-      * activity;
+      * activity * nightBoost;
     this.#lanternMaterial.emissiveIntensity =
       ((this.#isObjective ? 2.3 : 1.58) + pulse * 0.95 + shimmer * 0.24 + completionBurst * 1.25)
-      * activity;
+      * activity * nightBoost;
     this.#light.intensity =
       ((this.#isObjective ? 12 : 6.8)
         + pulse * (this.#isObjective ? 8.6 : 3.2)
         + shimmer * (this.#isObjective ? 1.8 : 0.72)
         + completionBurst * 15)
-      * activity;
+      * activity * nightBoost;
 
     for (const auxLight of this.#auxLights) {
       const localPulse =

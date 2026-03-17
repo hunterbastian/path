@@ -3,8 +3,8 @@ import { GritPostProcess } from '../render/GritPostProcess';
 
 const MAX_RENDER_PIXEL_RATIO = 1.15;
 const MIN_RENDER_PIXEL_RATIO = 0.6;
-const SLOW_FRAME_SECONDS = 1 / 56;
-const FAST_FRAME_SECONDS = 1 / 68;
+const SLOW_FRAME_SECONDS = 1 / 58;
+const FAST_FRAME_SECONDS = 1 / 72;
 
 export class Engine {
   readonly scene: THREE.Scene;
@@ -23,6 +23,8 @@ export class Engine {
   #frameTimeAverage = 1 / 60;
   #slowFrameCount = 0;
   #fastFrameCount = 0;
+  /** Whether post-processing is bypassed (low-perf fallback). */
+  #bypassPostProcess = false;
 
   constructor(container: HTMLElement) {
     this.#container = container;
@@ -33,10 +35,10 @@ export class Engine {
       powerPreference: 'high-performance',
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    // Tone mapping handled in post-process shader (GritPostProcess) for HDR bloom
+    this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
 
@@ -60,7 +62,34 @@ export class Engine {
 
   render(frameSeconds = 1 / 60): void {
     this.#updateAdaptiveQuality(frameSeconds);
-    this.postProcess.render();
+    const scale = this.effectScale;
+    const shouldBypass = scale <= 0.35;
+
+    // Toggle tone mapping only on state transition to avoid shader recompilation
+    if (shouldBypass !== this.#bypassPostProcess) {
+      this.#bypassPostProcess = shouldBypass;
+      this.renderer.toneMapping = shouldBypass
+        ? THREE.ACESFilmicToneMapping
+        : THREE.NoToneMapping;
+    }
+
+    if (shouldBypass) {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      this.postProcess.setEffectScale(scale);
+      this.postProcess.render();
+    }
+  }
+
+  get effectScale(): number {
+    const target = 1 / 60;
+    const slow = 1 / 30;
+    return THREE.MathUtils.clamp(
+      1 - (this.#frameTimeAverage - target) / (slow - target),
+      0.3,
+      1,
+    );
   }
 
   dispose(): void {

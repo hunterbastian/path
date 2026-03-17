@@ -5,6 +5,7 @@ import { applyProceduralParallax } from '../render/applyProceduralParallax';
 import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
 
 export type SurfaceType = 'sand' | 'dirt' | 'grass' | 'rock' | 'snow';
+export type BiomeType = 'default' | 'meadow' | 'desert' | 'hollow';
 
 
 export class Terrain {
@@ -18,7 +19,16 @@ export class Terrain {
   readonly serviceRoadPaths: THREE.Vector2[][];
   readonly #noise: ReturnType<typeof createNoise2D>;
   readonly #heightCache = new Map<number, number>();
-  #cacheFrame = 0;
+  readonly #surfaceCache = new Map<number, SurfaceType>();
+  readonly #roadInfluenceCache = new Map<number, number>();
+  readonly #normalResult = new THREE.Vector3();
+
+  /** Snap to 0.5-unit grid and hash into a single integer key. */
+  #cacheKey(x: number, z: number): number {
+    const gx = Math.round(x * 2) | 0;
+    const gz = Math.round(z * 2) | 0;
+    return gx * 131071 + gz;
+  }
 
   constructor(scene: THREE.Scene) {
     const random = new SeededRandom(0x50415448);
@@ -117,10 +127,15 @@ export class Terrain {
   }
 
   getRoadInfluence(x: number, z: number): number {
+    const key = this.#cacheKey(x, z);
+    const cached = this.#roadInfluenceCache.get(key);
+    if (cached !== undefined) return cached;
+
     let influence = this.getPathInfluence(x, z);
     for (const road of this.serviceRoadPaths ?? []) {
       influence = Math.max(influence, this.#getPolylineInfluence(x, z, road, 18));
     }
+    this.#roadInfluenceCache.set(key, influence);
     return influence;
   }
 
@@ -136,18 +151,21 @@ export class Terrain {
    * and only evicts entries older than 2 frames to handle movement.
    */
   flushHeightCache(): void {
-    this.#cacheFrame++;
-    // Evict stale entries every 120 frames (~2s) instead of every frame
-    if (this.#cacheFrame % 120 === 0) {
+    // Evict only when caches grow too large — avoids thrashing when stationary
+    const cacheLimit = 8000;
+    if (
+      this.#heightCache.size > cacheLimit ||
+      this.#surfaceCache.size > cacheLimit ||
+      this.#roadInfluenceCache.size > cacheLimit
+    ) {
       this.#heightCache.clear();
+      this.#surfaceCache.clear();
+      this.#roadInfluenceCache.clear();
     }
   }
 
   getHeightAt(x: number, z: number): number {
-    // Snap to 0.5-unit grid for cache lookups (close enough for rain/effects)
-    const gx = Math.round(x * 2) | 0;
-    const gz = Math.round(z * 2) | 0;
-    const key = gx * 131071 + gz;
+    const key = this.#cacheKey(x, z);
     const cached = this.#heightCache.get(key);
     if (cached !== undefined) return cached;
 
@@ -161,8 +179,8 @@ export class Terrain {
     const valleyDistance = Math.abs(x - pathCenter);
     const valleyWall = Math.pow(
       THREE.MathUtils.clamp(valleyDistance / 165, 0, 1),
-      1.18,
-    ) * 44;
+      1.22,
+    ) * 52;
 
     const broad = this.#sampleNoise(x, z, 1.7, 12, -5) * 13;
     const medium = this.#sampleNoise(x, z, 4.6, -18, 7) * 8;
@@ -182,6 +200,7 @@ export class Terrain {
 
     height += this.#routeCrestContribution(x, z);
     height += this.#landmarkContribution(x, z);
+    height += this.#mountainRangeContribution(x, z);
     return Math.max(height, 0);
   }
 
@@ -192,21 +211,58 @@ export class Terrain {
     const back = this.getHeightAt(x, z - sample);
     const front = this.getHeightAt(x, z + sample);
 
-    return new THREE.Vector3(left - right, sample * 2, back - front).normalize();
+    return this.#normalResult.set(left - right, sample * 2, back - front).normalize();
   }
 
   getSurfaceAt(x: number, z: number): SurfaceType {
+    const key = this.#cacheKey(x, z);
+    const cached = this.#surfaceCache.get(key);
+    if (cached !== undefined) return cached;
+
+    const surface = this.#computeSurfaceAt(x, z);
+    this.#surfaceCache.set(key, surface);
+    return surface;
+  }
+
+  #computeSurfaceAt(x: number, z: number): SurfaceType {
     const height = this.getHeightAt(x, z);
     const slope = 1 - this.getNormalAt(x, z).y;
     const moisture = this.#getMoisture(x, z, slope);
     const roadInfluence = this.getRoadInfluence(x, z);
     const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
     const sandBasinInfluence = this.#getSandBasinInfluence(x, z);
+    const { biome, influence: biomeStr } = this.getBiomeAt(x, z);
 
-    if (height > 122) return 'snow';
+    // Universal high-altitude rules
+    if (height > 95) return 'snow';
     if (snowCoverage > 0.72 && slope < 0.4 && sandBasinInfluence < 0.46) return 'snow';
     if (height > 88 || slope > 0.5) return 'rock';
     if (roadInfluence > 0.48 && sandBasinInfluence < 0.42) return 'dirt';
+
+    // Biome-specific surface classification
+    if (biome === 'meadow' && biomeStr > 0.2) {
+      // Meadow: much more grass, less sand
+      if (moisture > 0.32 && slope < 0.28) return 'grass';
+      if (slope < 0.2) return 'grass';
+      return 'dirt';
+    }
+
+    if (biome === 'desert' && biomeStr > 0.2) {
+      // Desert: sand dominates, rock on slopes
+      if (slope > 0.35) return 'rock';
+      if (height < 50 && slope < 0.3) return 'sand';
+      if (moisture < 0.6) return 'sand';
+      return 'dirt';
+    }
+
+    if (biome === 'hollow' && biomeStr > 0.2) {
+      // Hollow: grass and dirt, darker and wetter feel
+      if (moisture > 0.3 && slope < 0.3) return 'grass';
+      if (slope > 0.4) return 'rock';
+      return 'dirt';
+    }
+
+    // Default biome rules
     if (sandBasinInfluence > 0.36 && slope < 0.3 && height < 34) return 'sand';
     if (height < 14 && moisture < 0.46) return 'sand';
     if (sandBasinInfluence > 0.18 && slope < 0.24 && moisture < 0.64) return 'sand';
@@ -251,6 +307,54 @@ export class Terrain {
       Math.exp(-((dx * dx) / (36 * 36) + (dz * dz) / (52 * 52))) * 90;
 
     return massif + shoulder + spire;
+  }
+
+  /** Distant mountain range — dramatic peaks along the map edges. */
+  #mountainRangeContribution(x: number, z: number): number {
+    let contribution = 0;
+
+    // Western ridge — long jagged wall with multiple spires
+    const westDist = x + 260;
+    const westBase = Math.exp(-(westDist * westDist) / (100 * 100)) * 95;
+    const westJag = Math.sin(z * 0.024 + 1.4) * 28 + Math.sin(z * 0.058 - 0.8) * 14;
+    const westSpire1 = Math.exp(-(((x + 300) ** 2) / (28 * 28) + ((z - 120) ** 2) / (34 * 34))) * 65;
+    const westSpire2 = Math.exp(-(((x + 310) ** 2) / (24 * 24) + ((z - 260) ** 2) / (30 * 30))) * 55;
+    const westCliff = Math.exp(-(westDist * westDist) / (35 * 35)) * 50;
+    contribution += westBase + Math.max(0, westJag * Math.exp(-(westDist * westDist) / (70 * 70)))
+      + westCliff + westSpire1 + westSpire2;
+
+    // Northern massif — towering snow range, highest point in the world
+    const northDist = z - 360;
+    const northBase = Math.exp(-(northDist * northDist) / (80 * 80)) * 110;
+    const northPeak1 = Math.exp(-(((x + 40) ** 2) / (38 * 38) + ((z - 390) ** 2) / (32 * 32))) * 75;
+    const northPeak2 = Math.exp(-(((x - 90) ** 2) / (32 * 32) + ((z - 410) ** 2) / (36 * 36))) * 85;
+    const northPeak3 = Math.exp(-(((x + 120) ** 2) / (44 * 44) + ((z - 380) ** 2) / (40 * 40))) * 60;
+    const northSaddle = -Math.exp(-(((x - 20) ** 2) / (26 * 26) + ((z - 395) ** 2) / (22 * 22))) * 25;
+    contribution += northBase + northPeak1 + northPeak2 + northPeak3 + northSaddle;
+
+    // Eastern cliff face — towering vertical wall with stepped shelves
+    const eastDist = x - 300;
+    const eastCliff = Math.exp(-(eastDist * eastDist) / (38 * 38)) * 80;
+    const eastShelf = eastDist > 20 ? Math.exp(-(((eastDist - 30) ** 2) / (55 * 55))) * 35 : 0;
+    const eastSpire = Math.exp(-(((x - 340) ** 2) / (22 * 22) + ((z - 200) ** 2) / (28 * 28))) * 50;
+    contribution += eastCliff + eastShelf + eastSpire;
+
+    // Isolated southern peak — dramatic horn shape visible from spawn
+    const southDx = x + 140;
+    const southDz = z + 300;
+    const southPeak = Math.exp(-((southDx * southDx) / (48 * 48) + (southDz * southDz) / (42 * 42))) * 120;
+    const southShoulder = Math.exp(-(((southDx - 50) ** 2) / (58 * 58) + ((southDz + 30) ** 2) / (50 * 50))) * 40;
+    const southRidge = Math.exp(-(((southDx + 30) ** 2) / (35 * 35) + ((southDz - 20) ** 2) / (65 * 65))) * 35;
+    contribution += southPeak + southShoulder + southRidge;
+
+    // Southeast secondary range — connects east cliff to south peak
+    const seDx = x - 200;
+    const seDz = z + 220;
+    const seRange = Math.exp(-((seDx * seDx) / (90 * 90) + (seDz * seDz) / (70 * 70))) * 55;
+    const seSpire = Math.exp(-(((seDx + 20) ** 2) / (26 * 26) + ((seDz - 15) ** 2) / (24 * 24))) * 40;
+    contribution += seRange + seSpire;
+
+    return contribution;
   }
 
   #routeCrestContribution(x: number, z: number): number {
@@ -367,6 +471,11 @@ export class Terrain {
       [this.objectiveCenter.clone(), westA, westB],
       [westB, westC, westD],
       [westD, spawnReturn, new THREE.Vector2(this.getPathCenterX(0), 0)],
+      // Spur trails to nature landmarks
+      this.#createServiceRoad(220, new THREE.Vector2(-88, 220), -0.3),   // The Sentinel
+      this.#createServiceRoad(85, new THREE.Vector2(120, 85), 0.28),     // Sulfur Pool
+      this.#createServiceRoad(155, new THREE.Vector2(-45, 155), -0.2),   // Rockslide Crossing
+      this.#createServiceRoad(310, new THREE.Vector2(180, 310), 0.36),   // Black Hollow
     ];
   }
 
@@ -427,6 +536,56 @@ export class Terrain {
     return best;
   }
 
+  // ── Biome system ──
+
+  /** Returns the dominant biome and its influence at a world position. */
+  getBiomeAt(x: number, z: number): { biome: BiomeType; influence: number } {
+    const meadow = this.#getMeadowInfluence(x, z);
+    const desert = this.#getDesertInfluence(x, z);
+    const hollow = this.#getHollowInfluence(x, z);
+
+    if (meadow >= desert && meadow >= hollow && meadow > 0.15) {
+      return { biome: 'meadow', influence: meadow };
+    }
+    if (desert >= meadow && desert >= hollow && desert > 0.15) {
+      return { biome: 'desert', influence: desert };
+    }
+    if (hollow > 0.15) {
+      return { biome: 'hollow', influence: hollow };
+    }
+    return { biome: 'default', influence: 0 };
+  }
+
+  /** Alpine Meadow — north-northwest, lush and cool. */
+  #getMeadowInfluence(x: number, z: number): number {
+    const cx = -100, cz = 280;
+    const dx = x - cx, dz = z - cz;
+    return THREE.MathUtils.clamp(
+      Math.exp(-((dx * dx) / (160 * 160) + (dz * dz) / (130 * 130))),
+      0, 1,
+    );
+  }
+
+  /** Rust Desert — southeast, hot and dry. */
+  #getDesertInfluence(x: number, z: number): number {
+    const cx = 160, cz = 140;
+    const dx = x - cx, dz = z - cz;
+    return THREE.MathUtils.clamp(
+      Math.exp(-((dx * dx) / (140 * 140) + (dz * dz) / (120 * 120))),
+      0, 1,
+    );
+  }
+
+  /** Dark Hollow — southwest, shadowed and mossy. */
+  #getHollowInfluence(x: number, z: number): number {
+    const cx = -160, cz = 60;
+    const dx = x - cx, dz = z - cz;
+    return THREE.MathUtils.clamp(
+      Math.exp(-((dx * dx) / (130 * 130) + (dz * dz) / (110 * 110))),
+      0, 1,
+    );
+  }
+
   #getSandBasinCenter(): THREE.Vector2 {
     const z = 176;
     const x = this.getPathCenterX(z) + 54;
@@ -455,6 +614,8 @@ export class Terrain {
     const valleyBlend =
       1 - THREE.MathUtils.clamp(Math.abs(x - this.getPathCenterX(z)) / 145, 0, 1);
     const altitudeBlend = 1 - THREE.MathUtils.clamp((height - 56) / 82, 0, 1);
+    // High mountain snow — pure altitude-driven, independent of proximity to spawn/valley
+    const highAltitudeSnow = THREE.MathUtils.clamp((height - 80) / 60, 0, 1);
     const slopeBlend = 1 - THREE.MathUtils.clamp(slope / 0.44, 0, 1);
     const breakup = this.#sampleNoise01(x, z, 4.1, -5.4, 6.8);
 
@@ -462,6 +623,7 @@ export class Terrain {
       centralBlend * 0.56 +
         valleyBlend * 0.22 +
         altitudeBlend * 0.12 +
+        highAltitudeSnow * 0.62 +
         slopeBlend * 0.08 +
         breakup * 0.14 -
         0.18,
@@ -578,17 +740,27 @@ export class Terrain {
     const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
 
-    const sand = new THREE.Color(0xe2c27a);
-    const sandLight = new THREE.Color(0xf4dda6);
-    const dirt = new THREE.Color(0x9b5c40);
-    const dirtDark = new THREE.Color(0x6b392c);
-    const grass = new THREE.Color(0x6fa36b);
-    const grassLight = new THREE.Color(0x9fca84);
-    const rock = new THREE.Color(0x857c88);
-    const ash = new THREE.Color(0x57505f);
+    const sand = new THREE.Color(0xf0d88a);
+    const sandLight = new THREE.Color(0xf8e8b8);
+    const dirt = new THREE.Color(0xb87850);
+    const dirtDark = new THREE.Color(0x8a5038);
+    const grass = new THREE.Color(0x5bba5e);
+    const grassLight = new THREE.Color(0x8ad86e);
+    const rock = new THREE.Color(0x8a8e90);
+    const rockDark = new THREE.Color(0x5e6468);
+    const rockLight = new THREE.Color(0xa0a6a8);
     const snow = new THREE.Color(0xe5e8f2);
     const skyTint = new THREE.Color(0xaed4f5);
     const sunsetTint = new THREE.Color(0xffc490);
+
+    // Biome tint colors
+    const meadowGrass = new THREE.Color(0x48c85a);
+    const meadowDirt = new THREE.Color(0x7a9068);
+    const desertSand = new THREE.Color(0xe8b868);
+    const desertRock = new THREE.Color(0x9a7858);
+    const hollowGrass = new THREE.Color(0x2a7a3e);
+    const hollowDirt = new THREE.Color(0x4a3830);
+    const biomeColor = new THREE.Color();
 
     for (let index = 0; index < positions.count; index += 1) {
       const x = positions.getX(index);
@@ -618,15 +790,52 @@ export class Terrain {
       } else if (surface === 'grass') {
         color.copy(grass).lerp(grassLight, detail * 0.42 + moisture * 0.18);
       } else if (surface === 'rock') {
-        color.copy(rock).lerp(ash, slope * 0.32 + detail * 0.14);
+        // Height-based grey: darker at base, lighter at peaks
+        const heightBlend = THREE.MathUtils.clamp((height - 40) / 120, 0, 1);
+        color.copy(rockDark).lerp(rock, heightBlend * 0.72 + detail * 0.28);
+        color.lerp(rockLight, Math.max(0, heightBlend - 0.4) * 0.5);
+        // Slope darkening — steeper faces are darker crevices
+        color.lerp(rockDark, slope * 0.48);
+        // High-altitude rock lightens toward alpine grey
+        if (height > 100) {
+          const alpineBlend = THREE.MathUtils.clamp((height - 100) / 80, 0, 0.35);
+          color.lerp(rockLight, alpineBlend);
+        }
       } else if (surface === 'snow') {
         color.copy(snow)
           .lerp(skyTint, (1 - detail) * 0.12 + slope * 0.06)
           .lerp(sunsetTint, roadInfluence * 0.04 + detail * 0.03);
+        // High-altitude snow is brighter — glacial white
+        if (height > 110) {
+          const glacialBlend = THREE.MathUtils.clamp((height - 110) / 60, 0, 0.18);
+          color.offsetHSL(0, -glacialBlend * 0.5, glacialBlend);
+        }
       } else {
         color.copy(dirt).lerp(dirtDark, (1 - detail) * 0.24);
         color.lerp(sand, THREE.MathUtils.clamp((0.3 - moisture) * 0.2, 0, 0.12));
         color.lerp(grass, THREE.MathUtils.clamp((moisture - 0.48) * 0.24, 0, 0.13));
+      }
+
+      // Biome color tinting
+      const { biome, influence: biomeStr } = this.getBiomeAt(x, z);
+      if (biomeStr > 0.1 && surface !== 'snow' && surface !== 'rock') {
+        const tintAmount = biomeStr * 0.45;
+        if (biome === 'meadow') {
+          biomeColor.copy(surface === 'grass' ? meadowGrass : meadowDirt);
+          color.lerp(biomeColor, tintAmount);
+          // Meadow is slightly cooler/brighter
+          color.offsetHSL(-0.01 * biomeStr, 0.04 * biomeStr, 0.02 * biomeStr);
+        } else if (biome === 'desert') {
+          biomeColor.copy(surface === 'sand' ? desertSand : desertRock);
+          color.lerp(biomeColor, tintAmount);
+          // Desert is warmer/more saturated
+          color.offsetHSL(0.02 * biomeStr, 0.06 * biomeStr, -0.01 * biomeStr);
+        } else if (biome === 'hollow') {
+          biomeColor.copy(surface === 'grass' ? hollowGrass : hollowDirt);
+          color.lerp(biomeColor, tintAmount);
+          // Hollow is darker/more desaturated
+          color.offsetHSL(0.005 * biomeStr, -0.04 * biomeStr, -0.04 * biomeStr);
+        }
       }
 
       if (roadInfluence > 0.08 && surface !== 'rock') {
@@ -647,6 +856,22 @@ export class Terrain {
         surface === 'snow' ? 0.015 : 0.03,
         (detail - 0.5) * 0.055 - height * 0.00045 + (surface === 'snow' ? 0.004 : 0.015),
       );
+
+      // Atmospheric perspective — distant/high terrain blue-shifts and desaturates
+      // Onset pushed out so mid-ground stays rich; only far mountains get hazy
+      const distFromCenter = Math.hypot(x, z);
+      const atmosphereBlend = THREE.MathUtils.clamp(
+        (distFromCenter - 220) / 360 + (height - 80) / 220,
+        0,
+        0.32,
+      );
+      if (atmosphereBlend > 0.01) {
+        color.lerp(skyTint, atmosphereBlend * 0.42);
+        const hsl = { h: 0, s: 0, l: 0 };
+        color.getHSL(hsl);
+        hsl.s *= 1 - atmosphereBlend * 0.32;
+        color.setHSL(hsl.h, hsl.s, hsl.l);
+      }
       roadMasks[index] = parallaxRoadMask;
       snowMasks[index] = parallaxSnowMask;
       colors[index * 3] = color.r;

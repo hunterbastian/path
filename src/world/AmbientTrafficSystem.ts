@@ -102,6 +102,7 @@ export class AmbientTrafficSystem {
   readonly #playerToAgent = new THREE.Vector3();
   readonly #playerInteractionCorrection = new THREE.Vector3();
   readonly #playerInteractionImpulse = new THREE.Vector3();
+  readonly #cachedSourcePosition = new THREE.Vector3();
   #playerInteraction: AmbientTrafficPlayerInteraction = {
     nearestDistanceMeters: 999,
     nearMiss: false,
@@ -145,7 +146,7 @@ export class AmbientTrafficSystem {
     for (const agent of this.#agents) {
       this.#updateAgent(agent, dt, playerPosition, playerVelocity, weather);
     }
-    this.#playerInteraction = this.#buildPlayerInteraction(playerPosition, playerVelocity);
+    this.#buildPlayerInteraction(playerPosition, playerVelocity);
   }
 
   getSnapshot(playerPosition: THREE.Vector3): AmbientTrafficDebugSnapshot[] {
@@ -167,17 +168,9 @@ export class AmbientTrafficSystem {
     }));
   }
 
+  /** Returns the interaction state. Callers should NOT mutate the returned vectors. */
   get playerInteraction(): AmbientTrafficPlayerInteraction {
-    return {
-      nearestDistanceMeters: this.#playerInteraction.nearestDistanceMeters,
-      nearMiss: this.#playerInteraction.nearMiss,
-      blocking: this.#playerInteraction.blocking,
-      collision: this.#playerInteraction.collision,
-      sourceId: this.#playerInteraction.sourceId,
-      sourcePosition: this.#playerInteraction.sourcePosition?.clone() ?? null,
-      correction: this.#playerInteraction.correction.clone(),
-      impulse: this.#playerInteraction.impulse.clone(),
-    };
+    return this.#playerInteraction;
   }
 
   /** Returns the distance to the nearest honking agent, or -1 if none are honking. */
@@ -476,12 +469,12 @@ export class AmbientTrafficSystem {
       if (gap > 0.5) {
         agent.airborne = true;
         agent.verticalVelocity = 0;
-        // Seed tumble from current slope
+        // Seed tumble from current slope (reuse class scratch vectors)
         const normal = this.#terrain.getNormalAt(agent.position.x, agent.position.z);
-        const fwd = new THREE.Vector3(Math.sin(agent.heading), 0, Math.cos(agent.heading));
-        const rt = new THREE.Vector3(fwd.z, 0, -fwd.x);
-        agent.tumblePitch = -normal.dot(fwd) * agent.speed * 0.10;
-        agent.tumbleRoll = normal.dot(rt) * agent.speed * 0.08;
+        this.#forward.set(Math.sin(agent.heading), 0, Math.cos(agent.heading));
+        this.#right.set(this.#forward.z, 0, -this.#forward.x);
+        agent.tumblePitch = -normal.dot(this.#forward) * agent.speed * 0.10;
+        agent.tumbleRoll = normal.dot(this.#right) * agent.speed * 0.08;
         agent.tumbleQuat.identity();
       } else {
         agent.position.y = groundY;
@@ -528,7 +521,7 @@ export class AmbientTrafficSystem {
   #buildPlayerInteraction(
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
-  ): AmbientTrafficPlayerInteraction {
+  ): void {
     let nearestDistanceMeters = Number.POSITIVE_INFINITY;
     let nearMiss = false;
     let blocking = false;
@@ -559,7 +552,10 @@ export class AmbientTrafficSystem {
 
       collision = true;
       sourceId ??= agent.id;
-      sourcePosition ??= agent.position.clone();
+      if (sourcePosition === null) {
+        this.#cachedSourcePosition.copy(agent.position);
+        sourcePosition = this.#cachedSourcePosition;
+      }
       if (distance < 0.001) {
         this.#playerToAgent.set(
           Math.sin(agent.heading + Math.PI * 0.5),
@@ -623,18 +619,16 @@ export class AmbientTrafficSystem {
       }
     }
 
-    return {
-      nearestDistanceMeters: Number(
-        (Number.isFinite(nearestDistanceMeters) ? nearestDistanceMeters : 999).toFixed(2),
-      ),
-      nearMiss,
-      blocking,
-      collision,
-      sourceId,
-      sourcePosition,
-      correction: this.#playerInteractionCorrection.clone(),
-      impulse: this.#playerInteractionImpulse.clone(),
-    };
+    this.#playerInteraction.nearestDistanceMeters = Number(
+      (Number.isFinite(nearestDistanceMeters) ? nearestDistanceMeters : 999).toFixed(2),
+    );
+    this.#playerInteraction.nearMiss = nearMiss;
+    this.#playerInteraction.blocking = blocking;
+    this.#playerInteraction.collision = collision;
+    this.#playerInteraction.sourceId = sourceId;
+    this.#playerInteraction.sourcePosition = sourcePosition;
+    this.#playerInteraction.correction.copy(this.#playerInteractionCorrection);
+    this.#playerInteraction.impulse.copy(this.#playerInteractionImpulse);
   }
 
   #applyPose(agent: AmbientTrafficAgent, dt: number): void {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SeededRandom } from '../core/SeededRandom';
 import type { Terrain } from './Terrain';
 
@@ -22,11 +23,16 @@ interface ClutterCollider {
   radius: number;
   /** Height of the obstacle above terrain — skip if player is above */
   height: number;
+  /** Index into #groups — skip collision when group is LOD-hidden */
+  groupIndex: number;
 }
 
 interface ClutterGroup {
   root: THREE.Group;
   materials: THREE.Material[];
+  /** World-space position for LOD distance checks */
+  x: number;
+  z: number;
 }
 
 export interface ClutterPlayerInteraction {
@@ -36,6 +42,11 @@ export interface ClutterPlayerInteraction {
 }
 
 const PLAYER_COLLISION_RADIUS = 1.65;
+
+/** Distance beyond which clutter groups are hidden to save draw calls */
+const LOD_HIDE_DISTANCE = 140;
+/** Hysteresis buffer to prevent flicker at the boundary */
+const LOD_SHOW_DISTANCE = 125;
 
 export class EnvironmentalClutter {
   readonly #terrain: Terrain;
@@ -56,6 +67,53 @@ export class EnvironmentalClutter {
     this.#placeWreckedVehicles(scene, random);
     this.#placeRoadSigns(scene, random);
     this.#placeDebrisClusters(scene, random);
+
+    // Merge each group's children into a single mesh to reduce draw calls
+    for (const group of this.#groups) {
+      this.#mergeGroupChildren(group);
+    }
+  }
+
+  /** Merge all child meshes in a group into one mesh, preserving per-material groups. */
+  #mergeGroupChildren(group: ClutterGroup): void {
+    if (group.materials.length === 0) return;
+
+    const entries: { geometry: THREE.BufferGeometry; materialIndex: number }[] = [];
+
+    group.root.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.updateMatrix();
+        const cloned = child.geometry.clone();
+        cloned.applyMatrix4(child.matrix);
+        const matIdx = group.materials.indexOf(child.material as THREE.Material);
+        entries.push({ geometry: cloned, materialIndex: matIdx === -1 ? 0 : matIdx });
+      }
+    });
+
+    if (entries.length < 2) return;
+
+    // Sort by material so same-material groups are adjacent (better GPU batching)
+    entries.sort((a, b) => a.materialIndex - b.materialIndex);
+
+    const merged = mergeGeometries(entries.map((e) => e.geometry), true);
+    if (!merged) return;
+
+    // Remap each draw group's materialIndex to the actual material slot
+    for (let i = 0; i < merged.groups.length; i++) {
+      merged.groups[i]!.materialIndex = entries[i]!.materialIndex;
+    }
+
+    // Remove all children and replace with single merged mesh
+    while (group.root.children.length > 0) {
+      const child = group.root.children[0];
+      if (child) group.root.remove(child);
+    }
+
+    const mesh = new THREE.Mesh(merged, group.materials);
+    mesh.receiveShadow = true;
+    group.root.add(mesh);
+
+    for (const e of entries) e.geometry.dispose();
   }
 
   get playerInteraction(): ClutterPlayerInteraction {
@@ -70,6 +128,22 @@ export class EnvironmentalClutter {
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
   ): void {
+    // LOD: hide/show clutter groups based on distance to save draw calls
+    for (const group of this.#groups) {
+      const dx = playerPosition.x - group.x;
+      const dz = playerPosition.z - group.z;
+      const distSq = dx * dx + dz * dz;
+      if (group.root.visible) {
+        if (distSq > LOD_HIDE_DISTANCE * LOD_HIDE_DISTANCE) {
+          group.root.visible = false;
+        }
+      } else {
+        if (distSq < LOD_SHOW_DISTANCE * LOD_SHOW_DISTANCE) {
+          group.root.visible = true;
+        }
+      }
+    }
+
     this.#correction.set(0, 0, 0);
     this.#impulse.set(0, 0, 0);
     let hasCollision = false;
@@ -77,6 +151,9 @@ export class EnvironmentalClutter {
     const playerSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
 
     for (const collider of this.#colliders) {
+      // Skip colliders whose group is LOD-hidden (140m+ away)
+      if (!this.#groups[collider.groupIndex]?.root.visible) continue;
+
       const dx = playerPosition.x - collider.x;
       const dz = playerPosition.z - collider.z;
       const dist = Math.hypot(dx, dz);
@@ -110,6 +187,11 @@ export class EnvironmentalClutter {
 
   dispose(): void {
     for (const group of this.#groups) {
+      group.root.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+        }
+      });
       group.root.removeFromParent();
       for (const material of group.materials) {
         material.dispose();
@@ -155,15 +237,18 @@ export class EnvironmentalClutter {
         flipped ? Math.PI * 0.45 + crashRoll : crashRoll,
       );
 
+      group.x = wx;
+      group.z = wz;
       scene.add(group.root);
       this.#groups.push(group);
 
       // Register collision — wrecked vehicles are solid obstacles
+      const gi = this.#groups.length - 1;
       if (!flipped) {
-        this.#colliders.push({ x: wx, z: wz, radius: 2.0, height: 1.2 });
+        this.#colliders.push({ x: wx, z: wz, radius: 2.0, height: 1.2, groupIndex: gi });
       } else {
         // Flipped vehicles are wider but lower profile
-        this.#colliders.push({ x: wx, z: wz, radius: 2.4, height: 0.8 });
+        this.#colliders.push({ x: wx, z: wz, radius: 2.4, height: 0.8, groupIndex: gi });
       }
     }
   }
@@ -175,14 +260,14 @@ export class EnvironmentalClutter {
     const bodyColor = WRECK_BODY_COLORS[Math.floor(random.next() * WRECK_BODY_COLORS.length)]!;
     const rustColor = RUST_COLORS[Math.floor(random.next() * RUST_COLORS.length)]!;
 
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: bodyColor, roughness: 0.96, metalness: 0.12,
+    const bodyMat = new THREE.MeshLambertMaterial({
+      color: bodyColor,
     });
-    const rustMat = new THREE.MeshStandardMaterial({
-      color: rustColor, roughness: 0.98, metalness: 0.08,
+    const rustMat = new THREE.MeshLambertMaterial({
+      color: rustColor,
     });
-    const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1816, roughness: 0.94, metalness: 0.04,
+    const darkMat = new THREE.MeshLambertMaterial({
+      color: 0x1a1816,
     });
     materials.push(bodyMat, rustMat, darkMat);
 
@@ -219,7 +304,7 @@ export class EnvironmentalClutter {
     patch.position.set(random.range(-0.3, 0.3), 0.7, random.range(-0.6, 0.6));
     root.add(patch);
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   #createWreckTruck(random: SeededRandom): ClutterGroup {
@@ -227,14 +312,14 @@ export class EnvironmentalClutter {
     const materials: THREE.Material[] = [];
 
     const bodyColor = WRECK_BODY_COLORS[Math.floor(random.next() * WRECK_BODY_COLORS.length)]!;
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: bodyColor, roughness: 0.96, metalness: 0.1,
+    const bodyMat = new THREE.MeshLambertMaterial({
+      color: bodyColor,
     });
-    const bedMat = new THREE.MeshStandardMaterial({
-      color: 0x3e342c, roughness: 0.98, metalness: 0.06,
+    const bedMat = new THREE.MeshLambertMaterial({
+      color: 0x3e342c,
     });
-    const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1816, roughness: 0.94, metalness: 0.04,
+    const darkMat = new THREE.MeshLambertMaterial({
+      color: 0x1a1816,
     });
     materials.push(bodyMat, bedMat, darkMat);
 
@@ -276,7 +361,7 @@ export class EnvironmentalClutter {
       root.add(w);
     }
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   #createWreckVan(random: SeededRandom): ClutterGroup {
@@ -284,14 +369,14 @@ export class EnvironmentalClutter {
     const materials: THREE.Material[] = [];
 
     const bodyColor = WRECK_BODY_COLORS[Math.floor(random.next() * WRECK_BODY_COLORS.length)]!;
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: bodyColor, roughness: 0.96, metalness: 0.1,
+    const bodyMat = new THREE.MeshLambertMaterial({
+      color: bodyColor,
     });
-    const rustMat = new THREE.MeshStandardMaterial({
-      color: 0x6e4830, roughness: 0.98, metalness: 0.06,
+    const rustMat = new THREE.MeshLambertMaterial({
+      color: 0x6e4830,
     });
-    const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1816, roughness: 0.94, metalness: 0.04,
+    const darkMat = new THREE.MeshLambertMaterial({
+      color: 0x1a1816,
     });
     materials.push(bodyMat, rustMat, darkMat);
 
@@ -315,7 +400,7 @@ export class EnvironmentalClutter {
       root.add(w);
     }
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   // ── Road Signs ────────────────────────────────────────────
@@ -346,11 +431,13 @@ export class EnvironmentalClutter {
         random.range(-0.08, 0.08),
       );
 
+      group.x = sx;
+      group.z = sz;
       scene.add(group.root);
       this.#groups.push(group);
 
       // Signs are thin posts — small collision radius
-      this.#colliders.push({ x: sx, z: sz, radius: 0.5, height: 2.8 });
+      this.#colliders.push({ x: sx, z: sz, radius: 0.5, height: 2.8, groupIndex: this.#groups.length - 1 });
     }
   }
 
@@ -362,18 +449,14 @@ export class EnvironmentalClutter {
     const postHeight = tall ? 2.8 : 1.8;
     const broken = random.next() < 0.25;
 
-    const postMat = new THREE.MeshStandardMaterial({
-      color: 0x5a5550, roughness: 0.82, metalness: 0.4,
+    const postMat = new THREE.MeshLambertMaterial({
+      color: 0x5a5550,
     });
-    const signMat = new THREE.MeshStandardMaterial({
+    const signMat = new THREE.MeshLambertMaterial({
       color: broken ? 0x8a7a60 : 0xc8b88a,
-      roughness: 0.88,
-      metalness: 0.02,
     });
-    const textMat = new THREE.MeshStandardMaterial({
+    const textMat = new THREE.MeshLambertMaterial({
       color: 0x2a2420,
-      roughness: 0.92,
-      metalness: 0,
     });
     materials.push(postMat, signMat, textMat);
 
@@ -406,12 +489,10 @@ export class EnvironmentalClutter {
 
       // Border stripe (warns about danger)
       if (random.next() > 0.5) {
-        const borderMat = new THREE.MeshStandardMaterial({
+        const borderMat = new THREE.MeshLambertMaterial({
           color: 0xc47020,
           emissive: new THREE.Color(0x6a3810),
           emissiveIntensity: 0.2,
-          roughness: 0.72,
-          metalness: 0.04,
         });
         materials.push(borderMat);
         const border = new THREE.Mesh(
@@ -431,7 +512,7 @@ export class EnvironmentalClutter {
     base.position.set(0, 0.04, 0);
     root.add(base);
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   // ── Debris Clusters ───────────────────────────────────────
@@ -460,22 +541,24 @@ export class EnvironmentalClutter {
       group.root.position.set(dx, dy + 0.02, dz);
       group.root.rotation.y = random.range(0, Math.PI * 2);
 
+      group.x = dx;
+      group.z = dz;
       scene.add(group.root);
       this.#groups.push(group);
 
       // Debris clusters — medium radius, low profile
       const debrisRadius = variant === 1 ? 1.0 : 1.3; // barrels smaller
-      this.#colliders.push({ x: dx, z: dz, radius: debrisRadius, height: 0.9 });
+      this.#colliders.push({ x: dx, z: dz, radius: debrisRadius, height: 0.9, groupIndex: this.#groups.length - 1 });
     }
   }
 
   #createConcreteDebris(random: SeededRandom): ClutterGroup {
     const root = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x7a726a, roughness: 0.96, metalness: 0.02,
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0x7a726a,
     });
-    const rebarMat = new THREE.MeshStandardMaterial({
-      color: 0x6e4a30, roughness: 0.78, metalness: 0.44,
+    const rebarMat = new THREE.MeshLambertMaterial({
+      color: 0x6e4a30,
     });
     const materials = [mat, rebarMat];
 
@@ -516,16 +599,16 @@ export class EnvironmentalClutter {
       root.add(rebar);
     }
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   #createBarrelCluster(random: SeededRandom): ClutterGroup {
     const root = new THREE.Group();
-    const barrelMat = new THREE.MeshStandardMaterial({
-      color: 0x4a5048, roughness: 0.86, metalness: 0.18,
+    const barrelMat = new THREE.MeshLambertMaterial({
+      color: 0x4a5048,
     });
-    const rustMat = new THREE.MeshStandardMaterial({
-      color: 0x7a4e2e, roughness: 0.94, metalness: 0.1,
+    const rustMat = new THREE.MeshLambertMaterial({
+      color: 0x7a4e2e,
     });
     const materials = [barrelMat, rustMat];
 
@@ -549,16 +632,16 @@ export class EnvironmentalClutter {
       root.add(barrel);
     }
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   #createMetalScrap(random: SeededRandom): ClutterGroup {
     const root = new THREE.Group();
-    const metalMat = new THREE.MeshStandardMaterial({
-      color: 0x4e4a44, roughness: 0.74, metalness: 0.48,
+    const metalMat = new THREE.MeshLambertMaterial({
+      color: 0x4e4a44,
     });
-    const rustMat = new THREE.MeshStandardMaterial({
-      color: 0x6a4228, roughness: 0.92, metalness: 0.14,
+    const rustMat = new THREE.MeshLambertMaterial({
+      color: 0x6a4228,
     });
     const materials = [metalMat, rustMat];
 
@@ -602,7 +685,7 @@ export class EnvironmentalClutter {
       root.add(pipe);
     }
 
-    return { root, materials };
+    return { root, materials, x: 0, z: 0 };
   }
 
   // ── Placement Helpers ─────────────────────────────────────

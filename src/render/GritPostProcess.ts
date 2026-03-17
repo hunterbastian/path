@@ -13,8 +13,8 @@ const POST_SHADER = {
     tDepth: { value: null as THREE.DepthTexture | null },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uTime: { value: 0 },
-    uPixelSize: { value: 2 },
-    uColorSteps: { value: 24 },
+    uPixelSize: { value: 1 },
+    uColorSteps: { value: 128 },
     uDebugView: { value: 0 },
     uNearFar: { value: new THREE.Vector2(0.5, 1200) },
     uFogNearFar: { value: new THREE.Vector2(46, 430) },
@@ -25,8 +25,9 @@ const POST_SHADER = {
       value: Array.from({ length: MAX_WATER_DEBUG_POOLS }, () => new THREE.Vector4()),
     },
     uDamageFlash: { value: 0 },
-    uSpeedIntensity: { value: 0 },
-    uMotionBlur: { value: 0 },
+    uEffectScale: { value: 1 },
+    uBloomThreshold: { value: 0.38 },
+    uSpeedBlur: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -53,8 +54,9 @@ const POST_SHADER = {
     uniform float uWaterPoolCount;
     uniform vec4 uWaterPools[MAX_WATER_DEBUG_POOLS];
     uniform float uDamageFlash;
-    uniform float uSpeedIntensity;
-    uniform float uMotionBlur;
+    uniform float uEffectScale;
+    uniform float uBloomThreshold;
+    uniform float uSpeedBlur;
 
     varying vec2 vUv;
 
@@ -116,47 +118,53 @@ const POST_SHADER = {
       return vec2(mask, depth);
     }
 
-    vec3 radialBlur(sampler2D tex, vec2 uv, float strength) {
-      vec2 dir = uv - 0.5;
-      vec2 step = dir * strength * 0.018;
-
-      vec3 acc = vec3(0.0);
-      float total = 0.0;
-      for (int i = 0; i < 4; i += 1) {
-        float weight = 1.0 - float(i) / 4.0;
-        acc += texture2D(tex, uv - step * float(i)).rgb * weight;
-        total += weight;
-      }
-      return acc / total;
+    // Soft bloom — 9-tap weighted cross (wider glow, still cheap)
+    vec3 sampleBloom(sampler2D tex, vec2 uv, vec2 resolution) {
+      vec2 texel = 3.0 / resolution;
+      vec3 center = texture2D(tex, uv).rgb;
+      float centerLuma = dot(center, vec3(0.2126, 0.7152, 0.0722));
+      if (centerLuma < uBloomThreshold) return vec3(0.0);
+      vec3 acc = center * 0.3;
+      acc += texture2D(tex, uv + vec2(texel.x, 0.0)).rgb * 0.2;
+      acc += texture2D(tex, uv - vec2(texel.x, 0.0)).rgb * 0.2;
+      acc += texture2D(tex, uv + vec2(0.0, texel.y)).rgb * 0.2;
+      acc += texture2D(tex, uv - vec2(0.0, texel.y)).rgb * 0.2;
+      // Diagonal taps for rounder glow
+      vec2 diag = texel * 0.7;
+      acc += texture2D(tex, uv + diag).rgb * 0.1;
+      acc += texture2D(tex, uv - diag).rgb * 0.1;
+      acc += texture2D(tex, uv + vec2(diag.x, -diag.y)).rgb * 0.1;
+      acc += texture2D(tex, uv + vec2(-diag.x, diag.y)).rgb * 0.1;
+      return acc * smoothstep(uBloomThreshold, uBloomThreshold + 0.42, centerLuma);
     }
 
-    vec3 chromaticAberration(sampler2D tex, vec2 uv, float strength) {
-      vec2 dir = uv - 0.5;
-      float dist = length(dir);
-      vec2 offset = dir * dist * strength * 0.02;
-      float r = texture2D(tex, uv + offset).r;
-      float g = texture2D(tex, uv).g;
-      float b = texture2D(tex, uv - offset).b;
-      return vec3(r, g, b);
+    // ACES filmic tone mapping
+    vec3 acesToneMap(vec3 x) {
+      float a = 2.51;
+      float b = 0.03;
+      float c = 2.43;
+      float d = 0.59;
+      float e = 0.14;
+      return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
     }
 
-    vec3 applyFinalGrade(vec3 color, vec2 uv, vec2 sampleUv) {
-      float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-      vec3 graded = mix(color, vec3(luma) * vec3(1.02, 1.0, 0.98), 0.035);
-      graded = mix(vec3(luma), graded, 1.09);
-      graded.r *= 1.018;
-      graded.b *= 1.012;
+    vec3 applyFinalGrade(vec3 color, vec2 uv) {
+      // Tone map — compress HDR into displayable range
+      vec3 mapped = acesToneMap(color);
 
-      float grain = hash(sampleUv * uResolution + uTime * 4.0) - 0.5;
-      graded += grain * 0.009;
+      float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
 
-      float scanline = sin(uv.y * uResolution.y * 0.42) * 0.0025;
-      graded -= scanline;
+      // Warm color grade — golden hour push
+      vec3 graded = mix(mapped, vec3(luma) * vec3(1.08, 1.03, 0.92), 0.06);
+      graded = mix(vec3(luma), graded, 1.14);
 
-      graded = floor(clamp(graded, 0.0, 1.0) * uColorSteps) / uColorSteps;
+      // Speed desaturation — subtle wash at high effectScale (driven externally)
+      float speedDesatBlend = (1.0 - uEffectScale) * 0.12;
+      graded = mix(graded, vec3(luma), speedDesatBlend);
 
-      float vignette = smoothstep(0.92, 0.18, length(uv - 0.5));
-      graded *= mix(0.92, 1.0, vignette);
+      // Vignette — cinematic edge darkening
+      float vignette = smoothstep(1.1, 0.3, length(uv - 0.5));
+      graded *= mix(0.91, 1.0, vignette);
 
       return clamp(graded, 0.0, 1.0);
     }
@@ -165,36 +173,35 @@ const POST_SHADER = {
       vec2 grid = max(floor(uResolution / uPixelSize), vec2(1.0));
       vec2 sampleUv = floor(vUv * grid) / grid;
 
-      // Radial motion blur — only when moving fast
-      float blurStrength = uMotionBlur * uSpeedIntensity;
-      vec3 baseColor = texture2D(tScene, sampleUv).rgb;
-      vec3 preGrade = baseColor;
+      vec3 preGrade = texture2D(tScene, sampleUv).rgb;
 
-      if (blurStrength > 0.02) {
-        preGrade = radialBlur(tScene, sampleUv, blurStrength);
+      // 0. Radial speed blur — streaks from screen center at high speed
+      if (uSpeedBlur > 0.01) {
+        vec2 blurDir = (sampleUv - 0.5) * uSpeedBlur * 0.04;
+        vec3 blurAcc = preGrade;
+        blurAcc += texture2D(tScene, sampleUv - blurDir).rgb;
+        blurAcc += texture2D(tScene, sampleUv - blurDir * 2.0).rgb;
+        blurAcc += texture2D(tScene, sampleUv - blurDir * 3.0).rgb;
+        preGrade = blurAcc * 0.25;
       }
 
-      // Chromatic aberration — only on damage or high speed
-      float caStrength = uDamageFlash * 3.0 + uSpeedIntensity * 0.5;
-      if (caStrength > 0.05) {
-        vec3 caColor = chromaticAberration(tScene, sampleUv, caStrength);
-        preGrade = mix(preGrade, caColor, clamp(caStrength * 0.6, 0.0, 1.0));
+      // 1. Bloom — HDR space, soft 9-tap
+      if (uEffectScale > 0.3) {
+        vec3 bloom = sampleBloom(tScene, sampleUv, uResolution);
+        preGrade += bloom * 0.22 * uEffectScale;
       }
 
-      vec3 finalColor = applyFinalGrade(preGrade, vUv, sampleUv);
+      // 2–3. ACES tone map + warm grade + vignette
+      vec3 finalColor = applyFinalGrade(preGrade, vUv);
 
-      // Damage flash — red tint overlay
+      // 4. Damage flash
       if (uDamageFlash > 0.01) {
-        vec3 flashColor = vec3(0.85, 0.12, 0.08);
-        finalColor = mix(finalColor, flashColor, uDamageFlash * 0.35);
+        finalColor = mix(finalColor, vec3(0.85, 0.12, 0.08), uDamageFlash * 0.35);
       }
 
-      // Speed vignette — tighter darkening at edges with speed
-      if (uSpeedIntensity > 0.01) {
-        float dist = length(vUv - 0.5);
-        float speedVignette = smoothstep(0.55 - uSpeedIntensity * 0.15, 0.15, dist);
-        finalColor *= mix(0.7, 1.0, speedVignette);
-      }
+      // 5. Film grain — scales with effect intensity for gritty texture
+      float grain = hash(vUv * uResolution + fract(uTime * 7.3)) - 0.5;
+      finalColor += grain * mix(0.06, 0.03, uEffectScale);
 
       vec3 outputColor = finalColor;
 
@@ -287,7 +294,7 @@ export class GritPostProcess {
     this.#sceneTarget.setSize(width, height);
     const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
     uniforms.uResolution.value.set(width, height);
-    uniforms.uPixelSize.value = width < 900 ? 1.35 : 1.85;
+    uniforms.uPixelSize.value = 1;
   }
 
   setDebugView(view: RenderDebugViewId): void {
@@ -329,14 +336,24 @@ export class GritPostProcess {
     uniforms.uDamageFlash.value = intensity;
   }
 
-  setSpeedIntensity(intensity: number): void {
+  setEffectScale(scale: number): void {
     const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
-    uniforms.uSpeedIntensity.value = intensity;
+    uniforms.uEffectScale.value = scale;
   }
 
-  setMotionBlurStrength(strength: number): void {
+  /** Set radial speed blur intensity (0 = none, ~1 = heavy). */
+  setSpeedBlur(intensity: number): void {
     const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
-    uniforms.uMotionBlur.value = strength;
+    uniforms.uSpeedBlur.value = intensity;
+  }
+
+  /** Scale bloom threshold with scene brightness (sunIntensity 0–2.4). */
+  setBloomThreshold(sunIntensity: number): void {
+    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+    // Bright midday (2.4) → threshold 0.5 (suppress over-bloom)
+    // Dark night (0.06) → threshold 0.2 (let headlights glow)
+    const t = Math.min(sunIntensity / 2.4, 1);
+    uniforms.uBloomThreshold.value = 0.2 + t * 0.3;
   }
 
   render(): void {

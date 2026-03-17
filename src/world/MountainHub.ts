@@ -24,8 +24,8 @@ function createBeam(
 
 export class MountainHub {
   readonly group = new THREE.Group();
-  readonly #windowMaterial: THREE.MeshStandardMaterial;
-  readonly #roofLightMaterial: THREE.MeshStandardMaterial;
+  readonly #windowMaterial: THREE.MeshLambertMaterial;
+  readonly #roofLightMaterial: THREE.MeshLambertMaterial;
   readonly #lights: Array<{
     light: THREE.PointLight;
     base: number;
@@ -42,44 +42,30 @@ export class MountainHub {
     this.group.position.copy(position);
     this.group.lookAt(facingTarget.x, position.y + 2, facingTarget.z);
 
-    const concrete = new THREE.MeshStandardMaterial({
+    const concrete = new THREE.MeshLambertMaterial({
       color: 0x7a756d,
-      roughness: 0.97,
-      metalness: 0.03,
     });
-    const heavyConcrete = new THREE.MeshStandardMaterial({
+    const heavyConcrete = new THREE.MeshLambertMaterial({
       color: 0x63605a,
-      roughness: 0.98,
-      metalness: 0.02,
     });
-    const steel = new THREE.MeshStandardMaterial({
+    const steel = new THREE.MeshLambertMaterial({
       color: 0x495055,
-      roughness: 0.62,
-      metalness: 0.58,
     });
-    const darkSteel = new THREE.MeshStandardMaterial({
+    const darkSteel = new THREE.MeshLambertMaterial({
       color: 0x262d31,
-      roughness: 0.48,
-      metalness: 0.38,
     });
-    const glass = new THREE.MeshStandardMaterial({
+    const glass = new THREE.MeshLambertMaterial({
       color: 0x8fa0a6,
-      roughness: 0.16,
-      metalness: 0.12,
     });
-    this.#windowMaterial = new THREE.MeshStandardMaterial({
+    this.#windowMaterial = new THREE.MeshLambertMaterial({
       color: 0xffe7c4,
       emissive: new THREE.Color(0xf4bf78),
       emissiveIntensity: 1.25,
-      roughness: 0.26,
-      metalness: 0.04,
     });
-    this.#roofLightMaterial = new THREE.MeshStandardMaterial({
+    this.#roofLightMaterial = new THREE.MeshLambertMaterial({
       color: 0xffe8bc,
       emissive: new THREE.Color(0xffb36d),
       emissiveIntensity: 1.8,
-      roughness: 0.2,
-      metalness: 0.04,
     });
     applyProceduralParallax(concrete, {
       kind: 'concrete',
@@ -185,10 +171,8 @@ export class MountainHub {
     }
 
     const apron = box(18, 0.24, 12, darkSteel, 0, 0.12, 20.6);
-    const apronMaterial = new THREE.MeshStandardMaterial({
+    const apronMaterial = new THREE.MeshLambertMaterial({
       color: 0x2d3133,
-      roughness: 0.9,
-      metalness: 0.06,
     });
     apron.material = apronMaterial;
     applyProceduralParallax(apronMaterial, {

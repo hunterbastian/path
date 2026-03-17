@@ -31,7 +31,6 @@ const MIN_INTERVAL = 2.5;
 /** Per-category cooldowns in seconds. */
 const CATEGORY_COOLDOWNS: Record<string, number> = {
   outpost: 30,
-  raider: 20,
   objective: 25,
   water: 15,
   weather: 40,
@@ -47,6 +46,7 @@ export class RadioLog {
   readonly #queue: QueuedMessage[] = [];
   readonly #activeLines: ActiveLine[] = [];
   readonly #categoryCooldowns = new Map<string, number>();
+  readonly #pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
   #timeSinceLastMessage = 0;
   #idleTimer = 0;
   #visible = false;
@@ -100,11 +100,13 @@ export class RadioLog {
           line.exiting = true;
           line.element.classList.add('radio-line--exit');
           // Remove from DOM after fade
-          setTimeout(() => {
+          const tid = setTimeout(() => {
+            this.#pendingTimeouts.delete(tid);
             line.element.remove();
             const idx = this.#activeLines.indexOf(line);
             if (idx !== -1) this.#activeLines.splice(idx, 1);
           }, FADE_OUT_MS);
+          this.#pendingTimeouts.add(tid);
         }
       }
     }
@@ -137,6 +139,8 @@ export class RadioLog {
 
   /** Clear all messages and reset state. */
   clear(): void {
+    for (const tid of this.#pendingTimeouts) clearTimeout(tid);
+    this.#pendingTimeouts.clear();
     this.#queue.length = 0;
     for (const line of this.#activeLines) {
       line.element.remove();
@@ -147,6 +151,11 @@ export class RadioLog {
     this.#idleTimer = 0;
   }
 
+  /** Cancel all pending timeouts and remove DOM elements. */
+  dispose(): void {
+    this.clear();
+  }
+
   #spawnLine(msg: QueuedMessage): void {
     // If at max, force-exit the oldest
     const nonExiting = this.#activeLines.filter((l) => !l.exiting);
@@ -154,11 +163,13 @@ export class RadioLog {
       const oldest = nonExiting[0];
       oldest.exiting = true;
       oldest.element.classList.add('radio-line--exit');
-      setTimeout(() => {
+      const tid = setTimeout(() => {
+        this.#pendingTimeouts.delete(tid);
         oldest.element.remove();
         const idx = this.#activeLines.indexOf(oldest);
         if (idx !== -1) this.#activeLines.splice(idx, 1);
       }, FADE_OUT_MS);
+      this.#pendingTimeouts.add(tid);
     }
 
     const el = document.createElement('div');

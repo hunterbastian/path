@@ -153,13 +153,16 @@ export class SpriteParticleField {
       sizes[index] = particle.size * Math.max(fade(lifeFraction), 0);
     }
 
+    const wasActive = this.#activeCount > 0;
     this.#activeCount = activeCount;
 
-    // Only upload buffers if there are active particles (or were recently)
-    const posAttr = this.#geometry.attributes.position as THREE.BufferAttribute;
-    const sizeAttr = this.#geometry.attributes.aSize as THREE.BufferAttribute;
-    posAttr.needsUpdate = true;
-    sizeAttr.needsUpdate = true;
+    // Skip GPU upload when nothing changed
+    if (activeCount > 0 || wasActive) {
+      const posAttr = this.#geometry.attributes.position as THREE.BufferAttribute;
+      const sizeAttr = this.#geometry.attributes.aSize as THREE.BufferAttribute;
+      posAttr.needsUpdate = true;
+      sizeAttr.needsUpdate = true;
+    }
   }
 
   dispose(): void {

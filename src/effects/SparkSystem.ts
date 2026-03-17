@@ -12,7 +12,7 @@ export class SparkSystem {
 
   constructor(scene: THREE.Scene) {
     this.#field = new SpriteParticleField(scene, {
-      capacity: 200,
+      capacity: 120,
       color: 0xffcc44,
       opacity: 0.92,
       gravity: 18,

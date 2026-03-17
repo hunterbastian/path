@@ -8,6 +8,7 @@ export interface InputDebugState {
   steering: number;
   brake: boolean;
   boost: boolean;
+  handbrake: boolean;
 }
 
 interface GamepadStateSnapshot {
@@ -46,6 +47,7 @@ export class InputManager {
   #steering = 0;
   #brake = false;
   #boost = false;
+  #handbrake = false;
   #lastSource: InputSource = 'keyboard';
   #gamepadConnected = false;
   #gamepadLabel: string | null = null;
@@ -74,14 +76,14 @@ export class InputManager {
 
     const keyboardThrottle = this.#readKeyboardThrottle();
     const keyboardSteering = this.#readKeyboardSteering();
-    const keyboardBrake =
+    const keyboardBoost =
       this.isDown('ShiftLeft') || this.isDown('ShiftRight');
-    const keyboardBoost = this.isDown('Space');
+    const keyboardHandbrake = this.isDown('Space');
     const keyboardActivity = Math.max(
       Math.abs(keyboardThrottle),
       Math.abs(keyboardSteering),
-      keyboardBrake ? 1 : 0,
       keyboardBoost ? 1 : 0,
+      keyboardHandbrake ? 1 : 0,
     );
 
     const gamepad = this.#readGamepadState();
@@ -96,8 +98,9 @@ export class InputManager {
       Math.abs(keyboardSteering) >= Math.abs(gamepad.steering)
         ? keyboardSteering
         : gamepad.steering;
-    this.#brake = keyboardBrake || gamepad.brake;
+    this.#brake = gamepad.brake;
     this.#boost = keyboardBoost || gamepad.boost;
+    this.#handbrake = keyboardHandbrake;
 
     if (keyboardActivity > 0.08) {
       this.#lastSource = 'keyboard';
@@ -122,6 +125,10 @@ export class InputManager {
     return this.#boost;
   }
 
+  get handbrake(): boolean {
+    return this.#handbrake;
+  }
+
   get activeSource(): InputSource {
     return this.#gamepadConnected && this.#lastSource === 'gamepad'
       ? 'gamepad'
@@ -141,6 +148,7 @@ export class InputManager {
       steering: Number(this.#steering.toFixed(2)),
       brake: this.#brake,
       boost: this.#boost,
+      handbrake: this.#handbrake,
     };
   }
 
@@ -220,6 +228,7 @@ export class InputManager {
     this.#steering = 0;
     this.#brake = false;
     this.#boost = false;
+    this.#handbrake = false;
   };
 
   #readKeyboardThrottle(): number {

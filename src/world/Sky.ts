@@ -214,23 +214,23 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     time: 0.35,
     mood: {
-      fogColor: 0xc0c8c4,
-      hemisphereSky: 0xd0dce6,
-      hemisphereGround: 0x586858,
-      hemisphereIntensity: 0.92,
-      sunColor: 0xffd8a0,
-      sunIntensity: 1.8,
+      fogColor: 0xc8e0d0,
+      hemisphereSky: 0xb8ddf0,
+      hemisphereGround: 0x508850,
+      hemisphereIntensity: 1.06,
+      sunColor: 0xffe0a8,
+      sunIntensity: 2.0,
       fillColor: 0xa0bcc8,
       fillIntensity: 0.88,
       rimColor: 0xd0b890,
       rimIntensity: 0.40,
       backgroundBlurriness: 0.06,
       gradientStops: [
-        { offset: 0, color: '#88aec8' },
-        { offset: 0.20, color: '#c8d0d4' },
-        { offset: 0.46, color: '#d8b898' },
-        { offset: 0.74, color: '#807878' },
-        { offset: 1, color: '#607070' },
+        { offset: 0, color: '#70b8e0' },
+        { offset: 0.20, color: '#a8d8ec' },
+        { offset: 0.46, color: '#e0c8a0' },
+        { offset: 0.74, color: '#88a088' },
+        { offset: 1, color: '#608868' },
       ],
       sunGlowInner: 'rgba(255, 240, 200, 0.72)',
       sunGlowMid: 'rgba(255, 200, 130, 0.34)',
@@ -247,23 +247,23 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     time: 0.50,
     mood: {
-      fogColor: 0xcfd3cb,
-      hemisphereSky: 0xf0e9d6,
-      hemisphereGround: 0x647162,
-      hemisphereIntensity: 1.08,
-      sunColor: 0xffddb0,
-      sunIntensity: 2.24,
+      fogColor: 0xc0e4d4,
+      hemisphereSky: 0xc8e8ff,
+      hemisphereGround: 0x5a8a50,
+      hemisphereIntensity: 1.24,
+      sunColor: 0xffe8c0,
+      sunIntensity: 2.4,
       fillColor: 0xb7cad0,
       fillIntensity: 1.08,
       rimColor: 0xe2c1a0,
       rimIntensity: 0.52,
       backgroundBlurriness: 0.06,
       gradientStops: [
-        { offset: 0, color: '#a1c0d1' },
-        { offset: 0.18, color: '#e7ddd1' },
-        { offset: 0.42, color: '#dfb28d' },
-        { offset: 0.72, color: '#8e7e7a' },
-        { offset: 1, color: '#66737f' },
+        { offset: 0, color: '#78c0e8' },
+        { offset: 0.18, color: '#a8daf0' },
+        { offset: 0.42, color: '#e8d0a0' },
+        { offset: 0.72, color: '#90b098' },
+        { offset: 1, color: '#6a907a' },
       ],
       sunGlowInner: 'rgba(255, 246, 222, 0.9)',
       sunGlowMid: 'rgba(255, 210, 134, 0.42)',
@@ -280,32 +280,32 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     time: 0.68,
     mood: {
-      fogColor: 0xc8a87a,
-      hemisphereSky: 0xe0c8a0,
-      hemisphereGround: 0x584a38,
-      hemisphereIntensity: 0.94,
-      sunColor: 0xffa858,
-      sunIntensity: 1.9,
-      fillColor: 0x8aa0b8,
-      fillIntensity: 0.78,
-      rimColor: 0xf0a060,
-      rimIntensity: 0.56,
+      fogColor: 0xd4a060,
+      hemisphereSky: 0xf0c080,
+      hemisphereGround: 0x5a4430,
+      hemisphereIntensity: 0.96,
+      sunColor: 0xff9040,
+      sunIntensity: 2.0,
+      fillColor: 0x9088a8,
+      fillIntensity: 0.72,
+      rimColor: 0xf09048,
+      rimIntensity: 0.62,
       backgroundBlurriness: 0.07,
       gradientStops: [
-        { offset: 0, color: '#7898b8' },
-        { offset: 0.20, color: '#d8c0a0' },
-        { offset: 0.44, color: '#e89858' },
-        { offset: 0.74, color: '#906848' },
-        { offset: 1, color: '#584838' },
+        { offset: 0, color: '#7090b8' },
+        { offset: 0.18, color: '#e0b078' },
+        { offset: 0.40, color: '#f09048' },
+        { offset: 0.68, color: '#c06838' },
+        { offset: 1, color: '#5a3828' },
       ],
-      sunGlowInner: 'rgba(255, 210, 130, 0.88)',
-      sunGlowMid: 'rgba(255, 170, 80, 0.44)',
-      sunGlowOuter: 'rgba(240, 130, 60, 0.18)',
-      hazeStart: 'rgba(255, 180, 100, 0)',
-      hazeEnd: 'rgba(180, 90, 60, 0.32)',
-      cloudDeckStart: 'rgba(255, 220, 170, 0.28)',
-      cloudDeckMid: 'rgba(230, 190, 140, 0.20)',
-      cloudDeckEnd: 'rgba(230, 190, 140, 0)',
+      sunGlowInner: 'rgba(255, 200, 100, 0.92)',
+      sunGlowMid: 'rgba(255, 160, 60, 0.52)',
+      sunGlowOuter: 'rgba(245, 120, 50, 0.22)',
+      hazeStart: 'rgba(255, 180, 90, 0)',
+      hazeEnd: 'rgba(200, 100, 50, 0.36)',
+      cloudDeckStart: 'rgba(255, 200, 140, 0.32)',
+      cloudDeckMid: 'rgba(240, 170, 110, 0.22)',
+      cloudDeckEnd: 'rgba(240, 170, 110, 0)',
     },
   },
 
@@ -313,65 +313,98 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     time: 0.78,
     mood: {
-      fogColor: 0xa07050,
-      hemisphereSky: 0x8068a0,
-      hemisphereGround: 0x382820,
-      hemisphereIntensity: 0.52,
-      sunColor: 0xff6830,
-      sunIntensity: 1.0,
-      fillColor: 0x6070a0,
-      fillIntensity: 0.38,
-      rimColor: 0xe06028,
-      rimIntensity: 0.40,
+      fogColor: 0xc06838,
+      hemisphereSky: 0xc08870,
+      hemisphereGround: 0x3a2820,
+      hemisphereIntensity: 0.58,
+      sunColor: 0xff5020,
+      sunIntensity: 1.2,
+      fillColor: 0x8868a0,
+      fillIntensity: 0.42,
+      rimColor: 0xf05828,
+      rimIntensity: 0.48,
       backgroundBlurriness: 0.08,
       gradientStops: [
-        { offset: 0, color: '#485888' },
-        { offset: 0.20, color: '#8870a0' },
-        { offset: 0.46, color: '#e87040' },
-        { offset: 0.74, color: '#b04828' },
-        { offset: 1, color: '#402820' },
+        { offset: 0, color: '#4a5080' },
+        { offset: 0.18, color: '#b06878' },
+        { offset: 0.42, color: '#f06838' },
+        { offset: 0.72, color: '#c04020' },
+        { offset: 1, color: '#3a1810' },
       ],
-      sunGlowInner: 'rgba(255, 160, 70, 0.80)',
-      sunGlowMid: 'rgba(255, 110, 40, 0.38)',
-      sunGlowOuter: 'rgba(200, 80, 40, 0.14)',
-      hazeStart: 'rgba(255, 140, 60, 0)',
-      hazeEnd: 'rgba(160, 60, 50, 0.38)',
-      cloudDeckStart: 'rgba(220, 140, 100, 0.30)',
-      cloudDeckMid: 'rgba(180, 100, 80, 0.20)',
-      cloudDeckEnd: 'rgba(180, 100, 80, 0)',
+      sunGlowInner: 'rgba(255, 140, 50, 0.90)',
+      sunGlowMid: 'rgba(255, 100, 40, 0.50)',
+      sunGlowOuter: 'rgba(230, 70, 40, 0.20)',
+      hazeStart: 'rgba(255, 120, 50, 0)',
+      hazeEnd: 'rgba(200, 70, 50, 0.44)',
+      cloudDeckStart: 'rgba(240, 130, 90, 0.34)',
+      cloudDeckMid: 'rgba(200, 90, 70, 0.24)',
+      cloudDeckEnd: 'rgba(200, 90, 70, 0)',
+    },
+  },
+
+  // ── Late sunset (deep orange into pink) ──
+  {
+    time: 0.84,
+    mood: {
+      fogColor: 0x803848,
+      hemisphereSky: 0x904870,
+      hemisphereGround: 0x281820,
+      hemisphereIntensity: 0.38,
+      sunColor: 0xe04028,
+      sunIntensity: 0.6,
+      fillColor: 0x685080,
+      fillIntensity: 0.30,
+      rimColor: 0xc04830,
+      rimIntensity: 0.28,
+      backgroundBlurriness: 0.08,
+      gradientStops: [
+        { offset: 0, color: '#2a3058' },
+        { offset: 0.20, color: '#784870' },
+        { offset: 0.46, color: '#c84838' },
+        { offset: 0.76, color: '#802818' },
+        { offset: 1, color: '#281018' },
+      ],
+      sunGlowInner: 'rgba(240, 100, 50, 0.72)',
+      sunGlowMid: 'rgba(220, 70, 50, 0.38)',
+      sunGlowOuter: 'rgba(180, 50, 40, 0.14)',
+      hazeStart: 'rgba(200, 80, 60, 0)',
+      hazeEnd: 'rgba(140, 50, 50, 0.40)',
+      cloudDeckStart: 'rgba(180, 90, 80, 0.30)',
+      cloudDeckMid: 'rgba(140, 60, 60, 0.20)',
+      cloudDeckEnd: 'rgba(140, 60, 60, 0)',
     },
   },
 
   // ── Twilight ──
   {
-    time: 0.90,
+    time: 0.92,
     mood: {
-      fogColor: 0x302838,
-      hemisphereSky: 0x28304a,
-      hemisphereGround: 0x14181e,
-      hemisphereIntensity: 0.24,
-      sunColor: 0x905838,
-      sunIntensity: 0.18,
-      fillColor: 0x283848,
-      fillIntensity: 0.18,
-      rimColor: 0x604030,
-      rimIntensity: 0.10,
+      fogColor: 0x302030,
+      hemisphereSky: 0x283048,
+      hemisphereGround: 0x14141c,
+      hemisphereIntensity: 0.22,
+      sunColor: 0x803828,
+      sunIntensity: 0.14,
+      fillColor: 0x283040,
+      fillIntensity: 0.16,
+      rimColor: 0x503028,
+      rimIntensity: 0.08,
       backgroundBlurriness: 0.06,
       gradientStops: [
-        { offset: 0, color: '#1a2440' },
-        { offset: 0.22, color: '#384060' },
-        { offset: 0.48, color: '#6a4040' },
-        { offset: 0.76, color: '#201828' },
-        { offset: 1, color: '#100e18' },
+        { offset: 0, color: '#161e38' },
+        { offset: 0.20, color: '#2e2840' },
+        { offset: 0.42, color: '#5a3040' },
+        { offset: 0.66, color: '#3a1820' },
+        { offset: 1, color: '#100c14' },
       ],
-      sunGlowInner: 'rgba(180, 100, 60, 0.20)',
-      sunGlowMid: 'rgba(120, 60, 40, 0.10)',
-      sunGlowOuter: 'rgba(80, 40, 30, 0.04)',
-      hazeStart: 'rgba(100, 60, 40, 0)',
-      hazeEnd: 'rgba(40, 24, 30, 0.24)',
-      cloudDeckStart: 'rgba(60, 50, 60, 0.16)',
-      cloudDeckMid: 'rgba(34, 28, 40, 0.10)',
-      cloudDeckEnd: 'rgba(34, 28, 40, 0)',
+      sunGlowInner: 'rgba(160, 70, 50, 0.16)',
+      sunGlowMid: 'rgba(100, 40, 36, 0.08)',
+      sunGlowOuter: 'rgba(70, 30, 28, 0.03)',
+      hazeStart: 'rgba(80, 40, 40, 0)',
+      hazeEnd: 'rgba(36, 20, 26, 0.22)',
+      cloudDeckStart: 'rgba(50, 36, 46, 0.14)',
+      cloudDeckMid: 'rgba(28, 22, 32, 0.08)',
+      cloudDeckEnd: 'rgba(28, 22, 32, 0)',
     },
   },
 ];
@@ -428,7 +461,7 @@ const WEATHER_SCALES: Record<WeatherCondition, WeatherScale> = {
 const DAY_CYCLE_DURATION = 600;
 
 /** How often (in seconds) to regenerate the environment texture. */
-const ENV_TEXTURE_INTERVAL = 1.8;
+const ENV_TEXTURE_INTERVAL = 8;
 
 /** Sun orbit radius for directional light positioning. */
 const SUN_ORBIT_RADIUS = 220;
@@ -461,8 +494,7 @@ export class Sky {
   #envTextureTimer = 0;
   /** Fog near/far set externally by WeatherState — we scale by time brightness. */
   #baseFogNear = 46;
-  #baseFogFar = 430;
-  #baseMistStrength = 1;
+  #baseFogFar = 480;
   #valleyFogPush = 0;
 
   constructor(scene: THREE.Scene) {
@@ -472,29 +504,28 @@ export class Sky {
 
     this.#sun = new THREE.DirectionalLight(0xffd6aa, 1.95);
     this.#sun.position.set(180, 140, 70);
-    this.#sun.castShadow = true;
+    this.#sun.castShadow = false; // Enabled dynamically in #updateSunPosition when sun > horizon
     this.#sun.shadow.mapSize.set(1024, 1024);
-    this.#sun.shadow.camera.left = -52;
-    this.#sun.shadow.camera.right = 52;
-    this.#sun.shadow.camera.top = 52;
-    this.#sun.shadow.camera.bottom = -52;
+    this.#sun.shadow.camera.left = -28;
+    this.#sun.shadow.camera.right = 28;
+    this.#sun.shadow.camera.top = 28;
+    this.#sun.shadow.camera.bottom = -28;
     this.#sun.shadow.camera.near = 10;
     this.#sun.shadow.camera.far = 280;
-    this.#sun.shadow.bias = -0.0008;
+    this.#sun.shadow.bias = -0.001;
     scene.add(this.#sun);
     scene.add(this.#sun.target);
 
-    this.#fill = new THREE.DirectionalLight(0x9bb1bf, 0.96);
-    this.#fill.position.set(-110, 55, -90);
-    scene.add(this.#fill);
-
-    this.#rim = new THREE.DirectionalLight(0xb6a894, 0.46);
-    this.#rim.position.set(-60, 30, 140);
-    scene.add(this.#rim);
+    // Fill + rim lights disabled for performance — hemisphere provides ambient
+    this.#fill = new THREE.DirectionalLight(0x9bb1bf, 0);
+    this.#rim = new THREE.DirectionalLight(0xb6a894, 0);
+    // Boost hemisphere to compensate
+    this.#hemisphere.intensity = 1.2;
 
     this.#fog = new THREE.Fog(0xb9c0bf, 46, 430);
     scene.fog = this.#fog;
-    this.#addMistBands(scene);
+    // Mist bands disabled for performance — fog provides atmosphere
+    // this.#addMistBands(scene);
 
     // Apply initial mood
     this.#applyMood(this.#computeBlendedMood());
@@ -506,10 +537,19 @@ export class Sky {
     return this.#dayTime;
   }
 
-  setAtmosphere(fogNear: number, fogFar: number, mistStrength: number): void {
+  /** Sun world position for specular/shadow calculations. */
+  get sunPosition(): THREE.Vector3 {
+    return this.#sun.position;
+  }
+
+  /** Current sun intensity after time-of-day and weather scaling. */
+  get sunIntensity(): number {
+    return this.#sun.intensity;
+  }
+
+  setAtmosphere(fogNear: number, fogFar: number, _mistStrength: number): void {
     this.#baseFogNear = fogNear;
     this.#baseFogFar = fogFar;
-    this.#baseMistStrength = mistStrength;
   }
 
   setWeatherMood(condition: WeatherCondition): void {
@@ -521,7 +561,7 @@ export class Sky {
     this.#valleyFogPush = THREE.MathUtils.clamp(push, 0, 0.5);
   }
 
-  update(dt: number, routeActivity: number, rainDensity: number, playerPosition?: THREE.Vector3): void {
+  update(dt: number, _routeActivity: number, _rainDensity: number, playerPosition?: THREE.Vector3): void {
     this.#time += dt;
     this.#dayTime = (this.#dayTime + dt / DAY_CYCLE_DURATION) % 1;
 
@@ -550,44 +590,6 @@ export class Sky {
       this.#regenerateEnvTexture();
     }
 
-    // Mist animation
-    const weatherDriftScale =
-      this.#weatherCondition === 'rainy' ? 1.16 : this.#weatherCondition === 'sunny' ? 0.72 : 0.92;
-    const weatherOpacityScale =
-      this.#weatherCondition === 'rainy' ? 1.08 : this.#weatherCondition === 'sunny' ? 0.74 : 0.9;
-    const routeMix = THREE.MathUtils.lerp(0.78, 1.06, THREE.MathUtils.clamp(routeActivity, 0, 1));
-    const rainLift = THREE.MathUtils.lerp(0, 0.26, THREE.MathUtils.clamp(rainDensity, 0, 1));
-
-    for (const layer of this.#mistLayers) {
-      const driftTime = this.#time * layer.driftSpeed + layer.phase;
-      const sway = Math.sin(driftTime) * layer.driftRadius * weatherDriftScale;
-      const depthDrift =
-        Math.cos(driftTime * 0.72 + layer.phase * 0.4)
-        * layer.driftRadius
-        * 0.42
-        * weatherDriftScale;
-      const verticalWave =
-        Math.sin(driftTime * 0.46 + layer.phase) * layer.lift
-        + rainLift * layer.lift * 0.45;
-
-      layer.sprite.position.set(
-        layer.basePosition.x + sway,
-        layer.basePosition.y + verticalWave,
-        layer.basePosition.z + depthDrift,
-      );
-
-      const opacityPulse = 0.9 + Math.sin(driftTime * 0.62 + layer.phase * 0.5) * 0.08;
-      const scalePulse = 1 + Math.sin(driftTime * 0.38 + layer.phase) * 0.025;
-      layer.sprite.scale.set(
-        layer.baseScale.x * scalePulse,
-        layer.baseScale.y * scalePulse,
-        1,
-      );
-
-      const material = layer.sprite.material as THREE.SpriteMaterial;
-      material.opacity =
-        layer.baseOpacity * weatherOpacityScale * routeMix * opacityPulse * this.#baseMistStrength;
-    }
   }
 
   // -----------------------------------------------------------------------
@@ -717,9 +719,9 @@ export class Sky {
     const angle = (this.#dayTime - 0.25) * Math.PI * 2;
     const sunElevation = Math.sin(angle);
     // During day (elevation > 0): scale = 1.0
-    // At night (elevation < 0): scale drops to ~0.5 (closer fog)
+    // At night (elevation < 0): scale drops to ~0.45 (tighter fog, more intimate)
     if (sunElevation >= 0) return 1;
-    return THREE.MathUtils.lerp(1, 0.55, Math.min(-sunElevation, 1));
+    return THREE.MathUtils.lerp(1, 0.45, Math.min(-sunElevation, 1));
   }
 
   // -----------------------------------------------------------------------
@@ -760,48 +762,53 @@ export class Sky {
     // Map elevation to Y: high sun = low Y (top of canvas), horizon = middle
     const sunGlowY = (0.5 - sunElevation * 0.38) * canvas.height;
 
-    const sunGlow = context.createRadialGradient(sunGlowX, sunGlowY, 14, sunGlowX, sunGlowY, 220);
+    const h = canvas.height;
+    const w = canvas.width;
+
+    const sunGlow = context.createRadialGradient(
+      sunGlowX, sunGlowY, h * 0.055,
+      sunGlowX, sunGlowY, h * 0.86,
+    );
     sunGlow.addColorStop(0, mood.sunGlowInner);
     sunGlow.addColorStop(0.24, mood.sunGlowMid);
     sunGlow.addColorStop(0.72, mood.sunGlowOuter);
     sunGlow.addColorStop(1, 'rgba(255, 197, 126, 0)');
     context.fillStyle = sunGlow;
-    // Draw glow around the sun position
-    const glowLeft = Math.max(0, sunGlowX - 250);
-    const glowTop = Math.max(0, sunGlowY - 180);
-    context.fillRect(glowLeft, glowTop, 500, 360);
+    const glowLeft = Math.max(0, sunGlowX - w * 0.49);
+    const glowTop = Math.max(0, sunGlowY - h * 0.7);
+    context.fillRect(glowLeft, glowTop, w * 0.98, h * 1.4);
 
-    const warmHaze = context.createLinearGradient(0, 180, 0, 360);
+    const warmHaze = context.createLinearGradient(0, h * 0.7, 0, h * 1.4);
     warmHaze.addColorStop(0, mood.hazeStart);
     warmHaze.addColorStop(1, mood.hazeEnd);
     context.fillStyle = warmHaze;
-    context.fillRect(0, 180, canvas.width, 190);
+    context.fillRect(0, h * 0.7, w, h * 0.74);
 
-    const coolVeil = context.createLinearGradient(0, 80, 0, 310);
+    const coolVeil = context.createLinearGradient(0, h * 0.31, 0, h * 1.21);
     coolVeil.addColorStop(0, 'rgba(176, 199, 207, 0.24)');
     coolVeil.addColorStop(1, 'rgba(63, 74, 117, 0)');
     context.fillStyle = coolVeil;
-    context.fillRect(0, 80, canvas.width, 260);
+    context.fillRect(0, h * 0.31, w, h * 1.01);
 
-    const alpineMist = context.createLinearGradient(0, 210, 0, 430);
+    const alpineMist = context.createLinearGradient(0, h * 0.82, 0, h * 1.68);
     alpineMist.addColorStop(0, 'rgba(224, 231, 225, 0)');
     alpineMist.addColorStop(0.4, 'rgba(197, 203, 192, 0.24)');
     alpineMist.addColorStop(1, 'rgba(128, 135, 136, 0.34)');
     context.fillStyle = alpineMist;
-    context.fillRect(0, 210, canvas.width, 230);
+    context.fillRect(0, h * 0.82, w, h * 0.9);
 
-    const cloudDeck = context.createLinearGradient(0, 46, 0, 190);
+    const cloudDeck = context.createLinearGradient(0, h * 0.18, 0, h * 0.74);
     cloudDeck.addColorStop(0, mood.cloudDeckStart);
     cloudDeck.addColorStop(0.4, mood.cloudDeckMid);
     cloudDeck.addColorStop(1, mood.cloudDeckEnd);
     context.fillStyle = cloudDeck;
-    context.fillRect(0, 28, canvas.width, 180);
+    context.fillRect(0, h * 0.11, w, h * 0.7);
 
-    const ridgeShadow = context.createLinearGradient(0, 300, 0, 512);
+    const ridgeShadow = context.createLinearGradient(0, h * 1.17, 0, h * 2.0);
     ridgeShadow.addColorStop(0, 'rgba(99, 87, 84, 0)');
     ridgeShadow.addColorStop(1, 'rgba(68, 73, 84, 0.45)');
     context.fillStyle = ridgeShadow;
-    context.fillRect(0, 300, canvas.width, 212);
+    context.fillRect(0, h * 1.17, w, h * 0.83);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.mapping = THREE.EquirectangularReflectionMapping;

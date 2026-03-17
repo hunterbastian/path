@@ -32,8 +32,6 @@ export class Vehicle {
   }> = [];
   readonly #brakeLightMaterials: THREE.MeshStandardMaterial[] = [];
   readonly #reverseLightMaterials: THREE.MeshStandardMaterial[] = [];
-  readonly #speedLineMaterials: THREE.MeshBasicMaterial[] = [];
-  readonly #speedLines: THREE.Mesh[] = [];
   readonly #bodyMaterial: THREE.MeshStandardMaterial;
   readonly #bodyBaseRoughness: number;
   readonly #bodyBaseMetalness: number;
@@ -44,7 +42,6 @@ export class Vehicle {
   #bodySink = 0;
   #bodyHeave = 0;
   #bodyHeaveVelocity = 0;
-  #smoothedSpeedLineOpacity = 0;
 
   constructor(scene: THREE.Scene, options: VehicleOptions = {}, damage?: VehicleDamage) {
     this.damage = damage ?? new VehicleDamage(scene);
@@ -144,7 +141,6 @@ export class Vehicle {
     this.#addTailLight([0.48, 0.22, -2.36], 0xeeeeff, this.#reverseLightMaterials);
 
     // --- Speed lines (thin stretched meshes around the vehicle) ---
-    this.#createSpeedLines();
 
     const brushGuard = new THREE.Group();
     brushGuard.position.set(0, 0.04, 2.4);
@@ -332,7 +328,7 @@ export class Vehicle {
     return { roll, pitch };
   }
 
-  updateVisuals(dt: number, state: DrivingState): void {
+  updateVisuals(dt: number, state: DrivingState, sunIntensity = 2.0): void {
     const spin = (state.forwardSpeed / 0.48) * dt;
     for (const wheel of this.#wheelMeshes) {
       wheel.rotation.x += spin;
@@ -394,43 +390,34 @@ export class Vehicle {
 
     this.#boostStripMaterial.emissiveIntensity = state.isBoosting ? 1.8 : 0.7;
 
-    // --- Feature 5: Headlight intensity by speed ---
+    // --- Feature 5: Headlight intensity by darkness + speed ---
+    // darkness: 0 at midday (sun 2.4), 1 at night (sun ~0)
+    const darkness = 1 - Math.min(sunIntensity / 2.0, 1);
+    const nightBoost = 1 + darkness * 2.2; // up to 3.2x at full night
+    const nightDistanceBoost = 1 + darkness * 0.6; // reach further at night
     const speedIntensityScale = 1 + state.speed * 0.01;
     for (const material of this.#headlightMaterials) {
-      material.emissiveIntensity = (state.isGrounded ? 1.85 : 1.55) * speedIntensityScale;
+      material.emissiveIntensity =
+        (state.isGrounded ? 1.85 : 1.55) * speedIntensityScale * nightBoost;
     }
     for (const headlight of this.#headlights) {
       headlight.light.intensity =
-        headlight.baseIntensity * (state.isGrounded ? 1 : 0.9) * speedIntensityScale;
-      headlight.light.distance = headlight.baseDistance * (1 + state.speed * 0.005);
+        headlight.baseIntensity * (state.isGrounded ? 1 : 0.9)
+        * speedIntensityScale * nightBoost;
+      headlight.light.distance =
+        headlight.baseDistance * (1 + state.speed * 0.005) * nightDistanceBoost;
     }
 
-    // --- Feature 1: Brake lights ---
-    const brakeGlow = state.isBraking ? 2.4 : 0.15;
+    // --- Feature 1: Brake lights (brighter at night) ---
+    const brakeGlow = (state.isBraking ? 2.4 : 0.15) * (1 + darkness * 0.8);
     for (const mat of this.#brakeLightMaterials) {
       mat.emissiveIntensity = brakeGlow;
     }
 
-    // --- Feature 2: Reverse lights ---
-    const reverseGlow = state.throttle < 0 ? 1.8 : 0.1;
+    // --- Feature 2: Reverse lights (brighter at night) ---
+    const reverseGlow = (state.throttle < 0 ? 1.8 : 0.1) * (1 + darkness * 0.6);
     for (const mat of this.#reverseLightMaterials) {
       mat.emissiveIntensity = reverseGlow;
-    }
-
-    // --- Feature 3: Speed lines ---
-    const speedLineFraction = THREE.MathUtils.clamp((state.speed - 20) / 30, 0, 1);
-    const targetOpacity = speedLineFraction * 0.35;
-    this.#smoothedSpeedLineOpacity = expLerp(this.#smoothedSpeedLineOpacity, targetOpacity, 6, dt);
-    const lineVisible = this.#smoothedSpeedLineOpacity > 0.005;
-    for (let i = 0; i < this.#speedLines.length; i++) {
-      const line = this.#speedLines[i]!;
-      const mat = this.#speedLineMaterials[i]!;
-      line.visible = lineVisible;
-      if (lineVisible) {
-        mat.opacity = this.#smoothedSpeedLineOpacity;
-        // Stretch lines along Z based on speed
-        line.scale.z = 1 + speedLineFraction * 2.5;
-      }
     }
 
     // --- Feature 6: Damage visual feedback ---
@@ -504,36 +491,6 @@ export class Vehicle {
     this.#bodyVisual.add(housing);
   }
 
-  #createSpeedLines(): void {
-    // Create several thin stretched boxes along the sides and top of the vehicle
-    const lineGeo = new THREE.BoxGeometry(0.02, 0.02, 1.6);
-    const lineConfigs: [number, number, number][] = [
-      [-1.2, 0.5, -0.5],
-      [-1.2, 0.2, -0.8],
-      [-1.2, 0.8, -0.3],
-      [1.2, 0.5, -0.5],
-      [1.2, 0.2, -0.8],
-      [1.2, 0.8, -0.3],
-      [-0.6, 1.2, -0.4],
-      [0.6, 1.2, -0.4],
-    ];
-    for (const pos of lineConfigs) {
-      const material = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-      });
-      const line = new THREE.Mesh(lineGeo, material);
-      line.position.set(pos[0], pos[1], pos[2]);
-      line.visible = false;
-      line.castShadow = false;
-      line.receiveShadow = false;
-      this.#speedLineMaterials.push(material);
-      this.#speedLines.push(line);
-      this.#bodyVisual.add(line);
-    }
-  }
 
   #wheel(
     hubMaterial: THREE.MeshStandardMaterial,
@@ -634,7 +591,7 @@ export class Vehicle {
 
   /**
    * Load a GLB model and replace the procedural body with it.
-   * Keeps wheels, lights, speed lines, and physics intact.
+   * Keeps wheels, lights, and physics intact.
    */
   static async loadModel(url: string): Promise<THREE.Group> {
     const loader = new GLTFLoader();

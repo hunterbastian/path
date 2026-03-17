@@ -88,6 +88,7 @@ export class TireTrackSystem {
   readonly #normal = new THREE.Vector3();
   readonly #trackColor = new THREE.Color();
   readonly #wetTrackColor = new THREE.Color(0x2a241d);
+  readonly #groundPoint = new THREE.Vector3();
   #segmentCursor = 0;
   #wetness = 0;
 
@@ -282,7 +283,7 @@ export class TireTrackSystem {
 
   #projectWheelToGround(wheel: THREE.Vector3): THREE.Vector3 {
     const y = this.#terrain.getHeightAt(wheel.x, wheel.z) + TRACK_LIFT;
-    return new THREE.Vector3(wheel.x, y, wheel.z);
+    return this.#groundPoint.set(wheel.x, y, wheel.z);
   }
 
   #getEmitter(id: string): TrackEmitterState {

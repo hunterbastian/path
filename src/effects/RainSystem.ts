@@ -9,9 +9,10 @@ interface DropRecord {
   speed: number;
   length: number;
   drift: number;
+  cachedGroundY: number;
 }
 
-const DROP_COUNT = 160;
+const DROP_COUNT = 120;
 const FIELD_WIDTH = 92;
 const FIELD_DEPTH = 74;
 const FIELD_HEIGHT = 46;
@@ -26,6 +27,7 @@ export class RainSystem {
   readonly #random = new SeededRandom(0x5241494e);
   readonly #wind = new THREE.Vector3(-2.8, -1, 1.05);
   #densityScale = 1;
+  #sampleFrame = 0;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.#terrain = terrain;
@@ -37,6 +39,7 @@ export class RainSystem {
       speed: 0,
       length: 0,
       drift: 0,
+      cachedGroundY: 0,
     }));
 
     this.#geometry = new THREE.BufferGeometry();
@@ -64,6 +67,7 @@ export class RainSystem {
   }
 
   update(dt: number, cameraPosition: THREE.Vector3): void {
+    this.#sampleFrame++;
     const anchorX = cameraPosition.x + 8;
     const anchorY = Math.max(cameraPosition.y + 10, 30);
     const anchorZ = cameraPosition.z + 12;
@@ -98,7 +102,12 @@ export class RainSystem {
       const worldX = anchorX + drop.offsetX;
       const worldY = anchorY + drop.offsetY;
       const worldZ = anchorZ + drop.offsetZ;
-      const groundY = this.#terrain.getHeightAt(worldX, worldZ) + 2.2;
+
+      // Stagger terrain queries — only 1/8 of drops re-sample per frame
+      if (drop.cachedGroundY === 0 || (index & 7) === (this.#sampleFrame & 7)) {
+        drop.cachedGroundY = this.#terrain.getHeightAt(worldX, worldZ) + 2.2;
+      }
+      const groundY = drop.cachedGroundY;
 
       if (
         worldY <= groundY ||
@@ -133,6 +142,7 @@ export class RainSystem {
   }
 
   #respawnDrop(drop: DropRecord, anchorY: number, initial: boolean): void {
+    drop.cachedGroundY = 0;
     drop.offsetX = this.#random.signed() * FIELD_WIDTH * 0.5;
     drop.offsetZ = this.#random.signed() * FIELD_DEPTH * 0.5;
     drop.offsetY = initial

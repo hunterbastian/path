@@ -19,6 +19,7 @@
     "react-dom": "^19.2.4",
     "remotion": "4.0.434",
     "simplex-noise": "^4.0.3",
+    "spacetimedb": "^2.0.4",
     "three": "^0.170.0"
   },
   "devDependencies": {

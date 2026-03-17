@@ -14,6 +14,7 @@ import { FixedStepLoop } from '../core/FixedStepLoop';
 import { InputManager } from '../core/InputManager';
 import { DebugPanel, type DebugTelemetrySnapshot } from '../debug/DebugPanel';
 import { AchievementSystem } from '../gameplay/AchievementSystem';
+import { DriftScoreSystem } from '../gameplay/DriftScoreSystem';
 import { DriverProfile } from '../gameplay/DriverProfile';
 import { MapDiscoverySystem } from '../gameplay/MapDiscoverySystem';
 import {
@@ -34,8 +35,11 @@ import { DamageHud } from '../ui/DamageHud';
 import { RadioLog } from '../ui/RadioLog';
 import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
+import { DirtRoads } from '../world/DirtRoads';
+import { PointsOfInterest } from '../world/PointsOfInterest';
 import { MountainHub } from '../world/MountainHub';
-import { RaiderSystem } from '../world/RaiderSystem';
+import { GhostPlayerSystem } from '../world/GhostPlayerSystem';
+import { NetworkManager } from '../network/NetworkManager';
 import { ObjectiveBeacon } from '../world/ObjectiveBeacon';
 import {
   AmbientTrafficSystem,
@@ -90,10 +94,13 @@ export class PathGame {
   readonly #objectiveBeacon: ObjectiveBeacon;
   readonly #mountainHub: MountainHub;
   readonly #ambientTraffic: AmbientTrafficSystem;
-  readonly #raiders: RaiderSystem;
+  readonly #network: NetworkManager;
+  readonly #ghostPlayers: GhostPlayerSystem;
   readonly #reactiveProps: ReactiveWorldPropsSystem;
   readonly #sky: Sky;
   readonly #valleyFog: ValleyFog;
+  readonly #dirtRoads: DirtRoads;
+  readonly #pois: PointsOfInterest;
   readonly #grassField: GrassField;
   readonly #clutter: EnvironmentalClutter;
   readonly #mapDiscovery: MapDiscoverySystem;
@@ -102,6 +109,7 @@ export class PathGame {
   readonly #worldStreamer: WorldStreamer;
   readonly #weatherState: WeatherState;
   readonly #achievements: AchievementSystem;
+  readonly #driftScore = new DriftScoreSystem();
   readonly #driverProfile: DriverProfile;
   readonly #debugPanel: DebugPanel;
   readonly #radioLog: RadioLog;
@@ -117,7 +125,6 @@ export class PathGame {
   #prevWeatherCondition: string = '';
   #prevDamageHealth = 1;
   #discoveredSurfaces = new Set<string>();
-  #seenRaiders = false;
   #foundRoad = false;
   #prevDiscoveryPercent = 0;
   #trail: Array<{ x: number; z: number }> = [];
@@ -152,8 +159,13 @@ export class PathGame {
     this.#terrain = new Terrain(this.#engine.scene);
     this.#valleyFog = new ValleyFog(this.#engine.scene, this.#terrain);
     this.#water = new Water(this.#engine.scene, this.#terrain);
+    this.#dirtRoads = new DirtRoads(this.#engine.scene, this.#terrain);
     this.#grassField = new GrassField(this.#engine.scene, this.#terrain);
     this.#clutter = new EnvironmentalClutter(this.#engine.scene, this.#terrain);
+    this.#pois = new PointsOfInterest(this.#engine.scene, this.#terrain);
+    this.#pois.onDiscover((name) => {
+      this.#radioLog.push(`landmark found: ${name.toLowerCase()}`, 'discovery', 'alert');
+    });
     this.#spawnPosition = this.#terrain.getSpawnPosition();
     this.#outpostPositions = this.#terrain.getOutpostPositions();
     this.#objectivePosition =
@@ -184,11 +196,22 @@ export class PathGame {
       this.#terrain,
       this.#outpostPositions,
     );
-    this.#raiders = new RaiderSystem(
+    // Multiplayer: network manager + ghost player rendering
+    this.#network = new NetworkManager();
+    this.#ghostPlayers = new GhostPlayerSystem(
       this.#engine.scene,
       this.#terrain,
-      this.#outpostPositions,
+      20,
     );
+    this.#ghostPlayers.loadModel('/models/raider.glb').catch(() => {
+      // Fallback: ghosts won't render but game still works
+    });
+    this.#network.connect(
+      import.meta.env.VITE_SPACETIMEDB_HOST ?? 'ws://localhost:3000',
+      import.meta.env.VITE_SPACETIMEDB_MODULE ?? 'path-multiplayer',
+    ).catch(() => {
+      // No server — single-player mode
+    });
     this.#reactiveProps = new ReactiveWorldPropsSystem(
       this.#engine.scene,
       this.#terrain,
@@ -311,7 +334,7 @@ export class PathGame {
 
     this.#loop = new FixedStepLoop({
       stepSeconds: PHYSICS_STEP_SECONDS,
-      maxSubSteps: 4,
+      maxSubSteps: 6,
       onStep: (dt) => this.#step(dt),
       onRender: (frameSeconds) => this.#render(frameSeconds),
     });
@@ -343,12 +366,18 @@ export class PathGame {
 
   dispose(): void {
     this.#loop.stop();
+    this.#network.disconnect();
     this.#input.dispose();
     this.#camera.dispose();
     this.#audio.dispose();
     this.#effects.dispose();
     this.#grassField.dispose();
     this.#clutter.dispose();
+    this.#water.dispose();
+    this.#dirtRoads.dispose();
+    this.#pois.dispose();
+    this.#valleyFog.dispose();
+    this.#ghostPlayers.dispose();
     this.#engine.dispose();
   }
 
@@ -359,6 +388,9 @@ export class PathGame {
     this.#activeScenario = 'spawn';
     this.#runSession.start();
     this.#enterDrivingPresentation();
+
+    // Send player name to SpacetimeDB
+    this.#network.setName(this.#shell.getPlayerName());
   }
 
   advanceTime(milliseconds: number): void {
@@ -765,6 +797,7 @@ export class PathGame {
 
     if (isDriving) {
       this.#mapDiscovery.reveal(this.#controller.position.x, this.#controller.position.z);
+      this.#pois.update(this.#controller.position.x, this.#controller.position.z);
       // Accumulate trail breadcrumbs (every ~5 m of travel)
       const pos = this.#controller.position;
       const lastTrail = this.#trail[this.#trail.length - 1];
@@ -800,24 +833,22 @@ export class PathGame {
     );
     this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
     this.#controller.applyTrafficInteraction(this.#lastTrafficInteraction);
-    this.#raiders.update(dt, this.#controller.position, this.#controller.velocity);
-    const raiderInteraction = this.#raiders.playerInteraction;
-    if (raiderInteraction.collision) {
-      this.#controller.applyTrafficInteraction({
-        collision: true,
-        correction: raiderInteraction.correction,
-        impulse: raiderInteraction.impulse,
-      });
-      this.#effects.emitCollisionSparks(
-        this.#controller.position,
-        this.#controller.velocity,
-        raiderInteraction.correction,
-      );
-    }
+    // Multiplayer: broadcast position + update ghost rendering
+    this.#network.update(
+      dt,
+      this.#controller.position.x,
+      this.#controller.position.y,
+      this.#controller.position.z,
+      this.#controller.state.steering, // heading derived from steering
+      this.#controller.state.speed,
+      this.#controller.state.isBoosting,
+      this.#controller.state.isDrifting,
+    );
+    this.#ghostPlayers.update(this.#network.getRemotePlayers());
 
     // Vehicle visuals + damage
     this.#vehicle.setPose(pose.position, pose.quaternion);
-    this.#vehicle.updateVisuals(dt, this.#controller.state);
+    this.#vehicle.updateVisuals(dt, this.#controller.state, this.#sky.sunIntensity);
 
     if (this.#controller.state.impactMagnitude > 0) {
       this.#vehicle.damage.applyImpact(
@@ -878,9 +909,6 @@ export class PathGame {
     this.#damageFlash *= Math.exp(-6 * dt);
     if (this.#damageFlash < 0.01) this.#damageFlash = 0;
     this.#engine.postProcess.setDamageFlash(this.#damageFlash);
-    const speedNorm = Math.min(this.#controller.state.speed / 34, 1);
-    this.#engine.postProcess.setSpeedIntensity(speedNorm);
-    this.#engine.postProcess.setMotionBlurStrength(speedNorm * 0.6);
 
     // Camera
     if (this.#runSession.mode === 'driving') {
@@ -953,12 +981,13 @@ export class PathGame {
     );
 
     // World visuals
-    this.#objectiveBeacon.update(dt, this.#runSession.mode === 'arrived');
+    const sunI = this.#sky.sunIntensity;
+    this.#objectiveBeacon.update(dt, this.#runSession.mode === 'arrived', sunI);
     for (const outpost of this.#routeOutposts) {
-      outpost.update(dt, false);
+      outpost.update(dt, false, sunI);
     }
     this.#mountainHub.update(dt);
-    this.#water.update(dt, this.#engine.camera.position);
+    this.#water.update(dt, this.#engine.camera.position, this.#sky.sunPosition);
     this.#grassField.update(
       dt,
       this.#engine.camera.position,
@@ -1005,6 +1034,28 @@ export class PathGame {
         this.#controller.state.impactMagnitude,
         this.#controller.state.surface,
       );
+
+      // Drift scoring
+      const state = this.#controller.state;
+      this.#driftScore.update(
+        dt,
+        state.isDrifting,
+        state.isGrounded,
+        state.lateralSpeed,
+        state.forwardSpeed,
+        state.speed,
+        state.surface,
+      );
+      this.#driftScore.setMapPercent(this.#mapDiscovery.getPercent());
+
+      // Live drift counter or scored drift popup
+      if (this.#driftScore.isActiveDrift) {
+        this.#shell.updateActiveDrift(this.#driftScore.activeDriftPoints);
+      }
+      const scoredDrift = this.#driftScore.consumeScoredDrift();
+      if (scoredDrift) {
+        this.#shell.showDriftScore(scoredDrift.points, scoredDrift.duration);
+      }
     }
 
     this.#syncShell();
@@ -1050,9 +1101,8 @@ export class PathGame {
     this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
     this.#reactiveProps.update(dt, this.#controller.position, this.#controller.velocity);
     this.#lastPropInteraction = this.#reactiveProps.playerInteraction;
-    this.#raiders.update(dt, this.#controller.position, this.#controller.velocity);
     this.#vehicle.setPose(pose.position, pose.quaternion);
-    this.#vehicle.updateVisuals(dt, pausedState);
+    this.#vehicle.updateVisuals(dt, pausedState, this.#sky.sunIntensity);
     this.#camera.updateGodMode(dt, this.#engine.camera, this.#input);
 
     this.#lastWorldStreamSnapshot = this.#worldStreamer.update(this.#engine.camera.position);
@@ -1082,12 +1132,13 @@ export class PathGame {
       this.#ambientTraffic,
     );
 
-    this.#objectiveBeacon.update(dt, false);
+    const godSunI = this.#sky.sunIntensity;
+    this.#objectiveBeacon.update(dt, false, godSunI);
     for (const outpost of this.#routeOutposts) {
-      outpost.update(dt, false);
+      outpost.update(dt, false, godSunI);
     }
     this.#mountainHub.update(dt);
-    this.#water.update(dt, this.#engine.camera.position);
+    this.#water.update(dt, this.#engine.camera.position, this.#sky.sunPosition);
     this.#grassField.update(
       dt,
       this.#engine.camera.position,
@@ -1099,8 +1150,33 @@ export class PathGame {
     this.#syncShell();
   }
 
+  #fpsAccumulator = 0;
+  #fpsFrameCount = 0;
+  #fpsElement: HTMLElement | null = null;
+
   #render(frameSeconds: number): void {
+    this.#engine.postProcess.setBloomThreshold(this.#sky.sunIntensity);
+    // Radial blur scales with forward speed — subtle at cruise, visible at boost
+    const speedNorm = THREE.MathUtils.clamp(this.#controller.state.speed / 38, 0, 1);
+    this.#engine.postProcess.setSpeedBlur(speedNorm * speedNorm * 0.8);
     this.#engine.render(frameSeconds);
+
+    // Update FPS + renderer stats counter
+    this.#fpsAccumulator += frameSeconds;
+    this.#fpsFrameCount++;
+    if (this.#fpsAccumulator >= 0.5) {
+      const fps = Math.round(this.#fpsFrameCount / this.#fpsAccumulator);
+      if (!this.#fpsElement) {
+        this.#fpsElement = document.getElementById('fps-counter');
+      }
+      if (this.#fpsElement) {
+        const info = this.#engine.renderer.info;
+        this.#fpsElement.textContent =
+          `${fps} fps · ${info.render.calls} draws · ${info.render.triangles} tris`;
+      }
+      this.#fpsAccumulator = 0;
+      this.#fpsFrameCount = 0;
+    }
   }
 
   // ─── State Transitions ─────────────────────────────────────
@@ -1219,6 +1295,8 @@ export class PathGame {
     this.#vehicle.damage.reset();
     this.#audio.resetDamageTracking();
     this.#achievements.resetTracking();
+    this.#driftScore.reset();
+    this.#shell.clearDriftScore();
     this.#driverProfile.resetTracking();
     this.#driverProfile.save();
     this.#shell.setTitleCareer(
@@ -1235,7 +1313,6 @@ export class PathGame {
     this.#prevWeatherCondition = '';
     this.#prevDamageHealth = 1;
     this.#discoveredSurfaces.clear();
-    this.#seenRaiders = false;
     this.#foundRoad = false;
     this.#prevDiscoveryPercent = 0;
     this.#trail = [];
@@ -1311,6 +1388,12 @@ export class PathGame {
     };
   }
 
+  #formatTimer(seconds: number): string {
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  }
+
   #buildHudSnapshot(): HudSnapshot {
     const state = this.#controller.state;
     const runSnapshot = this.#runSession.snapshot;
@@ -1355,7 +1438,9 @@ export class PathGame {
           : state.isBoosting
             ? 'Boosting'
           : state.isDrifting
-              ? 'Drifting'
+              ? (this.#driftScore.activeDriftPoints > 0
+                ? `Drift +${this.#driftScore.activeDriftPoints}`
+                : 'Drifting')
             : state.isBraking
                 ? 'Braking'
                 : 'Cruising',
@@ -1379,6 +1464,19 @@ export class PathGame {
         this.#runSession.mode === 'driving' && !audioReady
           ? `${routeCore} • tap or press a key for audio`
           : routeCore,
+      driftTotalLabel: this.#runSession.mode === 'driving'
+        ? `${this.#driftScore.totalPoints}`
+        : '0',
+      mappedLabel: `${this.#mapDiscovery.getPercent()}%`,
+      achievementsLabel: `${this.#achievements.unlockedCount}/${this.#achievements.totalCount}`,
+      playersLabel: this.#network.isConnected
+        ? this.#ghostPlayers.activeCount > 0
+          ? `${this.#ghostPlayers.activeCount} nearby`
+          : 'solo'
+        : 'offline',
+      timerLabel: this.#runSession.mode === 'driving'
+        ? this.#formatTimer(this.#runSession.snapshot.elapsedSeconds)
+        : '0:00',
     };
   }
 
@@ -1510,7 +1608,6 @@ export class PathGame {
       },
       trail: this.#trail,
       trailDistanceMeters: this.#computeTrailDistance(),
-      raiders: this.#seenRaiders ? this.#raiders.getPositions() : [],
     };
   }
 
@@ -1647,7 +1744,7 @@ export class PathGame {
       if (dist < 80) {
         const msgs = [
           'relay echo — outpost signal, weak',
-          'structure ahead — watch for raiders',
+          'structure ahead — proceed with care',
           'outpost ping — proceed with caution',
         ];
         this.#radioLog.push(msgs[i % msgs.length] ?? msgs[0]!, 'outpost');
@@ -1662,20 +1759,6 @@ export class PathGame {
         ? 'ridge beacon hot — almost there'
         : 'signal spike — summit relay close';
       this.#radioLog.push(msg, 'objective', 'alert');
-    }
-
-    // Proximity: raiders
-    const raiderDist = this.#raiders.getNearestDistance(pos);
-    if (raiderDist < 60) {
-      const msg = raiderDist < 25
-        ? 'hostile contact — evade'
-        : 'movement on the road — not friendly';
-      this.#radioLog.push(msg, 'raider', 'alert');
-      // Discovery: first raider sighting
-      if (!this.#seenRaiders) {
-        this.#seenRaiders = true;
-        this.#shell.showDiscoveryToast('Hostile contact');
-      }
     }
 
     // Water entry
@@ -1789,12 +1872,6 @@ export class PathGame {
       if (dist < 70) {
         return `Outpost ahead — ${Math.round(dist)}m`;
       }
-    }
-
-    // Near raiders
-    const raiderDist = this.#raiders.getNearestDistance(pos);
-    if (raiderDist < 50) {
-      return `Hostile patrol — ${Math.round(raiderDist)}m`;
     }
 
     // On road

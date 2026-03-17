@@ -42,11 +42,11 @@ export class VehicleController {
   readonly #right = new THREE.Vector3(1, 0, 0);
   readonly #correctedForward = new THREE.Vector3(0, 0, 1);
   readonly #landingBounceBySurface: Record<DriveSurface, number> = {
-    dirt: 0.14,
-    sand: 0.03,
-    grass: 0.10,
-    rock: 0.18,
-    snow: 0.12,
+    dirt: 0.06,
+    sand: 0.02,
+    grass: 0.05,
+    rock: 0.10,
+    snow: 0.06,
     water: 0.02,
   };
   #heading = 0;
@@ -287,21 +287,18 @@ export class VehicleController {
     const halfSize = this.#terrain.size * 0.5 - 2;
     this.position.x = THREE.MathUtils.clamp(this.position.x, -halfSize, halfSize);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -halfSize, halfSize);
-    this.velocity.x = (this.velocity.x + interaction.impulse.x) * 0.82;
-    this.velocity.z = (this.velocity.z + interaction.impulse.z) * 0.82;
+    // Apply impulse without dampening the entire velocity — only absorb collision energy
+    this.velocity.x += interaction.impulse.x;
+    this.velocity.z += interaction.impulse.z;
+    const impactDampen = THREE.MathUtils.clamp(1 - collisionMagnitude * 0.04, 0.88, 1);
+    this.velocity.x *= impactDampen;
+    this.velocity.z *= impactDampen;
 
     const forwardSpeed =
       this.velocity.x * this.#forward.x + this.velocity.z * this.#forward.z;
     const lateralSpeed =
       this.velocity.x * this.#right.x + this.velocity.z * this.#right.z;
-    this.#yawVelocity += THREE.MathUtils.clamp(lateralSpeed * 0.08, -0.22, 0.22);
-
-    if (this.state.isGrounded) {
-      this.position.y = this.#sampleSurfaceAt(this.position.x, this.position.z).rideHeight;
-    }
-
-    this.#updateOrientation(1 / 60, this.state.isGrounded);
-    this.#updateWheelData();
+    this.#yawVelocity += THREE.MathUtils.clamp(lateralSpeed * 0.05, -0.14, 0.14);
     this.state.speed = Math.hypot(this.velocity.x, this.velocity.z);
     this.state.forwardSpeed = forwardSpeed;
     this.state.lateralSpeed = lateralSpeed;
@@ -367,7 +364,8 @@ export class VehicleController {
     let planarSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     const autoBraking =
       throttleIntent < 0 && forwardSpeed > 2.2;
-    const braking = controlsEnabled && (input.brake || autoBraking);
+    const handbraking = controlsEnabled && input.handbrake;
+    const braking = controlsEnabled && (input.brake || autoBraking || handbraking);
     const driveThrottle = autoBraking ? 0 : throttleIntent;
     const wantsBoost = controlsEnabled && input.boost && driveThrottle > 0 && !braking;
     const counterSteering =
@@ -447,8 +445,12 @@ export class VehicleController {
       0,
       1.25,
     );
-    const gripScale =
-      1 - tuning.slip * driftPressure * (driveThrottle > 0 ? 0.42 : 0.2);
+    const handbrakeGripLoss = handbraking ? 0.55 : 0;
+    const gripScale = Math.max(
+      0,
+      1 - tuning.slip * driftPressure * (driveThrottle > 0 ? 0.42 : 0.2)
+        - handbrakeGripLoss,
+    );
     // Water depth reduces grip — shallow is slippery, deep is sluggish
     const waterGripScale = this.#waterDepth > 0.05
       ? THREE.MathUtils.clamp(1 - this.#waterDepth * 0.35, 0.2, 1)
@@ -711,8 +713,8 @@ export class VehicleController {
           0.05,
         )
       : 0;
-    this.#weightPitch = expLerp(this.#weightPitch, targetWeightPitch, 8, dt);
-    this.#weightRoll = expLerp(this.#weightRoll, targetWeightRoll, 6, dt);
+    this.#weightPitch = expLerp(this.#weightPitch, targetWeightPitch, 5, dt);
+    this.#weightRoll = expLerp(this.#weightRoll, targetWeightRoll, 4, dt);
 
     const maxSpeed =
       (isBoosting ? vehicleTuning.maxBoostSpeed : vehicleTuning.maxCruiseSpeed)
@@ -743,9 +745,10 @@ export class VehicleController {
     const hoverDistance = this.position.y - desiredHeight;
     if (hoverDistance <= vehicleTuning.suspensionTravel) {
       const springCompression = Math.max(desiredHeight - this.position.y, 0);
+      // Bilateral damping: resist both compression (falling) and rebound (bouncing up)
       const suspensionLift =
         springCompression * vehicleTuning.suspensionSpring
-        + (this.velocity.y < 0 ? -this.velocity.y * vehicleTuning.suspensionDamping : 0);
+        - this.velocity.y * vehicleTuning.suspensionDamping;
       this.velocity.y += (suspensionLift - vehicleTuning.gravity) * dt;
     } else {
       this.velocity.y -= vehicleTuning.gravity * dt;
@@ -889,8 +892,8 @@ export class VehicleController {
       }
       const landingBounceScale = this.#landingBounceBySurface[resolvedSurface];
       const reboundVelocity = Math.min(
-        landingImpact * landingBounceScale + 0.14,
-        1.55,
+        landingImpact * landingBounceScale,
+        0.8,
       );
       if (reboundVelocity > 0.08) {
         this.velocity.y = reboundVelocity;
@@ -962,7 +965,7 @@ export class VehicleController {
       const targetNormal = grounded
         ? this.#terrain.getNormalAt(this.position.x, this.position.z)
         : this.#worldUp;
-      const blend = 1 - Math.exp(-(grounded ? 14 : 2.4) * dt);
+      const blend = 1 - Math.exp(-(grounded ? 3.2 : 1.8) * dt);
       this.#groundNormal.lerp(targetNormal, blend).normalize();
       this.#composeBaseOrientation();
     }
@@ -1027,11 +1030,11 @@ export class VehicleController {
     const leftAvg = (wheelCompression[0] + wheelCompression[2]) * 0.5;
     const rightAvg = (wheelCompression[1] + wheelCompression[3]) * 0.5;
     // Front compressed more than rear = nose dips (positive pitch)
-    const targetSuspPitch = (frontAvg - rearAvg) * 0.035;
+    const targetSuspPitch = (frontAvg - rearAvg) * 0.02;
     // Right compressed more than left = lean right (positive roll)
-    const targetSuspRoll = (rightAvg - leftAvg) * 0.03;
-    this.#suspensionPitch = THREE.MathUtils.lerp(this.#suspensionPitch, targetSuspPitch, 0.18);
-    this.#suspensionRoll = THREE.MathUtils.lerp(this.#suspensionRoll, targetSuspRoll, 0.18);
+    const targetSuspRoll = (rightAvg - leftAvg) * 0.018;
+    this.#suspensionPitch = THREE.MathUtils.lerp(this.#suspensionPitch, targetSuspPitch, 0.03);
+    this.#suspensionRoll = THREE.MathUtils.lerp(this.#suspensionRoll, targetSuspRoll, 0.03);
 
     this.state.wheelCompression = wheelCompression;
     this.state.wheelContact = wheelContact;

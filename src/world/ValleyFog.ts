@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Terrain } from './Terrain';
+import { type Terrain, type BiomeType } from './Terrain';
 import type { WeatherCondition } from '../config/GameTuning';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ const FOG_FRAGMENT_SHADER = /* glsl */ `
     float v = 0.0;
     float a = 0.5;
     vec2 shift = vec2(100.0);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
       v += a * noise(p);
       p = p * 2.0 + shift;
       a *= 0.5;
@@ -89,7 +89,7 @@ const FOG_FRAGMENT_SHADER = /* glsl */ `
 
     // Soft edge fade based on view distance
     float viewDist = length(vViewPos);
-    float distFade = smoothstep(8.0, 28.0, viewDist) * smoothstep(380.0, 220.0, viewDist);
+    float distFade = smoothstep(8.0, 28.0, viewDist) * smoothstep(260.0, 160.0, viewDist);
 
     // When camera is submerged in the fog, boost density
     float submergeFactor = smoothstep(uCeilingY + 4.0, uCeilingY - uThickness * 0.5, uCameraY);
@@ -115,6 +115,8 @@ interface FogVolume {
   thickness: number;
   baseDrift: number;
   opacityScale: number;
+  /** Dominant biome at this fog volume's center. */
+  biome: BiomeType;
 }
 
 /** Maximum height (world Y) below which fog can pool. */
@@ -133,8 +135,17 @@ const MIN_FOG_SIZE = 80;
 // ValleyFog class
 // ---------------------------------------------------------------------------
 
+// Biome fog tint colors
+const BIOME_FOG_TINTS: Record<BiomeType, THREE.Color> = {
+  default: new THREE.Color(0xd6d9d2),
+  meadow: new THREE.Color(0xe2e8de),   // soft white-green
+  desert: new THREE.Color(0xdcc8a0),   // warm amber haze
+  hollow: new THREE.Color(0xa8b8b0),   // dark blue-green mist
+};
+
 export class ValleyFog {
   readonly #scene: THREE.Scene;
+  readonly #terrain: Terrain;
   readonly #volumes: FogVolume[] = [];
   #time = 0;
   #dayTime = 0.35;
@@ -146,6 +157,7 @@ export class ValleyFog {
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.#scene = scene;
+    this.#terrain = terrain;
     this.#buildFogVolumes(terrain);
   }
 
@@ -185,14 +197,25 @@ export class ValleyFog {
 
     for (const vol of this.#volumes) {
       const mat = vol.mesh.material;
+      // Biome density modifier — hollow is thicker, desert is thinner
+      const biomeDensity =
+        vol.biome === 'hollow' ? 1.35
+          : vol.biome === 'desert' ? 0.6
+          : vol.biome === 'meadow' ? 1.1
+          : 1.0;
       // Smooth opacity transitions — each layer has its own density scale
-      const layerTarget = targetOpacity * vol.opacityScale;
+      const layerTarget = targetOpacity * vol.opacityScale * biomeDensity;
       const current = mat.uniforms.uOpacity!.value as number;
       mat.uniforms.uOpacity!.value = THREE.MathUtils.lerp(current, layerTarget, dt * 0.8);
       mat.uniforms.uTime!.value = this.#time;
       mat.uniforms.uCameraY!.value = this.#cameraY;
+      // Blend fog color: biome tint as base, scene fog for time-of-day adaptation
+      const fogColorUniform = mat.uniforms.uFogColor!.value as THREE.Color;
+      const biomeTint = BIOME_FOG_TINTS[vol.biome];
+      fogColorUniform.copy(biomeTint);
       if (sceneFog) {
-        (mat.uniforms.uFogColor!.value as THREE.Color).lerp(sceneFog.color, 0.7);
+        // Blend toward scene fog to track time-of-day, but preserve biome character
+        fogColorUniform.lerp(sceneFog.color, 0.55);
       }
 
       // Track submersion for scene fog push
@@ -227,20 +250,20 @@ export class ValleyFog {
   #getTimeOfDayOpacity(): number {
     const t = this.#dayTime;
 
-    // Dawn fog peak: 0.20–0.32
-    const dawnPeak = this.#bellCurve(t, 0.26, 0.06) * 0.92;
+    // Dawn fog peak: 0.20–0.32 — thick morning mist
+    const dawnPeak = this.#bellCurve(t, 0.26, 0.06) * 1.0;
     // Morning burn-off
-    const morningBurn = this.#bellCurve(t, 0.40, 0.08) * 0.45;
-    // Midday minimum
-    const middayClear = this.#bellCurve(t, 0.50, 0.06) * 0.18;
+    const morningBurn = this.#bellCurve(t, 0.40, 0.08) * 0.52;
+    // Midday minimum — never fully clear
+    const middayClear = this.#bellCurve(t, 0.50, 0.06) * 0.24;
     // Golden hour return
-    const goldenHour = this.#bellCurve(t, 0.70, 0.06) * 0.72;
-    // Dusk peak
-    const duskPeak = this.#bellCurve(t, 0.80, 0.05) * 0.88;
-    // Night — moderate fog
-    const night = this.#bellCurve(t, 0.0, 0.12) * 0.55;
+    const goldenHour = this.#bellCurve(t, 0.70, 0.06) * 0.82;
+    // Dusk peak — almost as thick as dawn
+    const duskPeak = this.#bellCurve(t, 0.80, 0.05) * 0.95;
+    // Night — persistent haze
+    const night = this.#bellCurve(t, 0.0, 0.12) * 0.65;
     // Also catch wrap-around night
-    const nightWrap = this.#bellCurve(t, 1.0, 0.12) * 0.55;
+    const nightWrap = this.#bellCurve(t, 1.0, 0.12) * 0.65;
 
     return Math.max(dawnPeak, morningBurn, middayClear, goldenHour, duskPeak, night, nightWrap);
   }
@@ -324,6 +347,7 @@ export class ValleyFog {
       const size = Math.max(MIN_FOG_SIZE, maxDist * 2 + SCAN_STEP * 1.4);
       const ceilingY = Math.min(FOG_CEILING_MAX, region.maxH + 4);
       const thickness = Math.min(FOG_THICKNESS, ceilingY - region.minH + 4);
+      const regionBiome = terrain.getBiomeAt(cx, cz).biome;
 
       // Stack 3 layers at different heights for volumetric depth
       const layerOffsets = [0.0, 0.35, 0.7];
@@ -335,6 +359,7 @@ export class ValleyFog {
           ceilingY, thickness, layerY,
           layerOpacityScale,
           region.points.length * 0.12 + li * 1.7,
+          regionBiome,
         );
       }
     }
@@ -349,11 +374,13 @@ export class ValleyFog {
     layerY: number,
     opacityScale: number,
     driftSeed: number,
+    biome: BiomeType = 'default',
   ): void {
     const geometry = new THREE.PlaneGeometry(size, size, 1, 1);
     geometry.rotateX(-Math.PI / 2);
 
-    const fogColor = new THREE.Color(0xd4dbd6);
+    // Start with biome-tinted fog color
+    const fogColor = BIOME_FOG_TINTS[biome].clone();
 
     const material = new THREE.ShaderMaterial({
       vertexShader: FOG_VERTEX_SHADER,
@@ -384,6 +411,7 @@ export class ValleyFog {
       thickness,
       baseDrift: driftSeed,
       opacityScale,
+      biome,
     });
   }
 }

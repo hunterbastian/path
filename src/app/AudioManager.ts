@@ -52,7 +52,11 @@ export class AudioManager {
     return this.#impactAudio;
   }
 
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style
+  get #muted(): boolean { return true; }
+
   async activate(): Promise<void> {
+    if (this.#muted) return;
     const unlocked = await this.#engineAudio.activate();
     if (unlocked) {
       this.removeUnlockListeners();

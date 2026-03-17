@@ -61,11 +61,12 @@ export class MapDiscoverySystem {
       Math.ceil(((z + radius) + halfWorld) / cellHeight),
     );
 
+    const radiusSq = radius * radius;
     for (let row = minRow; row <= maxRow; row += 1) {
       for (let column = minColumn; column <= maxColumn; column += 1) {
-        const cellCenterX = -halfWorld + (column + 0.5) * cellWidth;
-        const cellCenterZ = -halfWorld + (row + 0.5) * cellHeight;
-        if (Math.hypot(cellCenterX - x, cellCenterZ - z) <= radius) {
+        const dx = -halfWorld + (column + 0.5) * cellWidth - x;
+        const dz = -halfWorld + (row + 0.5) * cellHeight - z;
+        if (dx * dx + dz * dz <= radiusSq) {
           this.#cells[row * this.#columns + column] = 1;
         }
       }
