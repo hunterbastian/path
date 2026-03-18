@@ -99,6 +99,7 @@ Progressive disclosure: essential stats always visible, full grid on Tab.
 |---------|----------|-------------|
 | Speedometer | Bottom center | Existing — restyle to amber on transparent (no paper panel). Speed value + km/h label + bar |
 | Compass strip | Top center | Heading with cardinal labels, amber diamond marker. Fades when not turning. |
+| Weather indicator | Near compass or corner | Amber icon + condition text. Updates on biome change. See § Per-Biome Weather. |
 | Boost gauge | Near speedo or corner | Replaces existing HUD boost display. Shows `boostLevel` (0–1) as percentage + bar. "Glow" = `text-shadow` intensity scales with boost level. |
 | Drift total | Floating | Persistent running score. Pulses during active drift. |
 | Surface type | Small, unobtrusive | Color-coded terrain label (dirt=clay, sand=warm, rock=grey, grass=green) |
@@ -127,6 +128,35 @@ The island is divided into 5 distinct biomes radiating outward from a central el
 | 3 | **Salt Flats** | Wide open white expanse, cracked ground | Salt (fast surface) | Bright, heat shimmer | Medium — speed-focused |
 | 4 | **Jagged Peaks** | Fitz Roy-style spires, switchback roads, steep grades | Rock, snow | Cold, dramatic, high contrast | Hard |
 | 5 | **Coast** | Shoreline roads, sea stacks, beach | Sand, rock | Ocean breeze, spray | Medium |
+
+### Per-Biome Weather
+
+Weather is biome-local, not global. Each biome has its own weather state that cycles independently.
+
+| Biome | Weather Options | Notes |
+|-------|----------------|-------|
+| Alpine Meadows | Clear, light rain | Gentle rain with sun breaks. No snow. |
+| Canyon | Clear, dust storm | No rain — too dry. Dust storm reduces visibility. |
+| Salt Flats | Clear only | Always dry, always bright. Weather is the heat shimmer. |
+| Jagged Peaks | Clear, snow, blizzard | Snow is frequent. Blizzard = heavy snow + wind + low visibility. |
+| Coast | Clear, rain, heavy rain | Coastal storms roll in. Rain + ocean spray. |
+
+- Weather transitions smoothly (60-90s crossfade)
+- Existing `RainSystem` (120 drop cap) extends to support snow variant (slower fall, lateral drift, white particles)
+- Weather affects driving: rain reduces grip slightly, snow reduces grip more, dust storm / blizzard reduce draw distance
+- Weather state per biome persisted in memory (not localStorage — resets each session)
+
+### Weather on HUD
+
+The always-visible HUD gets a **weather indicator** — small amber icon + condition text near the compass or corner. Shows current biome weather:
+
+- Clear: `○` (empty circle)
+- Rain: `≡` (horizontal lines)
+- Snow: `✦` (crystal)
+- Dust: `◌` (dotted circle)
+- Blizzard: `✦✦` (double crystal)
+
+Updates when crossing biome boundaries. Transitions with a brief fade.
 
 ### Island Layout
 
@@ -243,13 +273,16 @@ Driving is the XP source. No grinding — just play.
 - Per-biome color palettes, grass config, fog
 - Biome transition blending
 
-### Phase 3: Routes + Ambience
+### Phase 3: Routes + Ambience + Weather
 - Route registry with named waypoint paths
 - Extend DirtRoads with route-aware road generation
 - Per-biome road materials and widths
 - HUD: route name display when on a named road
 - Per-biome ambient particles (pollen, dust, snow, spray)
 - Wildlife billboard sprites on looping paths
+- Per-biome weather system (rain, snow, dust storms)
+- Weather HUD indicator
+- Weather → grip effects on vehicle
 
 ### Phase 4: Progression
 - XP system (distance + discovery)
