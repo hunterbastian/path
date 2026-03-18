@@ -166,6 +166,40 @@ Named dirt roads connecting biomes and points of interest.
 - **Main routes**: wider, connect biome centers. Always accessible.
 - **Side paths**: narrower, lead to viewpoints or hidden areas. Some level-gated.
 
+### Per-Biome Road Style
+
+Road appearance changes based on biome — same DirtRoads mesh system, different material/width:
+
+| Biome | Road Look | Width |
+|-------|-----------|-------|
+| Alpine Meadows | Worn dirt trail, grass encroaching at edges | Medium |
+| Canyon | Carved rock shelf, sandy/red surface, narrow cliff edges | Narrow |
+| Salt Flats | Faint tire tracks on white crust, barely visible | Wide |
+| Jagged Peaks | Gravel switchbacks, rocky borders, snow-dusted | Narrow |
+| Coast | Packed sand path, driftwood/seagrass edges | Medium |
+
+---
+
+## 6b. Biome Ambience — Particles & Wildlife
+
+Each biome has ambient particle systems and simple wildlife to make it feel alive. Built on the existing `SpriteParticleField` / `DustSystem` pattern.
+
+### Per-Biome Ambience
+
+| Biome | Particles | Wildlife |
+|-------|-----------|----------|
+| Alpine Meadows | Pollen drifts, dandelion seeds, light dust | Birds circling overhead (instanced billboard sprites on looping paths), butterflies near wildflowers |
+| Canyon | Red dust clouds, small rock debris near cliffs | Hawks soaring in thermals (slow, wide circles) |
+| Salt Flats | Heat shimmer (shader distortion), fine white dust | Nothing — empty, desolate feel is the point |
+| Jagged Peaks | Snow flurries, ice crystals catching light | Eagles at high altitude (rare, distant) |
+| Coast | Sea spray, foam particles near shore | Seabirds (existing bird system if any), crabs skittering on rocks (ground sprites) |
+
+### Implementation Notes
+
+- **Particles**: new instances of `SpriteParticleField` per biome, spawned only when player is in that biome. Despawn when leaving.
+- **Wildlife**: instanced billboard sprites on simple spline/circle paths. Not physical — no collision. 2-3 species per biome max. LOD culled beyond ~120m.
+- **Sound**: when audio is wired, each biome gets ambient loops (wind variants, bird calls, ocean, silence for salt flats).
+
 ---
 
 ## 7. Progression System
@@ -209,10 +243,13 @@ Driving is the XP source. No grinding — just play.
 - Per-biome color palettes, grass config, fog
 - Biome transition blending
 
-### Phase 3: Routes
+### Phase 3: Routes + Ambience
 - Route registry with named waypoint paths
 - Extend DirtRoads with route-aware road generation
+- Per-biome road materials and widths
 - HUD: route name display when on a named road
+- Per-biome ambient particles (pollen, dust, snow, spray)
+- Wildlife billboard sprites on looping paths
 
 ### Phase 4: Progression
 - XP system (distance + discovery)
