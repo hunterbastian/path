@@ -2,21 +2,21 @@
  * ProgressionSystem — XP tracking and level calculation with localStorage persistence.
  *
  * XP sources:
- * - Distance driven: ~0.5 XP per meter (continuous, every frame)
- * - Discovery: ~10 XP per new fog-of-war cell discovered (one-time per cell)
+ * - Distance driven: ~1.0 XP per meter (continuous, every frame)
+ * - Discovery: ~15 XP per new fog-of-war cell discovered (one-time per cell)
  *
  * 8 levels with increasing thresholds. Progress persists across sessions.
  */
 
 const STORAGE_KEY = 'path-progression';
 
-const LEVEL_THRESHOLDS = [0, 500, 1500, 3500, 7000, 12000, 20000, 30000] as const;
+const LEVEL_THRESHOLDS = [0, 300, 900, 2000, 4000, 7000, 12000, 20000] as const;
 
 /** XP awarded per meter driven. */
-const XP_PER_METER = 0.5;
+const XP_PER_METER = 1.0;
 
 /** XP awarded per newly discovered fog cell. */
-const XP_PER_CELL = 10;
+const XP_PER_CELL = 15;
 
 /** How often to auto-save, in seconds. */
 const SAVE_INTERVAL_S = 30;

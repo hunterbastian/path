@@ -16,10 +16,11 @@ interface GateDefinition {
 }
 
 const GATES: GateDefinition[] = [
-  { id: 'canyon-pass', x: 100, z: -60, radius: 8, requiredLevel: 2, label: 'Canyon Pass' },
-  { id: 'peak-trail', x: -40, z: 110, radius: 8, requiredLevel: 3, label: 'Peak Trail' },
-  { id: 'salt-crossing', x: -110, z: -30, radius: 8, requiredLevel: 2, label: 'Salt Crossing' },
-  { id: 'summit-path', x: -20, z: 90, radius: 8, requiredLevel: 5, label: 'Summit Path' },
+  { id: 'canyon-pass',   x: 85,   z: -85,  radius: 12, requiredLevel: 2, label: 'Canyon Pass' },
+  { id: 'peak-trail',   x: 85,   z: 85,   radius: 12, requiredLevel: 3, label: 'Peak Trail' },
+  { id: 'coast-gate',   x: -85,  z: 85,   radius: 12, requiredLevel: 2, label: 'Coast Gate' },
+  { id: 'salt-crossing', x: -85, z: -85,  radius: 12, requiredLevel: 2, label: 'Salt Crossing' },
+  { id: 'summit-path',  x: 170,  z: 170,  radius: 12, requiredLevel: 5, label: 'Summit Path' },
 ] as const;
 
 export class LevelGateSystem {

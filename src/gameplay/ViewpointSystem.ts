@@ -21,15 +21,15 @@ export interface ViewpointDefinition {
 
 const VIEWPOINTS: readonly ViewpointDefinition[] = [
   // Alpine Meadows — center ridge
-  { id: 'meadow_overlook',   name: 'Meadow Overlook',   x: 0,    z: -20,  triggerRadius: 15, revealRadius: 120, xpReward: 50 },
-  // Canyon — NE rim (~45°, ~200m out)
-  { id: 'red_ridge',         name: 'Red Ridge',          x: 160,  z: -100, triggerRadius: 15, revealRadius: 120, xpReward: 50 },
-  // Salt Flats — NW edge (~315°, ~220m out)
-  { id: 'salt_basin_vista',  name: 'Salt Basin Vista',   x: -180, z: -120, triggerRadius: 15, revealRadius: 120, xpReward: 50 },
-  // Jagged Peaks — SE summit (~135°, ~240m out)
-  { id: 'fitz_roy_point',    name: 'Fitz Roy Point',     x: 170,  z: 170,  triggerRadius: 15, revealRadius: 120, xpReward: 50 },
-  // Coast — SW cliff (~225°, ~200m out)
-  { id: 'shoreline_bluff',   name: 'Shoreline Bluff',    x: -140, z: 140,  triggerRadius: 15, revealRadius: 120, xpReward: 50 },
+  { id: 'meadow_overlook',   name: 'Meadow Overlook',   x: 0,    z: -30,  triggerRadius: 15, revealRadius: 120, xpReward: 100 },
+  // Canyon — deeper into canyon (~45°, ~240m out)
+  { id: 'red_ridge',         name: 'Red Ridge',          x: 200,  z: -130, triggerRadius: 15, revealRadius: 120, xpReward: 100 },
+  // Salt Flats — out in salt flats (~315°, ~270m out)
+  { id: 'salt_basin_vista',  name: 'Salt Basin Vista',   x: -220, z: -150, triggerRadius: 15, revealRadius: 120, xpReward: 100 },
+  // Jagged Peaks — deep in peaks (~135°, ~280m out)
+  { id: 'fitz_roy_point',    name: 'Fitz Roy Point',     x: 200,  z: 200,  triggerRadius: 15, revealRadius: 120, xpReward: 100 },
+  // Coast — along coast (~225°, ~250m out)
+  { id: 'shoreline_bluff',   name: 'Shoreline Bluff',    x: -180, z: 180,  triggerRadius: 15, revealRadius: 120, xpReward: 100 },
 ] as const;
 
 // ---------------------------------------------------------------------------
