@@ -26,6 +26,13 @@ Arcade driving game built with Three.js + TypeScript + Vite. Focus on experience
 - `src/gameplay/MapDiscoverySystem.ts` — grid-based fog-of-war, squared-distance reveal
 - `src/app/PathGame.ts` — game entry point, wires systems together
 
+## Biomes
+- 5 radial biomes: Alpine Meadows (center, elevated), Canyon (N-NE), Salt Flats (NW-W), Jagged Peaks (E-SE), Coast (S-SW)
+- `src/world/BiomeConfig.ts` — biome definitions, `sampleBiome(x, z)` lookup
+- Per-biome: terrain noise, vertex colors, surface types, grass density/color, clutter, fog, cloud density, sky tinting
+- 30m smooth transitions between adjacent biomes
+- Alpine Meadows is elevated — slopes outward so all biomes visible from center
+
 ## Controls (Crossout-style)
 - WASD/Arrows — drive/steer
 - Space — handbrake (drift)
