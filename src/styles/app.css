@@ -1492,6 +1492,220 @@ body {
   }
 }
 
+/* ── Floating HUD Elements ── */
+
+.hud-compass,
+.hud-boost,
+.hud-drift,
+.hud-surface,
+.hud-weather {
+  position: fixed;
+  z-index: 12;
+  pointer-events: none;
+  font-family: 'Geist Mono', monospace;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+body.game-started .hud-compass,
+body.game-started .hud-boost,
+body.game-started .hud-drift,
+body.game-started .hud-surface,
+body.game-started .hud-weather { opacity: 1; }
+
+body.game-arrived .hud-compass,
+body.game-arrived .hud-boost,
+body.game-arrived .hud-drift,
+body.game-arrived .hud-surface,
+body.game-arrived .hud-weather,
+body.map-open .hud-compass,
+body.map-open .hud-boost,
+body.map-open .hud-drift,
+body.map-open .hud-surface,
+body.map-open .hud-weather,
+body.pause-menu-open .hud-compass,
+body.pause-menu-open .hud-boost,
+body.pause-menu-open .hud-drift,
+body.pause-menu-open .hud-surface,
+body.pause-menu-open .hud-weather { opacity: 0; }
+
+.hud-compass {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hud-compass-labels {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.hud-compass-side {
+  font-size: 9px;
+  color: var(--amber-muted);
+  letter-spacing: 0.1em;
+}
+
+.hud-compass-center {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--amber-bright);
+  letter-spacing: 0.06em;
+}
+
+.hud-compass-track {
+  width: 80px;
+  height: 1px;
+  background: var(--amber-dim);
+  position: relative;
+}
+
+.hud-compass-marker {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 4px;
+  height: 4px;
+  background: var(--amber);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.hud-boost {
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-80px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hud-boost-label {
+  font-size: 5px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--amber-muted);
+}
+
+.hud-boost-bar {
+  width: 60px;
+  height: 3px;
+  background: var(--amber-dim);
+}
+
+.hud-boost-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--amber-muted), var(--amber));
+  transition: width 0.15s ease-out;
+}
+
+.hud-boost-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--amber-bright);
+}
+
+.hud-drift {
+  top: 12px;
+  left: calc(16px + var(--safe-left));
+}
+
+.hud-drift-label {
+  font-size: 5px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--amber-muted);
+  display: block;
+}
+
+.hud-drift-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--amber-bright);
+  letter-spacing: -0.02em;
+}
+
+.hud-surface {
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(30px);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--amber-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hud-weather {
+  top: 12px;
+  right: calc(16px + var(--safe-right));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hud-weather-icon {
+  font-size: 10px;
+  color: var(--amber-bright);
+}
+
+.hud-weather-text {
+  font-size: 8px;
+  color: var(--amber-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hud-expanded {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  pointer-events: none;
+  background: rgba(28, 30, 36, 0.85);
+  border: 1px solid var(--amber-dim);
+  backdrop-filter: blur(4px);
+  padding: 12px;
+}
+
+.hud-expanded[hidden] {
+  display: none;
+}
+
+.hud-expanded-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.hud-expanded-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--amber-dim);
+}
+
+.hud-expanded-label {
+  font-size: 5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--amber-muted);
+}
+
+.hud-expanded-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--amber-bright);
+}
+
 /* ── Bottom Speedometer ── */
 
 .speedo {
