@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SEA_LEVEL, type Terrain, type BiomeType } from './Terrain';
+import { sampleBiome } from './BiomeConfig';
 import type { WeatherCondition } from '../config/GameTuning';
 
 // ---------------------------------------------------------------------------
@@ -135,13 +136,19 @@ const MIN_FOG_SIZE = 80;
 // ValleyFog class
 // ---------------------------------------------------------------------------
 
-// Biome fog tint colors
+// Legacy biome fog tint colors (used for per-volume init tint)
 const BIOME_FOG_TINTS: Record<BiomeType, THREE.Color> = {
   default: new THREE.Color(0xd0c8b0),   // dusty warm mist
   meadow: new THREE.Color(0xd8d0b8),    // warm steppe haze
   desert: new THREE.Color(0xd0b890),    // amber dust
   hollow: new THREE.Color(0xa09880),    // dark dusty mist
 };
+
+/** Lerp speed for biome fog transitions (~3 seconds to converge). */
+const BIOME_FOG_LERP_SPEED = 0.35;
+
+/** Scratch color to avoid per-frame allocation. */
+const _tempColor = new THREE.Color();
 
 export class ValleyFog {
   readonly #scene: THREE.Scene;
@@ -151,6 +158,15 @@ export class ValleyFog {
   #dayTime = 0.35;
   #weatherCondition: WeatherCondition = 'sunny';
   #cameraY = 20;
+
+  /** Current interpolated biome fog density at the player position. */
+  #currentBiomeDensity = 1.0;
+  /** Current interpolated biome fog color at the player position. */
+  readonly #currentBiomeFogColor = new THREE.Color(0xd0c8b0);
+  /** Target biome fog density (sampled each frame, lerped toward). */
+  #targetBiomeDensity = 1.0;
+  /** Target biome fog color (sampled each frame, lerped toward). */
+  readonly #targetBiomeFogColor = new THREE.Color(0xd0c8b0);
 
   /** Extra fog-near push when the camera is submerged. */
   fogNearPush = 0;
@@ -172,6 +188,9 @@ export class ValleyFog {
   update(dt: number, cameraPosition: THREE.Vector3): void {
     this.#time += dt;
     this.#cameraY = cameraPosition.y;
+
+    // --- Sample biome at player position for fog adaptation ---
+    this.#updateBiomeFogTarget(cameraPosition.x, cameraPosition.z, dt);
 
     // Time-of-day opacity curve
     // Thickest at dawn (0.22-0.30) and dusk (0.72-0.82)
@@ -197,22 +216,23 @@ export class ValleyFog {
 
     for (const vol of this.#volumes) {
       const mat = vol.mesh.material;
-      // Biome density modifier — hollow is thicker, desert is thinner
-      const biomeDensity =
-        vol.biome === 'hollow' ? 1.35
-          : vol.biome === 'desert' ? 0.6
-          : vol.biome === 'meadow' ? 1.1
-          : 1.0;
+
+      // Use smoothly interpolated biome density from player position
+      const biomeDensity = this.#currentBiomeDensity;
+
       // Smooth opacity transitions — each layer has its own density scale
       const layerTarget = targetOpacity * vol.opacityScale * biomeDensity;
       const current = mat.uniforms.uOpacity!.value as number;
       mat.uniforms.uOpacity!.value = THREE.MathUtils.lerp(current, layerTarget, dt * 0.8);
       mat.uniforms.uTime!.value = this.#time;
       mat.uniforms.uCameraY!.value = this.#cameraY;
+
       // Blend fog color: biome tint as base, scene fog for time-of-day adaptation
       const fogColorUniform = mat.uniforms.uFogColor!.value as THREE.Color;
       const biomeTint = BIOME_FOG_TINTS[vol.biome];
+      // Start from volume's static biome tint, then blend toward player's current biome fog color
       fogColorUniform.copy(biomeTint);
+      fogColorUniform.lerp(this.#currentBiomeFogColor, 0.5);
       if (sceneFog) {
         // Blend toward scene fog to track time-of-day, but preserve biome character
         fogColorUniform.lerp(sceneFog.color, 0.55);
@@ -232,6 +252,41 @@ export class ValleyFog {
 
     // Scene fog push — when inside valley fog, scene fog closes in
     this.fogNearPush = maxSubmersion * targetOpacity * 0.45;
+  }
+
+  // -----------------------------------------------------------------------
+  // Biome fog sampling & smooth interpolation
+  // -----------------------------------------------------------------------
+
+  /** Sample the biome at the player's XZ position and lerp toward it. */
+  #updateBiomeFogTarget(x: number, z: number, dt: number): void {
+    const biomeSample = sampleBiome(x, z);
+    const primaryFog = biomeSample.primary.fog;
+
+    if (biomeSample.secondary && biomeSample.blend > 0) {
+      // In a transition zone — blend between primary and secondary biome fog
+      const secondaryFog = biomeSample.secondary.fog;
+      this.#targetBiomeDensity =
+        THREE.MathUtils.lerp(primaryFog.density, secondaryFog.density, biomeSample.blend);
+      this.#targetBiomeFogColor.set(primaryFog.color);
+      this.#targetBiomeFogColor.lerp(
+        _tempColor.set(secondaryFog.color),
+        biomeSample.blend,
+      );
+    } else {
+      // Pure biome
+      this.#targetBiomeDensity = primaryFog.density;
+      this.#targetBiomeFogColor.set(primaryFog.color);
+    }
+
+    // Smooth interpolation (~3 seconds to converge)
+    const lerpFactor = 1 - Math.exp(-BIOME_FOG_LERP_SPEED * dt);
+    this.#currentBiomeDensity = THREE.MathUtils.lerp(
+      this.#currentBiomeDensity,
+      this.#targetBiomeDensity,
+      lerpFactor,
+    );
+    this.#currentBiomeFogColor.lerp(this.#targetBiomeFogColor, lerpFactor);
   }
 
   dispose(): void {

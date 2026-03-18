@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../core/SeededRandom';
+import { sampleBiome, type BiomeName } from './BiomeConfig';
 
 interface CloudInstance {
   x: number;
@@ -11,8 +12,27 @@ interface CloudInstance {
   speedZ: number;
 }
 
-const CLOUD_COUNT = 24;
+/** Maximum cloud candidates to evaluate (actual count may be lower after biome filtering). */
+const CLOUD_CANDIDATES = 36;
 const DRIFT_WRAP = 700; // wrap distance from center
+
+/** Cloud spawn density per biome (probability that a candidate survives). */
+const BIOME_CLOUD_DENSITY: Record<BiomeName, number> = {
+  'alpine-meadows': 1.0,
+  'canyon': 0.4,
+  'salt-flats': 0.15,
+  'jagged-peaks': 1.0,   // capped at 1.0 but we generate extra candidates
+  'coast': 1.0,
+};
+
+/** Per-biome altitude adjustment (added to base Y range). */
+const BIOME_CLOUD_ALTITUDE: Record<BiomeName, { min: number; max: number }> = {
+  'alpine-meadows': { min: 115, max: 195 },
+  'canyon': { min: 115, max: 195 },
+  'salt-flats': { min: 115, max: 195 },
+  'jagged-peaks': { min: 80, max: 140 },   // lower altitude, hugging peaks
+  'coast': { min: 70, max: 140 },           // lower altitude, coastal mist
+};
 
 export class CloudSystem {
   readonly #mesh: THREE.InstancedMesh;
@@ -30,27 +50,44 @@ export class CloudSystem {
       fog: false,
     });
 
-    this.#mesh = new THREE.InstancedMesh(geometry, material, CLOUD_COUNT);
-    this.#mesh.frustumCulled = false;
-    this.#mesh.renderOrder = -1;
-    scene.add(this.#mesh);
-
     const random = new SeededRandom(0x434c4f55);
-    this.#clouds = [];
-    for (let i = 0; i < CLOUD_COUNT; i++) {
-      // Scatter in a large area above the terrain
+    const accepted: CloudInstance[] = [];
+
+    // Generate more candidates than we need; biome density filtering will cull some
+    for (let i = 0; i < CLOUD_CANDIDATES; i++) {
       const angle = random.next() * Math.PI * 2;
       const radius = random.range(80, 580);
-      this.#clouds.push({
-        x: Math.cos(angle) * radius,
-        y: random.range(115, 195),
-        z: Math.sin(angle) * radius,
+      const cx = Math.cos(angle) * radius;
+      const cz = Math.sin(angle) * radius;
+
+      // Sample biome below this cloud position
+      const biomeSample = sampleBiome(cx, cz);
+      const biomeName = biomeSample.primary.name;
+      const density = BIOME_CLOUD_DENSITY[biomeName];
+
+      // Skip cloud based on biome density probability
+      if (random.next() > density) continue;
+
+      // Altitude adjusted per biome
+      const alt = BIOME_CLOUD_ALTITUDE[biomeName];
+      const y = random.range(alt.min, alt.max);
+
+      accepted.push({
+        x: cx,
+        y,
+        z: cz,
         width: random.range(45, 100),
         height: random.range(18, 38),
         speedX: random.range(0.8, 2.8) * (random.next() > 0.5 ? 1 : -0.3),
         speedZ: random.range(-0.4, 0.6),
       });
     }
+
+    this.#clouds = accepted;
+    this.#mesh = new THREE.InstancedMesh(geometry, material, accepted.length);
+    this.#mesh.frustumCulled = false;
+    this.#mesh.renderOrder = -1;
+    scene.add(this.#mesh);
   }
 
   update(dt: number, camera: THREE.Camera, sunIntensity: number): void {
