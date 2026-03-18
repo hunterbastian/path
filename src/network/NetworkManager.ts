@@ -49,18 +49,28 @@ export interface RemotePlayerState {
   interpT: number;
 }
 
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_DELAY_MS = 5000;
+
 export class NetworkManager {
   #connection: DbConnection | null = null;
   #localIdentity: string | null = null;
   readonly #remotePlayers = new Map<string, RemotePlayerState>();
   #sendAccumulator = 0;
   #connected = false;
+  #reconnectAttempts = 0;
+  #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  #lastHost: string | null = null;
+  #lastModule: string | null = null;
 
   /**
    * Connect to a SpacetimeDB module. Non-blocking — the game works offline
    * and ghosts appear when the connection establishes.
    */
   async connect(host: string, moduleName: string): Promise<void> {
+    this.#lastHost = host;
+    this.#lastModule = moduleName;
+
     try {
       const savedToken = localStorage.getItem(TOKEN_KEY) ?? undefined;
 
@@ -71,6 +81,7 @@ export class NetworkManager {
         .onConnect((_conn: DbConnection, identity: { toHexString(): string }, token: string) => {
           this.#localIdentity = identity.toHexString();
           this.#connected = true;
+          this.#reconnectAttempts = 0;
           if (token) {
             localStorage.setItem(TOKEN_KEY, token);
           }
@@ -89,6 +100,7 @@ export class NetworkManager {
           console.log('[Network] Disconnected');
           this.#connected = false;
           this.#remotePlayers.clear();
+          this.#scheduleReconnect();
         })
         .build();
 
@@ -263,9 +275,33 @@ export class NetworkManager {
   }
 
   disconnect(): void {
+    if (this.#reconnectTimer != null) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
+    }
+    this.#reconnectAttempts = MAX_RECONNECT_ATTEMPTS; // prevent auto-reconnect
     this.#connection?.disconnect();
     this.#connection = null;
     this.#connected = false;
     this.#remotePlayers.clear();
+  }
+
+  #scheduleReconnect(): void {
+    if (this.#reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.log('[Network] Max reconnect attempts reached — staying in single-player mode');
+      return;
+    }
+    if (!this.#lastHost || !this.#lastModule) return;
+
+    this.#reconnectAttempts += 1;
+    console.log(`[Network] Reconnecting in ${RECONNECT_DELAY_MS / 1000}s (attempt ${this.#reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+    this.#reconnectTimer = setTimeout(() => {
+      this.#reconnectTimer = null;
+      if (this.#connected) return;
+      this.connect(this.#lastHost!, this.#lastModule!).catch(() => {
+        // connect() already handles errors internally
+      });
+    }, RECONNECT_DELAY_MS);
   }
 }

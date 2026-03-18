@@ -42,6 +42,15 @@ export class Engine {
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
 
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('WebGL context lost — game paused');
+    });
+
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.info('WebGL context restored');
+    });
+
     this.postProcess = new GritPostProcess(
       this.renderer,
       this.scene,

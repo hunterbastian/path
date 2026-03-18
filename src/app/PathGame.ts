@@ -239,6 +239,8 @@ export class PathGame {
     this.#vehicle = new Vehicle(this.#engine.scene);
     Vehicle.loadModel('/models/textured.glb').then((modelScene) => {
       this.#vehicle.replaceBody(modelScene);
+    }).catch(() => {
+      console.warn('Vehicle model failed to load — using fallback geometry');
     });
     this.#controller = new VehicleController(
       this.#terrain,

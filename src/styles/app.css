@@ -551,6 +551,8 @@ body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--amber-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -566,6 +568,9 @@ body {
   padding: 5px 8px;
   outline: none;
   transition: border-color 160ms ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .device-input:focus {
@@ -1310,6 +1315,8 @@ body {
   transform: translateX(30px);
   transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .discovery-toast.visible {
@@ -1414,6 +1421,8 @@ body {
   color: var(--value);
   letter-spacing: 0.04em;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .achievement-toast__desc {
@@ -1421,6 +1430,8 @@ body {
   color: var(--label);
   line-height: 1.4;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .achievement-toast__progress {
@@ -1482,6 +1493,9 @@ body {
   text-transform: uppercase;
   color: var(--amber-bright);
   margin-top: 8px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Responsive ── */
@@ -1635,6 +1649,9 @@ body.pause-menu-open .hud-weather { opacity: 0; }
   font-weight: 700;
   color: var(--amber-bright);
   letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-compass-track {
@@ -1687,6 +1704,9 @@ body.pause-menu-open .hud-weather { opacity: 0; }
   font-size: 10px;
   font-weight: 700;
   color: var(--amber-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-drift {
@@ -1707,6 +1727,9 @@ body.pause-menu-open .hud-weather { opacity: 0; }
   font-weight: 800;
   color: var(--amber-bright);
   letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-surface {
@@ -1738,6 +1761,9 @@ body.pause-menu-open .hud-weather { opacity: 0; }
   color: var(--amber-muted);
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-expanded {
@@ -1782,6 +1808,9 @@ body.pause-menu-open .hud-weather { opacity: 0; }
   font-size: 10px;
   font-weight: 700;
   color: var(--amber-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Bottom Speedometer ── */
@@ -1822,6 +1851,9 @@ body.pause-menu-open .speedo {
     0 0 20px rgba(0, 0, 0, 0.3);
   line-height: 1;
   transition: color 0.3s ease, text-shadow 0.3s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .speedo[data-intensity="warm"] .speedo-value {
@@ -1911,6 +1943,9 @@ body.pause-menu-open .hud-xp { opacity: 0; }
   text-transform: uppercase;
   color: var(--amber-muted);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Corner Minimap ── */
