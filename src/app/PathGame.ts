@@ -1224,6 +1224,13 @@ export class PathGame {
     this.#pauseVisible = shouldPause;
     if (shouldPause) {
       this.#mapVisible = false;
+      // Update settings panel with current input state
+      const inputDebug = this.#input.getDebugState();
+      this.#shell.updateSettingsPanel(
+        inputDebug.activeSource === 'gamepad' ? 'Gamepad' : 'Keyboard',
+        inputDebug.gamepadConnected,
+        inputDebug.gamepadLabel,
+      );
     }
     this.#shell.setPauseVisible(shouldPause);
   }

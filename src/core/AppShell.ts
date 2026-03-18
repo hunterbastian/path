@@ -110,6 +110,16 @@ interface AppShellElements {
   speedoFill: HTMLDivElement;
   speedo: HTMLDivElement;
   damageVignette: HTMLDivElement;
+  settingVolume: HTMLInputElement;
+  settingVolumeValue: HTMLSpanElement;
+  settingQuality: HTMLSelectElement;
+  settingCameraShake: HTMLInputElement;
+  settingInputSource: HTMLSpanElement;
+  settingGamepadRow: HTMLDivElement;
+  settingGamepadLabel: HTMLSpanElement;
+  settingDeadzoneRow: HTMLDivElement;
+  settingDeadzone: HTMLInputElement;
+  settingDeadzoneValue: HTMLSpanElement;
 }
 
 // ── Topo map palette ──
@@ -342,6 +352,43 @@ export class AppShell {
                 Restart Run
               </button>
             </div>
+
+            <div class="settings-panel">
+              <div class="settings-heading">Settings</div>
+              <div class="settings-grid">
+                <div class="settings-row">
+                  <label class="settings-label" for="setting-volume">Master volume</label>
+                  <input id="setting-volume" class="settings-range" type="range" min="0" max="100" value="70" />
+                  <span id="setting-volume-value" class="settings-value">70%</span>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="setting-quality">Graphics</label>
+                  <select id="setting-quality" class="settings-select">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="setting-camera-shake">Camera shake</label>
+                  <input id="setting-camera-shake" class="settings-toggle" type="checkbox" checked />
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label">Input</label>
+                  <span id="setting-input-source" class="settings-value">Keyboard</span>
+                </div>
+                <div class="settings-row" id="setting-gamepad-row" hidden>
+                  <label class="settings-label">Controller</label>
+                  <span id="setting-gamepad-label" class="settings-value">--</span>
+                </div>
+                <div class="settings-row" id="setting-deadzone-row" hidden>
+                  <label class="settings-label" for="setting-deadzone">Stick deadzone</label>
+                  <input id="setting-deadzone" class="settings-range" type="range" min="5" max="35" value="16" />
+                  <span id="setting-deadzone-value" class="settings-value">0.16</span>
+                </div>
+              </div>
+            </div>
+
             <div class="pause-meta">Press Esc or Start to close. Esc in god mode returns to drive.</div>
           </div>
         </section>
@@ -490,6 +537,16 @@ export class AppShell {
       speedoFill: this.#query(root, '#speedo-fill'),
       speedo: this.#query(root, '#speedo'),
       damageVignette: this.#query(root, '#damage-vignette'),
+      settingVolume: this.#query(root, '#setting-volume'),
+      settingVolumeValue: this.#query(root, '#setting-volume-value'),
+      settingQuality: this.#query(root, '#setting-quality'),
+      settingCameraShake: this.#query(root, '#setting-camera-shake'),
+      settingInputSource: this.#query(root, '#setting-input-source'),
+      settingGamepadRow: this.#query(root, '#setting-gamepad-row'),
+      settingGamepadLabel: this.#query(root, '#setting-gamepad-label'),
+      settingDeadzoneRow: this.#query(root, '#setting-deadzone-row'),
+      settingDeadzone: this.#query(root, '#setting-deadzone'),
+      settingDeadzoneValue: this.#query(root, '#setting-deadzone-value'),
     };
 
     const mapContext = this.elements.mapCanvas.getContext('2d');
@@ -505,6 +562,15 @@ export class AppShell {
     this.#fogContext = fogCtx;
     this.#drawMap(null);
     this.#achievementToastContainer = root.querySelector('#achievement-toasts');
+
+    // Settings panel interactivity
+    this.elements.settingVolume.addEventListener('input', () => {
+      this.elements.settingVolumeValue.textContent = `${this.elements.settingVolume.value}%`;
+    });
+    this.elements.settingDeadzone.addEventListener('input', () => {
+      const val = Number(this.elements.settingDeadzone.value) / 100;
+      this.elements.settingDeadzoneValue.textContent = val.toFixed(2);
+    });
 
     // Toggle crosshair visibility based on pointer lock
     const crosshair = root.querySelector('#crosshair');
@@ -523,6 +589,14 @@ export class AppShell {
     const toast = document.createElement('div');
     toast.className = 'achievement-toast';
 
+    // Eyebrow label
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'achievement-toast__eyebrow';
+    eyebrow.textContent = 'Achievement unlocked';
+
+    const main = document.createElement('div');
+    main.className = 'achievement-toast__main';
+
     const iconEl = document.createElement('div');
     iconEl.className = 'achievement-toast__icon';
     iconEl.textContent = icon;
@@ -540,21 +614,36 @@ export class AppShell {
 
     body.appendChild(titleEl);
     body.appendChild(descEl);
-    toast.appendChild(iconEl);
-    toast.appendChild(body);
+    main.appendChild(iconEl);
+    main.appendChild(body);
+
+    // Progress bar at bottom
+    const progress = document.createElement('div');
+    progress.className = 'achievement-toast__progress';
+    const progressFill = document.createElement('div');
+    progressFill.className = 'achievement-toast__progress-fill';
+    progress.appendChild(progressFill);
+
+    toast.appendChild(eyebrow);
+    toast.appendChild(main);
+    toast.appendChild(progress);
     container.appendChild(toast);
 
     // Trigger enter animation next frame
     requestAnimationFrame(() => {
       toast.classList.add('visible');
+      // Start progress bar countdown
+      requestAnimationFrame(() => {
+        progressFill.style.width = '0%';
+      });
     });
 
-    // Auto-dismiss after 3.5s
+    // Auto-dismiss after 4s
     setTimeout(() => {
       toast.classList.remove('visible');
       toast.classList.add('exiting');
-      setTimeout(() => toast.remove(), 400);
-    }, 3500);
+      setTimeout(() => toast.remove(), 500);
+    }, 4000);
   }
 
   showDiscoveryToast(text: string): void {
@@ -647,6 +736,24 @@ export class AppShell {
     });
 
     this.elements.startButton.addEventListener('click', handler);
+  }
+
+  updateSettingsPanel(inputSource: string, gamepadConnected: boolean, gamepadLabel: string | null): void {
+    this.elements.settingInputSource.textContent = inputSource;
+    this.elements.settingGamepadRow.hidden = !gamepadConnected;
+    this.elements.settingDeadzoneRow.hidden = !gamepadConnected;
+    if (gamepadConnected && gamepadLabel) {
+      this.elements.settingGamepadLabel.textContent = gamepadLabel;
+    }
+  }
+
+  getSettingsValues(): { volume: number; quality: string; cameraShake: boolean; deadzone: number } {
+    return {
+      volume: Number(this.elements.settingVolume.value) / 100,
+      quality: this.elements.settingQuality.value,
+      cameraShake: this.elements.settingCameraShake.checked,
+      deadzone: Number(this.elements.settingDeadzone.value) / 100,
+    };
   }
 
   flashDamage(intensity: number): void {
