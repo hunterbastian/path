@@ -116,6 +116,8 @@ interface AppShellElements {
   speedoValue: HTMLSpanElement;
   speedoFill: HTMLDivElement;
   speedo: HTMLDivElement;
+  xpFill: HTMLDivElement;
+  xpLabel: HTMLSpanElement;
   damageVignette: HTMLDivElement;
   settingVolume: HTMLInputElement;
   settingVolumeValue: HTMLSpanElement;
@@ -418,6 +420,13 @@ export class AppShell {
           </div>
         </div>
 
+        <div class="hud-xp" id="hud-xp">
+          <div class="hud-xp-bar">
+            <div class="hud-xp-fill" id="xp-fill"></div>
+          </div>
+          <span class="hud-xp-label" id="xp-label">Lv 1</span>
+        </div>
+
         <div class="hud-minimap" id="hud-minimap">
           <canvas id="minimap-canvas" width="96" height="96"></canvas>
         </div>
@@ -498,6 +507,8 @@ export class AppShell {
       speedoValue: this.#query(root, '#speedo-value'),
       speedoFill: this.#query(root, '#speedo-fill'),
       speedo: this.#query(root, '#speedo'),
+      xpFill: this.#query(root, '#xp-fill'),
+      xpLabel: this.#query(root, '#xp-label'),
       damageVignette: this.#query(root, '#damage-vignette'),
       settingVolume: this.#query(root, '#setting-volume'),
       settingVolumeValue: this.#query(root, '#setting-volume-value'),
@@ -807,6 +818,10 @@ export class AppShell {
 
     // Compass
     this.updateCompass(snapshot.heading);
+
+    // XP bar
+    this.elements.xpFill.style.width = `${Math.round(snapshot.levelProgress * 100)}%`;
+    this.elements.xpLabel.textContent = `Lv ${snapshot.level}`;
 
     // Expanded grid
     this.elements.expandedRelay.textContent = snapshot.landmarkLabel;

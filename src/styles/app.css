@@ -1790,6 +1790,51 @@ body.pause-menu-open .speedo {
   background: linear-gradient(90deg, rgba(212, 167, 74, 0.6), rgba(255, 120, 60, 0.8));
 }
 
+/* ── XP Progress Bar ── */
+
+.hud-xp {
+  position: fixed;
+  bottom: calc(12px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+body.game-started .hud-xp { opacity: 1; }
+
+body.game-arrived .hud-xp,
+body.map-open .hud-xp,
+body.pause-menu-open .hud-xp { opacity: 0; }
+
+.hud-xp-bar {
+  width: 100px;
+  height: 2px;
+  background: var(--amber-dim);
+}
+
+.hud-xp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--amber-muted), var(--amber));
+  transition: width 0.3s ease-out;
+}
+
+.hud-xp-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber-muted);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
 /* ── Corner Minimap ── */
 
 .hud-minimap {
