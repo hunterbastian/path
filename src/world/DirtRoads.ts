@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Terrain } from './Terrain';
 import { applyProceduralParallax } from '../render/applyProceduralParallax';
+import { sampleBiome, type BiomeName } from './BiomeConfig';
 
 /** Half-width of the main route. */
 const MAIN_ROAD_HALF_WIDTH = 5.5;
@@ -11,6 +12,24 @@ const SERVICE_ROAD_HALF_WIDTH = 3.2;
 const ROAD_Y_OFFSET = 0.06;
 /** Spacing between sample points along a road segment. */
 const SAMPLE_SPACING = 3.5;
+
+/** Per-biome road width multiplier (applied to half-width). */
+const BIOME_WIDTH_SCALE: Record<BiomeName, number> = {
+  'alpine-meadows': 1.0,
+  'canyon': 0.7,
+  'salt-flats': 1.4,
+  'jagged-peaks': 0.65,
+  'coast': 1.0,
+};
+
+/** Per-biome road surface color. */
+const BIOME_ROAD_COLOR: Record<BiomeName, THREE.Color> = {
+  'alpine-meadows': new THREE.Color(0x8a6a48), // warm brown dirt (default)
+  'canyon': new THREE.Color(0x8a5a3a),          // red-brown clay
+  'salt-flats': new THREE.Color(0xd0c8b8),     // near-white salt
+  'jagged-peaks': new THREE.Color(0x707070),    // grey gravel
+  'coast': new THREE.Color(0xb0a080),           // sandy tan
+};
 
 /**
  * Generates dirt road strip meshes that follow the terrain's road paths.
@@ -39,10 +58,11 @@ export class DirtRoads {
     for (const g of geometries) g.dispose();
 
     const material = new THREE.MeshStandardMaterial({
-      color: 0x8a6a48,
+      color: 0xffffff, // neutral — vertex colors carry the tint
       roughness: 0.96,
       metalness: 0,
       flatShading: true,
+      vertexColors: true,
     });
     applyProceduralParallax(material, {
       kind: 'terrain',
@@ -114,7 +134,8 @@ export class DirtRoads {
 
   /**
    * Extrude a terrain-hugging strip along a path of {x, z} points.
-   * Returns a BufferGeometry with positions, normals, and UVs.
+   * Returns a BufferGeometry with positions, normals, UVs, and vertex colors.
+   * Width and color vary per-vertex based on the biome at each sample point.
    */
   #extrudeStrip(
     path: Array<{ x: number; z: number }>,
@@ -127,10 +148,34 @@ export class DirtRoads {
     const positions = new Float32Array(vertCount * 3);
     const normals = new Float32Array(vertCount * 3);
     const uvs = new Float32Array(vertCount * 2);
+    const colors = new Float32Array(vertCount * 3);
     let accLen = 0;
+
+    // Reusable color objects to avoid per-vertex allocation
+    const primaryColor = new THREE.Color();
+    const secondaryColor = new THREE.Color();
+    const blendedColor = new THREE.Color();
 
     for (let i = 0; i < path.length; i++) {
       const p = path[i]!;
+
+      // --- Biome sampling for width & color ---
+      const biome = sampleBiome(p.x, p.z);
+      const primaryName = biome.primary.name;
+      const widthScale = biome.secondary
+        ? BIOME_WIDTH_SCALE[primaryName] * (1 - biome.blend)
+          + BIOME_WIDTH_SCALE[biome.secondary.name] * biome.blend
+        : BIOME_WIDTH_SCALE[primaryName];
+      const localHalfWidth = halfWidth * widthScale;
+
+      // Blend road color between primary and secondary biomes
+      primaryColor.copy(BIOME_ROAD_COLOR[primaryName]);
+      if (biome.secondary) {
+        secondaryColor.copy(BIOME_ROAD_COLOR[biome.secondary.name]);
+        blendedColor.copy(primaryColor).lerp(secondaryColor, biome.blend);
+      } else {
+        blendedColor.copy(primaryColor);
+      }
 
       // Tangent direction
       const prev = path[Math.max(0, i - 1)]!;
@@ -143,11 +188,11 @@ export class DirtRoads {
       const px = -tz / tLen;
       const pz = tx / tLen;
 
-      // Left and right edge positions
-      const lx = p.x + px * halfWidth;
-      const lz = p.z + pz * halfWidth;
-      const rx = p.x - px * halfWidth;
-      const rz = p.z - pz * halfWidth;
+      // Left and right edge positions (biome-scaled width)
+      const lx = p.x + px * localHalfWidth;
+      const lz = p.z + pz * localHalfWidth;
+      const rx = p.x - px * localHalfWidth;
+      const rz = p.z - pz * localHalfWidth;
 
       // Sample terrain height at each edge
       const ly = terrain.getHeightAt(lx, lz) + ROAD_Y_OFFSET;
@@ -160,6 +205,14 @@ export class DirtRoads {
       positions[vi + 3] = rx;
       positions[vi + 4] = ry;
       positions[vi + 5] = rz;
+
+      // Vertex colors — same color for left and right edge at this segment
+      colors[vi] = blendedColor.r;
+      colors[vi + 1] = blendedColor.g;
+      colors[vi + 2] = blendedColor.b;
+      colors[vi + 3] = blendedColor.r;
+      colors[vi + 4] = blendedColor.g;
+      colors[vi + 5] = blendedColor.b;
 
       // Approximate normal from terrain
       const normal = terrain.getNormalAt(p.x, p.z);
@@ -202,6 +255,7 @@ export class DirtRoads {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     return geometry;
   }
