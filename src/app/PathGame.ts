@@ -37,6 +37,7 @@ import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
 import { BirdSystem } from '../effects/BirdSystem';
 import { PollenSystem } from '../effects/PollenSystem';
+import { BiomeAmbience } from '../world/BiomeAmbience';
 import { CloudSystem } from '../world/CloudSystem';
 import { CoastalRocks } from '../world/CoastalRocks';
 import { DirtRoads } from '../world/DirtRoads';
@@ -120,6 +121,7 @@ export class PathGame {
   #birds: BirdSystem | null = null;
   #wildflowers: WildflowerField | null = null;
   #clouds: CloudSystem | null = null;
+  #biomeAmbience: BiomeAmbience | null = null;
   readonly #ocean: Ocean;
   readonly #coastalRocks: CoastalRocks;
   readonly #driverProfile: DriverProfile;
@@ -174,6 +176,7 @@ export class PathGame {
     this.#trees = new TreeSystem(this.#engine.scene, this.#terrain);
     this.#birds = new BirdSystem(this.#engine.scene);
     this.#wildflowers = new WildflowerField(this.#engine.scene, this.#terrain);
+    this.#biomeAmbience = new BiomeAmbience(this.#engine.scene, this.#terrain);
     this.#pois.onDiscover((name) => {
       this.#radioLog.push(`landmark found: ${name.toLowerCase()}`, 'discovery', 'alert');
     });
@@ -401,6 +404,7 @@ export class PathGame {
     this.#birds?.dispose();
     this.#wildflowers?.dispose();
     this.#clouds?.dispose();
+    this.#biomeAmbience?.dispose();
     this.#ocean.dispose();
     this.#coastalRocks.dispose();
     this.#valleyFog.dispose();
@@ -987,6 +991,12 @@ export class PathGame {
     this.#trees?.update(this.#engine.camera.position);
     this.#birds?.update(dt, this.#engine.camera.position);
     this.#wildflowers?.update(dt, this.#engine.camera.position);
+    this.#biomeAmbience?.update(
+      dt,
+      this.#controller.position.x,
+      this.#controller.position.z,
+      this.#engine.camera.position,
+    );
     this.#objectiveBeacon.update(dt, this.#runSession.mode === 'arrived', sunI);
     for (const outpost of this.#routeOutposts) {
       outpost.update(dt, false, sunI);
