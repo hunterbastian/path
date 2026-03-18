@@ -18,8 +18,9 @@ Retro-futuristic device aesthetic inspired by Teenage Engineering hardware (OP-1
 | `--surround` | `#0e1420` | Full-screen backdrop |
 | `--amber` | `#d4a74a` | Primary text/accents at varying opacities |
 | `--amber-glow` | `box-shadow: 0 0 8px rgba(212,167,74,0.4)` | LED indicators |
-| `--amber-muted` | `rgba(212,167,74, 0.25–0.4)` | Labels |
-| `--amber-bright` | `rgba(212,167,74, 0.7–0.85)` | Values, active elements |
+| `--amber-muted` | `rgba(212,167,74, 0.35)` | Labels |
+| `--amber-bright` | `rgba(212,167,74, 0.75)` | Values, active elements |
+| `--amber-dim` | `rgba(212,167,74, 0.15)` | Borders, inactive elements |
 | `--te-orange` | `#e8622c` | Toggle indicators (sparingly) |
 
 ### Shared Elements
@@ -43,7 +44,7 @@ Full-screen dark surround. Centered device panel.
 
 1. **Header bar** (dark): amber LED + "PATH · Navigator Terminal" + version string
 2. **Screen area**: live 3D preview in 16:9 aspect ratio, CRT scanline overlay, phosphor glow effect, "▸ Terrain preview active" placeholder text
-3. **Data row**: 4 equal cells — Region / Grid / Conditions / Relay status. 1px amber border, amber labels (5px) + amber values (9px)
+3. **Data row**: 4 equal cells — Region / Grid / Conditions / Relay status. 1px amber border, amber labels (5px) + amber values (9px). Phase 1 defaults: Region="Patagonia", Grid="920 × 920", Conditions=current weather from Sky system, Relay="Online"/"Offline" from NetworkManager. Updated per-biome in Phase 2.
 4. **Title block**: "PATH" at 52px 800-weight amber, subtitle "Open-world driving · autonomous navigation" below
 5. **Bottom bar** (dark): callsign input (amber border, amber text) + "Initialize" button (amber border + text)
 
@@ -79,10 +80,12 @@ Single-column amber device panel. Settings + actions only — no run stats.
 |---------|--------|--------|
 | Volume slider | `SampleAudio` | `setMasterVolume(value)` |
 | Graphics toggle | `Engine` | Adjust `#maxPixelRatio`, `#minPixelRatio`, shadow map size, shadow type |
-| Cam Shake toggle | `ThirdPersonCamera` | Shake intensity multiplier (1.0 or 0.0) |
-| Deadzone slider | `InputManager` | Gamepad stick deadzone threshold |
+| Cam Shake toggle | `ThirdPersonCamera` | Add public `shakeScale` property (0.0 or 1.0) that multiplies all shake outputs (`#shakeOffsetX/Y/Z`, `#shakeRollOffset`, `#shakePitchOffset`) before applying to camera |
+| Deadzone slider | `InputManager` | Refactor `GAMEPAD_AXIS_DEADZONE` from module-level `const` to a mutable instance property with a setter |
 
 Settings are read via `AppShell.getSettingsValues()` on pause close, applied immediately. Values persist to localStorage.
+
+**Note**: "Free camera" action maps to the existing God Mode system (`#enterGodMode` / `#exitGodMode` in PathGame.ts). No new camera system needed — just rename the button label.
 
 ---
 
@@ -96,10 +99,10 @@ Progressive disclosure: essential stats always visible, full grid on Tab.
 |---------|----------|-------------|
 | Speedometer | Bottom center | Existing — restyle to amber on transparent (no paper panel). Speed value + km/h label + bar |
 | Compass strip | Top center | Heading with cardinal labels, amber diamond marker. Fades when not turning. |
-| Boost gauge | Near speedo or corner | Small bar + percentage. Glows brighter as boost charges. |
+| Boost gauge | Near speedo or corner | Replaces existing HUD boost display. Shows `boostLevel` (0–1) as percentage + bar. "Glow" = `text-shadow` intensity scales with boost level. |
 | Drift total | Floating | Persistent running score. Pulses during active drift. |
 | Surface type | Small, unobtrusive | Color-coded terrain label (dirt=clay, sand=warm, rock=grey, grass=green) |
-| Corner minimap | Bottom-left or top-left corner | 72×72px square. Fog-of-war from MapDiscoverySystem. Player dot (amber, glowing) + relay marker (amber outline). Border matches amber terminal style. |
+| Corner minimap | Bottom-left corner | 96×96px square. Renders the fog-of-war cell grid from MapDiscoverySystem to a small canvas (not the full topo map). Player dot (amber, glowing) + relay marker (amber outline). Border matches amber terminal style. |
 
 ### Tab-Expanded Grid
 
@@ -128,13 +131,16 @@ The island is divided into 5 distinct biomes radiating outward from a central el
 ### Island Layout
 
 - **Radial design** — Alpine Meadows at center, elevated. Other biomes fan outward like sectors toward the island edge.
-- **Alpine Meadows is a natural viewpoint** — from the center you can see all biomes on the horizon: canyon walls, white salt flats, jagged peaks, ocean glint. Visual menu of what's ahead.
-- **Biome transitions** — terrain generation blends between zones over ~50m. Height, color palette, surface type, vegetation all crossfade.
+- **Angled terrain** — Alpine Meadows slopes outward so the player naturally looks downhill into the distance. The elevation drop means you can see all biomes stretching out below: canyon walls, white salt flats, jagged peaks, ocean glint. The landscape falls away like standing on a mountainside.
+- **Alpine Meadows is a natural viewpoint** — visual menu of what's ahead before you even start driving.
+- **Biome transitions** — terrain generation blends between zones over ~30m. Height, color palette, surface type, vegetation all crossfade. 30m keeps transitions tight while leaving ~70-120m of pure biome per sector.
 - **Each biome has its own**: terrain generation parameters, color palette, grass/vegetation config, fog color, ambient sounds (when audio is wired).
 
 ### Terrain Generation Per Biome
 
-Extend `Terrain.ts` with a biome lookup based on world position (angle + distance from center):
+**This replaces the existing terrain generation algorithm.** The current single-biome island (sinusoidal main path, uniform noise) is replaced with a biome-aware generator. Existing systems that depend on terrain (DirtRoads, EnvironmentalClutter, GrassField, WildflowerField, CoastalRocks, ValleyFog, Water) will need biome-aware configs.
+
+Biome lookup based on world position (angle + distance from center). With `ISLAND_EDGE = 355`, Alpine Meadows occupies the inner ~120m radius, outer biomes each span ~100-150m radially, with 30m transition blends between zones:
 
 - **Alpine Meadows**: moderate noise amplitude, green-gold palette, existing grass + wildflower system
 - **Canyon**: high amplitude with sharp ridges, deep valleys cut by erosion noise, clay/red palette
