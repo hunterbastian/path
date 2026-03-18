@@ -167,6 +167,7 @@ Updates when crossing biome boundaries. Transitions with a brief fade.
 - **Alpine Meadows is a natural viewpoint** — visual menu of what's ahead before you even start driving.
 - **Biome transitions** — terrain generation blends between zones over ~30m. Height, color palette, surface type, vegetation all crossfade. 30m keeps transitions tight while leaving ~70-120m of pure biome per sector.
 - **Each biome has its own**: terrain generation parameters, color palette, grass/vegetation config, fog color, ambient sounds (when audio is wired).
+- **Day/night tinting per biome** — existing Sky system (9 mood keyframes) gets biome-specific color offsets. Alpine Meadows: warmer golden hour, soft pink dawn. Canyon: deep orange sunsets, purple twilight. Salt Flats: harsh white noon, pale blue nights. Jagged Peaks: cold blue nights, pink alpenglow at dawn/dusk. Coast: warm amber sunsets, grey-blue overcast mornings.
 
 ### Terrain Generation Per Biome
 
