@@ -183,6 +183,7 @@ export class PathGame {
     this.#birds = new BirdSystem(this.#engine.scene);
     this.#wildflowers = new WildflowerField(this.#engine.scene, this.#terrain);
     this.#biomeAmbience = new BiomeAmbience(this.#engine.scene, this.#terrain);
+    this.#levelGates.createGateVisuals(this.#engine.scene, this.#terrain);
     this.#pois.onDiscover((name) => {
       this.#radioLog.push(`landmark found: ${name.toLowerCase()}`, 'discovery', 'alert');
     });
@@ -1088,8 +1089,12 @@ export class PathGame {
       // Level-up notification
       const newLevel = this.#progression.consumeLevelUp();
       if (newLevel !== null) {
-        this.#shell.showAchievementToast(`Level ${newLevel}`, 'Your driving skills have grown', `${newLevel}`);
+        const unlocks = this.#levelGates.getUnlocksForLevel(newLevel);
+        this.#shell.showLevelUp(newLevel, unlocks);
       }
+
+      // Update gate visuals based on current level
+      this.#levelGates.updateVisuals(this.#progression.level);
 
       // Viewpoint check
       const vpPos = this.#controller.pose.position;

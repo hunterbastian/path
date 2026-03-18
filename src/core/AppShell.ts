@@ -454,6 +454,14 @@ export class AppShell {
 
         <div id="radio-log" class="radio-log" aria-live="polite"></div>
         <div id="achievement-toasts" class="achievement-toasts" aria-live="polite"></div>
+
+        <div class="level-up-overlay" id="level-up-overlay">
+          <div class="level-up-content">
+            <div class="level-up-label">System Upgrade</div>
+            <div class="level-up-level" id="level-up-level">Level 2</div>
+            <div class="level-up-unlocks" id="level-up-unlocks"></div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -658,6 +666,22 @@ export class AppShell {
       toast.classList.add('exiting');
       setTimeout(() => toast.remove(), 400);
     }, 2500);
+  }
+
+  showLevelUp(level: number, unlocks: string[]): void {
+    const overlay = document.getElementById('level-up-overlay');
+    const levelEl = document.getElementById('level-up-level');
+    const unlocksEl = document.getElementById('level-up-unlocks');
+    if (!overlay || !levelEl || !unlocksEl) return;
+
+    levelEl.textContent = `Level ${level}`;
+    unlocksEl.textContent = unlocks.length > 0 ? unlocks.join(' / ') : '';
+
+    overlay.classList.add('visible');
+
+    setTimeout(() => {
+      overlay.classList.remove('visible');
+    }, 2800); // 0.3s fade-in + 2.5s hold, then CSS 0.5s fade-out
   }
 
   mountCanvas(canvas: HTMLCanvasElement): void {

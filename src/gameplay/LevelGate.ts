@@ -6,6 +6,9 @@
  * the required level the gate has no effect.
  */
 
+import * as THREE from 'three';
+import type { Terrain } from '../world/Terrain';
+
 interface GateDefinition {
   id: string;
   x: number;
@@ -23,11 +26,83 @@ const GATES: GateDefinition[] = [
   { id: 'summit-path',  x: 170,  z: 170,  radius: 12, requiredLevel: 5, label: 'Summit Path' },
 ] as const;
 
+/** Height of each gate post in world units. */
+const POST_HEIGHT = 9;
+/** Half-width spacing between the two posts of a gate. */
+const POST_SPREAD = 5;
+
+interface GateVisual {
+  gateId: string;
+  requiredLevel: number;
+  left: THREE.Mesh;
+  right: THREE.Mesh;
+}
+
 export class LevelGateSystem {
   readonly #gates: GateDefinition[];
+  #visuals: GateVisual[] = [];
 
   constructor() {
     this.#gates = [...GATES];
+  }
+
+  // ── Visuals ──
+
+  /** Create glowing amber gate-post meshes and add them to the scene. */
+  createGateVisuals(scene: THREE.Scene, terrain: Terrain): void {
+    const postGeometry = new THREE.BoxGeometry(0.25, POST_HEIGHT, 0.25);
+    const postMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd4a74a,
+      emissive: 0xd4a74a,
+      emissiveIntensity: 0.6,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+    });
+
+    for (const gate of this.#gates) {
+      // Direction from gate center toward world origin — posts are perpendicular to this
+      const toOriginX = -gate.x;
+      const toOriginZ = -gate.z;
+      const len = Math.sqrt(toOriginX * toOriginX + toOriginZ * toOriginZ) || 1;
+      // Perpendicular direction (rotated 90 degrees)
+      const perpX = -toOriginZ / len;
+      const perpZ = toOriginX / len;
+
+      const baseY = terrain.getHeightAt(gate.x, gate.z);
+
+      const leftMesh = new THREE.Mesh(postGeometry, postMaterial.clone());
+      leftMesh.position.set(
+        gate.x + perpX * POST_SPREAD,
+        baseY + POST_HEIGHT / 2,
+        gate.z + perpZ * POST_SPREAD,
+      );
+
+      const rightMesh = new THREE.Mesh(postGeometry, postMaterial.clone());
+      rightMesh.position.set(
+        gate.x - perpX * POST_SPREAD,
+        baseY + POST_HEIGHT / 2,
+        gate.z - perpZ * POST_SPREAD,
+      );
+
+      scene.add(leftMesh, rightMesh);
+
+      this.#visuals.push({
+        gateId: gate.id,
+        requiredLevel: gate.requiredLevel,
+        left: leftMesh,
+        right: rightMesh,
+      });
+    }
+  }
+
+  /** Hide gate visuals the player has surpassed. */
+  updateVisuals(playerLevel: number): void {
+    for (const visual of this.#visuals) {
+      const visible = playerLevel < visual.requiredLevel;
+      visual.left.visible = visible;
+      visual.right.visible = visible;
+    }
   }
 
   // ── Queries ──
@@ -80,5 +155,16 @@ export class LevelGateSystem {
     }
 
     return null;
+  }
+
+  /** Returns gate labels whose requiredLevel matches the given level. */
+  getUnlocksForLevel(level: number): string[] {
+    const unlocks: string[] = [];
+    for (const gate of this.#gates) {
+      if (gate.requiredLevel === level) {
+        unlocks.push(`${gate.label} now accessible`);
+      }
+    }
+    return unlocks;
   }
 }
