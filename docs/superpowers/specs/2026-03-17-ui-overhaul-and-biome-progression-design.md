@@ -141,9 +141,11 @@ Weather is biome-local, not global. Each biome has its own weather state that cy
 | Jagged Peaks | Clear, snow, blizzard | Snow is frequent. Blizzard = heavy snow + wind + low visibility. |
 | Coast | Clear, rain, heavy rain | Coastal storms roll in. Rain + ocean spray. |
 
-- Weather transitions smoothly (60-90s crossfade)
+- Weather is mostly clear/cloudy. Active weather (rain, snow, dust) lasts ~30 seconds, then fades back to clear. Feels like brief passing events, not sustained storms.
+- Weather transitions smoothly (10-15s fade in, 30s active, 10-15s fade out)
+- Long clear stretches between events (3-8 minutes of clear/cloudy)
 - Existing `RainSystem` (120 drop cap) extends to support snow variant (slower fall, lateral drift, white particles)
-- Weather affects driving: rain reduces grip slightly, snow reduces grip more, dust storm / blizzard reduce draw distance
+- Weather affects driving during active events: rain reduces grip slightly, snow reduces grip more, dust storm / blizzard reduce draw distance
 - Weather state per biome persisted in memory (not localStorage — resets each session)
 
 ### Weather on HUD
