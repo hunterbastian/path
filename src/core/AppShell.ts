@@ -8,7 +8,7 @@ export interface HudSnapshot {
   boostLabel: string;
   boostLevel: number;
   weatherLabel: string;
-  weatherCondition: 'cloudy' | 'rainy' | 'sunny';
+  weatherCondition: string;
   routeLabel: string;
   driftTotalLabel: string;
   mappedLabel: string;
@@ -56,7 +56,7 @@ export interface MapRuntimeSnapshot {
   checkpointStates: Array<'pending' | 'current' | 'reached'>;
   pulse: number;
   statusLabel: string;
-  weatherCondition: 'cloudy' | 'rainy' | 'sunny';
+  weatherCondition: string;
   vehicle: { x: number; z: number; heading: number };
   trail: Array<{ x: number; z: number }>;
   trailDistanceMeters: number;
@@ -791,9 +791,12 @@ export class AppShell {
 
     // Weather
     const weatherIcon =
-      snapshot.weatherCondition === 'sunny' ? '\u25CB'   // ○
+      snapshot.weatherCondition === 'sunny' ? '\u25CB'     // ○
         : snapshot.weatherCondition === 'rainy' ? '\u2261' // ≡
-        : '\u25CC';                                        // ◌
+        : snapshot.weatherCondition === 'snowy' ? '\u2726' // ✦
+        : snapshot.weatherCondition === 'blizzard' ? '\u2726\u2726' // ✦✦
+        : snapshot.weatherCondition === 'dust' ? '\u25CC'  // ◌
+        : '\u25CC';                                        // ◌ (cloudy default)
     this.elements.weatherIcon.textContent = weatherIcon;
     this.elements.weatherText.textContent = snapshot.weatherLabel;
 
@@ -1563,7 +1566,7 @@ export class AppShell {
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    condition: 'cloudy' | 'rainy' | 'sunny',
+    condition: string,
   ): void {
     ctx.save();
     ctx.translate(x, y);

@@ -202,9 +202,15 @@ export class ValleyFog {
     const weatherMult =
       this.#weatherCondition === 'rainy'
         ? 1.35
-        : this.#weatherCondition === 'cloudy'
-          ? 1.1
-          : 0.85;
+        : this.#weatherCondition === 'blizzard'
+          ? 1.5
+          : this.#weatherCondition === 'snowy'
+            ? 1.25
+            : this.#weatherCondition === 'dust'
+              ? 1.4
+              : this.#weatherCondition === 'cloudy'
+                ? 1.1
+                : 0.85;
 
     const targetOpacity = THREE.MathUtils.clamp(todOpacity * weatherMult, 0, 1);
 

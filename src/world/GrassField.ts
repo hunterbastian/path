@@ -142,13 +142,20 @@ export class GrassField {
     this.#time += dt;
 
     const weatherWindScale =
-      weatherCondition === 'rainy' ? 1.18 : weatherCondition === 'sunny' ? 0.86 : 1;
+      weatherCondition === 'blizzard' ? 1.4
+        : weatherCondition === 'dust' ? 1.3
+          : weatherCondition === 'rainy' ? 1.18
+            : weatherCondition === 'snowy' ? 1.1
+              : weatherCondition === 'sunny' ? 0.86
+                : 1;
     const windStrength = THREE.MathUtils.clamp(
       (0.34 + windDensity * 0.82 + rainDensity * 0.18) * weatherWindScale,
       0.2,
       1.6,
     );
-    const heightScale = weatherCondition === 'rainy' ? 0.95 : 1;
+    const heightScale = weatherCondition === 'rainy' || weatherCondition === 'snowy' ? 0.95
+      : weatherCondition === 'blizzard' ? 0.88
+        : 1;
 
     const camX = cameraPosition.x;
     const camZ = cameraPosition.z;

@@ -32,6 +32,10 @@ Arcade driving game built with Three.js + TypeScript + Vite. Focus on experience
 - Per-biome: terrain noise, vertex colors, surface types, grass density/color, clutter, fog, cloud density, sky tinting
 - 30m smooth transitions between adjacent biomes
 - Alpine Meadows is elevated — slopes outward so all biomes visible from center
+- Per-biome roads: width and color vary (narrow red clay in Canyon, wide faint tracks in Salt Flats, grey gravel in Peaks)
+- Per-biome weather: brief 30s events (rain in meadows/coast, snow/blizzard in peaks, dust in canyon, always clear in salt flats). 3-8min clear between events. Snow = RainSystem variant (slower, white, lateral drift).
+- `src/world/BiomeAmbience.ts` — wildlife billboard sprites (birds, hawks, eagles, seabirds) on circular paths + ambient particles (pollen, dust, snow flecks, sea spray) per biome
+- `src/gameplay/WeatherState.ts` — biome-aware weather cycling with WeatherCondition: sunny/cloudy/rainy/snowy/blizzard/dust
 
 ## Controls (Crossout-style)
 - WASD/Arrows — drive/steer
