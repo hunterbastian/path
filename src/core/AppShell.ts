@@ -916,10 +916,20 @@ export class AppShell {
   }
 
   /** Flash the final scored drift and fade out. */
-  showDriftScore(points: number, duration: number): void {
+  showDriftScore(points: number, duration: number, comboMultiplier = 1): void {
     const el = this.elements.driftScorePopup;
     const label = duration > 2.5 ? 'DRIFT' : 'drift';
-    el.textContent = `${label} +${points}`;
+    el.textContent = '';
+    const scoreSpan = document.createElement('span');
+    scoreSpan.textContent = `${label} +${points}`;
+    el.appendChild(scoreSpan);
+    if (comboMultiplier > 1) {
+      const comboSpan = document.createElement('span');
+      comboSpan.textContent = ` ${comboMultiplier}x`;
+      comboSpan.style.fontSize = '0.75em';
+      comboSpan.style.opacity = '0.8';
+      el.appendChild(comboSpan);
+    }
     el.classList.remove('drift-score-popup--active');
     el.classList.remove('drift-score-popup--fade');
     el.hidden = false;

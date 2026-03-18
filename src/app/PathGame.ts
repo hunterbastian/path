@@ -1077,7 +1077,7 @@ export class PathGame {
       }
       const scoredDrift = this.#driftScore.consumeScoredDrift();
       if (scoredDrift) {
-        this.#shell.showDriftScore(scoredDrift.points, scoredDrift.duration);
+        this.#shell.showDriftScore(scoredDrift.points, scoredDrift.duration, scoredDrift.comboMultiplier);
       }
 
       // Progression: XP from driving

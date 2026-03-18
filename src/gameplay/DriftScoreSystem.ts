@@ -7,7 +7,7 @@
  */
 
 export interface ScoredDrift {
-  /** Points earned from this drift. */
+  /** Points earned from this drift (after combo multiplier). */
   points: number;
   /** Duration in seconds. */
   duration: number;
@@ -15,6 +15,8 @@ export interface ScoredDrift {
   peakLateralSpeed: number;
   /** Peak forward speed during the drift. */
   peakForwardSpeed: number;
+  /** Combo multiplier applied to this drift (1-4). */
+  comboMultiplier: number;
 }
 
 export interface DriftRunStats {
@@ -46,6 +48,12 @@ export class DriftScoreSystem {
   #driftDuration = 0;
   #driftPeakLateral = 0;
   #driftPeakForward = 0;
+
+  // ── Combo state ──
+  #comboMultiplier = 1;
+  #comboTimer = 0;
+  #maxCombo = 4;
+  #comboWindow = 3;
 
   // ── Run stats ──
   #totalPoints = 0;
@@ -90,6 +98,14 @@ export class DriftScoreSystem {
     return this.#isDrifting && this.#driftDuration > MIN_DRIFT_SECONDS;
   }
 
+  get comboMultiplier(): number {
+    return this.#comboMultiplier;
+  }
+
+  get comboActive(): boolean {
+    return this.#comboMultiplier > 1;
+  }
+
   update(
     dt: number,
     isDrifting: boolean,
@@ -107,6 +123,15 @@ export class DriftScoreSystem {
 
     const driftActive = isDrifting && isGrounded && forwardSpeed > 4;
 
+    // Tick combo timer when not drifting
+    if (!driftActive && !this.#isDrifting && this.#comboMultiplier > 1) {
+      this.#comboTimer += dt;
+      if (this.#comboTimer >= this.#comboWindow) {
+        this.#comboMultiplier = 1;
+        this.#comboTimer = 0;
+      }
+    }
+
     if (driftActive) {
       // Accumulate score: lateral intensity × forward speed
       const absLateral = Math.abs(lateralSpeed);
@@ -117,19 +142,26 @@ export class DriftScoreSystem {
       this.#driftPeakForward = Math.max(this.#driftPeakForward, forwardSpeed);
 
       if (!this.#isDrifting) {
-        // Drift just started
+        // Drift just started — check combo window
         this.#isDrifting = true;
+        if (this.#comboTimer > 0 && this.#comboTimer < this.#comboWindow) {
+          this.#comboMultiplier = Math.min(this.#comboMultiplier + 1, this.#maxCombo);
+        }
+        this.#comboTimer = 0;
       }
     } else if (this.#isDrifting) {
       // Drift just ended — score it
       this.#isDrifting = false;
+      this.#comboTimer = 0; // start combo window
 
       if (this.#driftPoints >= MIN_DRIFT_POINTS && this.#driftDuration >= MIN_DRIFT_SECONDS) {
+        const comboPoints = Math.round(this.#driftPoints) * this.#comboMultiplier;
         const scored: ScoredDrift = {
-          points: Math.round(this.#driftPoints),
+          points: comboPoints,
           duration: this.#driftDuration,
           peakLateralSpeed: this.#driftPeakLateral,
           peakForwardSpeed: this.#driftPeakForward,
+          comboMultiplier: this.#comboMultiplier,
         };
 
         this.#totalPoints += scored.points;
@@ -137,6 +169,9 @@ export class DriftScoreSystem {
         this.#bestDrift = Math.max(this.#bestDrift, scored.points);
         this.#longestDriftS = Math.max(this.#longestDriftS, scored.duration);
         this.#lastScoredDrift = scored;
+      } else {
+        // Drift too small to score — don't advance combo
+        // (but don't reset it either; combo timer will handle expiry)
       }
 
       // Reset active drift state
@@ -158,6 +193,8 @@ export class DriftScoreSystem {
     this.#driftDuration = 0;
     this.#driftPeakLateral = 0;
     this.#driftPeakForward = 0;
+    this.#comboMultiplier = 1;
+    this.#comboTimer = 0;
     this.#totalPoints = 0;
     this.#driftCount = 0;
     this.#bestDrift = 0;
