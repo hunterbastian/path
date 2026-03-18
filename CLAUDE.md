@@ -37,6 +37,14 @@ Arcade driving game built with Three.js + TypeScript + Vite. Focus on experience
 - `src/world/BiomeAmbience.ts` — wildlife billboard sprites (birds, hawks, eagles, seabirds) on circular paths + ambient particles (pollen, dust, snow flecks, sea spray) per biome
 - `src/gameplay/WeatherState.ts` — biome-aware weather cycling with WeatherCondition: sunny/cloudy/rainy/snowy/blizzard/dust
 
+## Progression
+- XP from driving (0.5/m) + fog cell discovery (10/cell) + viewpoint bonuses (50 XP)
+- 8 levels: [0, 500, 1500, 3500, 7000, 12000, 20000, 30000]
+- Level gates at biome boundaries (4 gates, require levels 2-5)
+- 5 viewpoints (one per biome) reveal large map chunks
+- `src/gameplay/ProgressionSystem.ts`, `LevelGate.ts`, `ViewpointSystem.ts`
+- All progress persists to localStorage
+
 ## Controls (Crossout-style)
 - WASD/Arrows — drive/steer
 - Space — handbrake (drift)

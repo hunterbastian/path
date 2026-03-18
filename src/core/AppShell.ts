@@ -16,6 +16,8 @@ export interface HudSnapshot {
   playersLabel: string;
   timerLabel: string;
   heading: number;
+  level: number;
+  levelProgress: number;
 }
 
 export interface ArrivalSnapshot {
@@ -103,6 +105,7 @@ interface AppShellElements {
   expandedMapped: HTMLSpanElement;
   expandedAchievements: HTMLSpanElement;
   expandedPlayers: HTMLSpanElement;
+  expandedLevel: HTMLSpanElement;
   hudExpanded: HTMLDivElement;
   mapDevice: HTMLDivElement;
   mapCanvas: HTMLCanvasElement;
@@ -401,6 +404,7 @@ export class AppShell {
             <div class="hud-expanded-cell"><span class="hud-expanded-label">Mapped</span><span class="hud-expanded-value" id="expanded-mapped">0%</span></div>
             <div class="hud-expanded-cell"><span class="hud-expanded-label">Unlocked</span><span class="hud-expanded-value" id="expanded-achievements">0/0</span></div>
             <div class="hud-expanded-cell"><span class="hud-expanded-label">Players</span><span class="hud-expanded-value" id="expanded-players">offline</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Level</span><span class="hud-expanded-value" id="expanded-level">1</span></div>
           </div>
         </div>
 
@@ -483,6 +487,7 @@ export class AppShell {
       expandedMapped: this.#query(root, '#expanded-mapped'),
       expandedAchievements: this.#query(root, '#expanded-achievements'),
       expandedPlayers: this.#query(root, '#expanded-players'),
+      expandedLevel: this.#query(root, '#expanded-level'),
       hudExpanded: this.#query(root, '#hud-expanded'),
       mapDevice: this.#query(root, '#map-device'),
       mapCanvas: this.#query(root, '#map-canvas'),
@@ -809,6 +814,7 @@ export class AppShell {
     this.elements.expandedMapped.textContent = snapshot.mappedLabel;
     this.elements.expandedAchievements.textContent = snapshot.achievementsLabel;
     this.elements.expandedPlayers.textContent = snapshot.playersLabel;
+    this.elements.expandedLevel.textContent = `${snapshot.level}`;
   }
 
   updateCompass(heading: number): void {

@@ -70,6 +70,15 @@ export class ProgressionSystem {
     return newCells;
   }
 
+  /** Grant a flat XP bonus (e.g. viewpoint discovery rewards). */
+  grantBonusXP(amount: number): void {
+    if (amount <= 0) return;
+
+    const previousLevel = this.level;
+    this.#xp += amount;
+    this.#checkLevelUp(previousLevel);
+  }
+
   // ── Queries ──
 
   /** Current level (1-8). */
