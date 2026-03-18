@@ -97,22 +97,22 @@ export const BIOME_ALPINE_MEADOWS: BiomeDefinition = {
     elevationFalloff: 0.15,
   },
   palette: {
-    ground: 0x7a9a5e,  // green-gold meadow
+    ground: 0x6d9948,  // rich green meadow
     slope: 0x8b7d5a,   // exposed earth
     peak: 0x9a9080,    // rocky outcrop
-    accent: 0xc4a840,  // wildflower gold
+    accent: 0xd4b840,  // bright wildflower gold
   },
   primarySurface: 'grass',
   secondarySurface: 'dirt',
   grass: {
     density: 1.0,
-    baseColor: 0x6a8a4e,
-    tipColor: 0xc4b060,
+    baseColor: 0x5a8a3a,
+    tipColor: 0xd4c050,
     heightScale: 1.0,
   },
   fog: {
     color: 0xa0b898,
-    density: 0.6,
+    density: 0.35,
   },
   skyTint: {
     goldenHour: 0x331a00,  // warm orange boost
@@ -140,9 +140,9 @@ export const BIOME_CANYON: BiomeDefinition = {
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0x8e6a4a,  // red clay
-    slope: 0xa07050,    // sandstone
-    peak: 0x6e5040,     // dark rock
+    ground: 0x9e5a3a,  // red clay
+    slope: 0xb06040,    // warm sandstone
+    peak: 0x5e4030,     // dark rock
     accent: 0xc09060,   // warm sand
   },
   primarySurface: 'rock',
@@ -155,7 +155,7 @@ export const BIOME_CANYON: BiomeDefinition = {
   },
   fog: {
     color: 0x8a6a50,
-    density: 1.2,
+    density: 0.7,
   },
   skyTint: {
     goldenHour: 0x4a2000,  // deep orange
@@ -183,10 +183,10 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0xe8e0d0,  // white salt crust
+    ground: 0xf0ebe0,  // white salt crust
     slope: 0xd0c8b8,   // cream
     peak: 0xc0b8a8,    // slightly darker
-    accent: 0xf0e8d8,  // bright white
+    accent: 0xf8f4ec,  // near-white
   },
   primarySurface: 'sand',  // fast surface, reuse sand
   secondarySurface: 'sand',
@@ -198,7 +198,7 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
   },
   fog: {
     color: 0xd0c8c0,
-    density: 0.2,
+    density: 0.12,
   },
   skyTint: {
     goldenHour: 0x1a1000,
@@ -226,9 +226,9 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0x606870,  // grey-blue rock
-    slope: 0x505860,   // darker rock
-    peak: 0xd8d8e0,    // snow
+    ground: 0x556070,  // blue-grey rock
+    slope: 0x454c58,   // dark blue-grey
+    peak: 0xe8e8f4,    // bright snow
     accent: 0x708090,  // blue-grey
   },
   primarySurface: 'rock',
@@ -241,7 +241,7 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
   },
   fog: {
     color: 0x708898,
-    density: 1.5,
+    density: 0.9,
   },
   skyTint: {
     goldenHour: 0x200a10,  // pink alpenglow
@@ -269,8 +269,8 @@ export const BIOME_COAST: BiomeDefinition = {
     elevationFalloff: 0.05,
   },
   palette: {
-    ground: 0xa09878,  // sandy ground
-    slope: 0x7a8a6a,   // coastal green
+    ground: 0xb0a070,  // sandy ground
+    slope: 0x6a8a5a,   // coastal green
     peak: 0x808080,    // grey rock
     accent: 0xc0b890,  // beach sand
   },
@@ -278,13 +278,13 @@ export const BIOME_COAST: BiomeDefinition = {
   secondarySurface: 'dirt',
   grass: {
     density: 0.3,
-    baseColor: 0x4a6a3a,
+    baseColor: 0x3a6a30,
     tipColor: 0x6a8a50,
     heightScale: 0.6,
   },
   fog: {
     color: 0x90a0a8,
-    density: 0.8,
+    density: 0.5,
   },
   skyTint: {
     goldenHour: 0x2a1800,  // warm amber
