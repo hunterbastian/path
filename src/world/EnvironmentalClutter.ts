@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SeededRandom } from '../core/SeededRandom';
+import { sampleBiome, type BiomeName } from './BiomeConfig';
 import { SEA_LEVEL } from './Terrain';
 import type { Terrain } from './Terrain';
 
@@ -201,6 +202,19 @@ export class EnvironmentalClutter {
     }
   }
 
+  // ── Biome Density ────────────────────────────────────────
+
+  /** Return a 0-1 density multiplier for clutter in the given biome. */
+  #biomeDensity(biome: BiomeName): number {
+    switch (biome) {
+      case 'alpine-meadows': return 1.0;
+      case 'canyon':         return 1.3;
+      case 'salt-flats':     return 0.1;
+      case 'jagged-peaks':   return 1.0;
+      case 'coast':          return 0.5;
+    }
+  }
+
   // ── Wrecked Vehicles ──────────────────────────────────────
 
   #placeWreckedVehicles(scene: THREE.Scene, random: SeededRandom): void {
@@ -219,6 +233,11 @@ export class EnvironmentalClutter {
 
       const wy = this.#terrain.getHeightAt(wx, wz);
       if (wy < SEA_LEVEL) continue;
+
+      // Biome density gate — skip this clutter if random exceeds density
+      const biomeName = sampleBiome(wx, wz).primary.name;
+      if (random.next() > this.#biomeDensity(biomeName)) continue;
+
       const variant = i % 3;
       const group = variant === 0
         ? this.#createWreckSedan(random)
@@ -423,6 +442,11 @@ export class EnvironmentalClutter {
 
       const sy = this.#terrain.getHeightAt(sx, sz);
       if (sy < SEA_LEVEL) continue;
+
+      // Biome density gate
+      const biomeName = sampleBiome(sx, sz).primary.name;
+      if (random.next() > this.#biomeDensity(biomeName)) continue;
+
       const text = SIGN_TEXTS[i % SIGN_TEXTS.length]!;
       const group = this.#createRoadSign(random, text);
 
@@ -536,6 +560,11 @@ export class EnvironmentalClutter {
 
       const dy = this.#terrain.getHeightAt(dx, dz);
       if (dy < SEA_LEVEL) continue;
+
+      // Biome density gate
+      const biomeName = sampleBiome(dx, dz).primary.name;
+      if (random.next() > this.#biomeDensity(biomeName)) continue;
+
       const variant = i % 3;
       const group = variant === 0
         ? this.#createConcreteDebris(random)
@@ -716,6 +745,9 @@ export class EnvironmentalClutter {
 
       const ty = this.#terrain.getHeightAt(tx, tz);
       if (ty < SEA_LEVEL) continue;
+
+      // Power towers are an Alpine Meadows feature only
+      if (sampleBiome(tx, tz).primary.name !== 'alpine-meadows') continue;
 
       const towerHeight = random.range(12, 16);
       const group = this.#createPowerTower(random, towerHeight);

@@ -62,6 +62,7 @@ import { AudioManager } from './AudioManager';
 import { SampleAudio } from '../audio/SampleAudio';
 import { EffectsCoordinator } from './EffectsCoordinator';
 import { ValleyFog } from '../world/ValleyFog';
+import { sampleBiome, type BiomeName } from '../world/BiomeConfig';
 
 const PHYSICS_STEP_SECONDS = 1 / 60;
 const SCENARIO_IDS: ScenarioFixtureId[] = [
@@ -136,6 +137,7 @@ export class PathGame {
   #prevWeatherCondition: string = '';
   #prevDamageHealth = 1;
   #discoveredSurfaces = new Set<string>();
+  #visitedBiomes = new Set<BiomeName>();
   #wasDrowning = false;
   #foundRoad = false;
   #prevDiscoveryPercent = 0;
@@ -1110,6 +1112,7 @@ export class PathGame {
       dt,
       this.#lastWorldStreamSnapshot.routeActivity,
       this.#lastWeatherSnapshot.rainDensity,
+      this.#controller.position,
     );
     this.#valleyFog.setDayTime(this.#sky.dayTime);
     this.#valleyFog.setWeather(this.#lastWeatherSnapshot.condition);
@@ -1317,6 +1320,7 @@ export class PathGame {
     this.#prevWeatherCondition = '';
     this.#prevDamageHealth = 1;
     this.#discoveredSurfaces.clear();
+    this.#visitedBiomes.clear();
     this.#wasDrowning = false;
     this.#foundRoad = false;
     this.#prevDiscoveryPercent = 0;
@@ -1409,6 +1413,8 @@ export class PathGame {
 
   #buildHudSnapshot(): HudSnapshot {
     const state = this.#controller.state;
+    const pos = this.#controller.pose.position;
+    const biome = sampleBiome(pos.x, pos.z);
     const runSnapshot = this.#runSession.snapshot;
     const nextCheckpoint = this.#getCheckpointTarget(runSnapshot.nextCheckpointIndex);
     const audioReady = this.#audio.engineAudio.getDebugState().contextState === 'running';
@@ -1431,6 +1437,7 @@ export class PathGame {
           ? 'Grounded'
           : 'Airborne',
       surfaceLabel: state.surface.charAt(0).toUpperCase() + state.surface.slice(1),
+      biomeName: biome.primary.displayName,
       driveLabel:
         this.#godModeActive
           ? 'God Mode'
@@ -1821,6 +1828,16 @@ export class PathGame {
     // Checkpoint reached
     if (this.#checkpointBannerTime > 2.0) {
       this.#radioLog.push('relay banked — keep moving', 'checkpoint', 'alert');
+    }
+
+    // Discovery: new biome
+    const playerPos = this.#controller.pose.position;
+    const currentBiome = sampleBiome(playerPos.x, playerPos.z);
+    const currentBiomeName = currentBiome.primary.name;
+    if (!this.#visitedBiomes.has(currentBiomeName)) {
+      this.#visitedBiomes.add(currentBiomeName);
+      this.#shell.showDiscoveryToast(`Discovered: ${currentBiome.primary.displayName}`);
+      this.#radioLog.push(`entering ${currentBiome.primary.displayName.toLowerCase()}`, 'discovery');
     }
 
     // Discovery: new surface

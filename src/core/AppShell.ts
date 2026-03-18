@@ -2,6 +2,7 @@ export interface HudSnapshot {
   speedLabel: string;
   tractionLabel: string;
   surfaceLabel: string;
+  biomeName: string;
   driveLabel: string;
   landmarkLabel: string;
   boostLabel: string;
@@ -778,7 +779,7 @@ export class AppShell {
     this.elements.boostFill.style.width = `${Math.round(snapshot.boostLevel * 100)}%`;
     this.elements.boostValue.textContent = snapshot.boostLabel;
     this.elements.driftValue.textContent = snapshot.driftTotalLabel;
-    this.elements.surfaceValue.textContent = snapshot.surfaceLabel;
+    this.elements.surfaceValue.textContent = `${snapshot.biomeName} · ${snapshot.surfaceLabel}`;
 
     // Surface color
     this.elements.surfaceValue.dataset.surface =

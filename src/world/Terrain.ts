@@ -3,6 +3,11 @@ import { createNoise2D } from 'simplex-noise';
 import { SeededRandom } from '../core/SeededRandom';
 import { applyProceduralParallax } from '../render/applyProceduralParallax';
 import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
+import {
+  sampleBiome,
+  type BiomeDefinition,
+  type BiomeSample,
+} from './BiomeConfig';
 
 export const SEA_LEVEL = 3;
 /** Average distance from center where coastline sits. */
@@ -179,16 +184,50 @@ export class Terrain {
     return height;
   }
 
-  #computeHeightAt(x: number, z: number): number {
-    const broad = this.#sampleNoise(x, z, 1.7, 12, -5) * 13;
-    const medium = this.#sampleNoise(x, z, 4.6, -18, 7) * 8;
-    const detail = this.#sampleNoise(x, z, 10.4, 4.3, -14.8) * 2.8;
+  /** Generate raw biome-driven terrain height for a single BiomeDefinition. */
+  #biomeHeight(x: number, z: number, biome: BiomeDefinition): number {
+    // Scale noise params relative to size so frequency is world-space
+    const freqScale = this.size * biome.noise.frequency;
+    const detailScale = this.size * biome.noise.detailFrequency;
 
-    let height = 8 + broad + medium + detail;
+    const broad = this.#sampleNoise(x, z, freqScale, 12, -5) * biome.noise.amplitude;
+    const medium = this.#sampleNoise(x, z, freqScale * 2.7, -18, 7) * (biome.noise.amplitude * 0.45);
+    const detail = this.#sampleNoise(x, z, detailScale * this.size * 0.011, 4.3, -14.8) * biome.noise.detailAmplitude;
+
+    let height = biome.noise.baseElevation + broad + medium + detail;
+
+    // Alpine Meadows slopes outward — higher in center, lower at edges
+    if (biome.noise.elevationFalloff > 0) {
+      const distFromCenter = Math.sqrt(x * x + z * z);
+      height -= biome.noise.elevationFalloff * distFromCenter;
+    }
+
+    return height;
+  }
+
+  #computeHeightAt(x: number, z: number): number {
+    const biomeSample = sampleBiome(x, z);
+    let height: number;
+
+    if (biomeSample.secondary && biomeSample.blend > 0) {
+      // Transition zone — lerp between both biome heights
+      const h1 = this.#biomeHeight(x, z, biomeSample.primary);
+      const h2 = this.#biomeHeight(x, z, biomeSample.secondary);
+      height = THREE.MathUtils.lerp(h1, h2, biomeSample.blend);
+    } else {
+      height = this.#biomeHeight(x, z, biomeSample.primary);
+    }
+
+    // Route flattening — roads cut through all biomes
+    const broad = this.#sampleNoise(x, z, biomeSample.primary.noise.frequency * this.size, 12, -5)
+      * biomeSample.primary.noise.amplitude;
+    const medium = this.#sampleNoise(x, z, biomeSample.primary.noise.frequency * this.size * 2.7, -18, 7)
+      * (biomeSample.primary.noise.amplitude * 0.45);
     const roadInfluence = this.getRoadInfluence(x, z);
     const roadHeight = 3.5 + broad * 0.45 + medium * 0.2 - roadInfluence * 0.8;
     height = THREE.MathUtils.lerp(height, roadHeight, roadInfluence * 0.8);
 
+    // Spawn area flattening — smooth plateau near origin
     const distFromSpawn = Math.hypot(x, z);
     if (distFromSpawn < 62) {
       const blend = Math.pow(1 - distFromSpawn / 62, 1.75);
@@ -211,7 +250,6 @@ export class Terrain {
         (distFromCenter - dropStart) / (dropEnd - dropStart), 0, 1,
       );
       const falloff = t * t * (3 - 2 * t); // smoothstep
-      // Blend height toward sea floor
       const seaFloor = -6 + this.#sampleNoise(x, z, 2.2, -8, 14) * 2;
       height = THREE.MathUtils.lerp(height, seaFloor, falloff);
     }
@@ -246,7 +284,8 @@ export class Terrain {
     const roadInfluence = this.getRoadInfluence(x, z);
     const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
     const sandBasinInfluence = this.#getSandBasinInfluence(x, z);
-    const { biome, influence: biomeStr } = this.getBiomeAt(x, z);
+    const biomeSample = sampleBiome(x, z);
+    const biome = biomeSample.primary;
 
     // Coastal beach — sand near sea level at island edges
     if (height < SEA_LEVEL + 4 && height >= SEA_LEVEL - 1 && slope < 0.32) {
@@ -257,40 +296,43 @@ export class Terrain {
     // Universal high-altitude rules
     if (height > 95) return 'snow';
     if (snowCoverage > 0.72 && slope < 0.4 && sandBasinInfluence < 0.46) return 'snow';
+    // Jagged Peaks snow at lower altitude
+    if (biome.name === 'jagged-peaks' && height > 60 && slope < 0.35) return 'snow';
     if (height > 88 || slope > 0.5) return 'rock';
     if (roadInfluence > 0.48 && sandBasinInfluence < 0.42) return 'dirt';
 
-    // Biome-specific surface classification
-    if (biome === 'meadow' && biomeStr > 0.2) {
-      // Meadow: much more grass, less sand
+    // Biome-aware surface classification
+    // Steep slopes use secondary surface, flat areas use primary
+    if (slope > 0.35) return biome.secondarySurface === 'snow' ? 'rock' : biome.secondarySurface;
+    if (slope > 0.22) return biome.secondarySurface;
+
+    // Biome-specific primary surface with moisture/height modifiers
+    const primary = biome.primarySurface;
+
+    if (primary === 'grass') {
+      // Grass biomes (alpine-meadows, coast) — drier areas become dirt
       if (moisture > 0.32 && slope < 0.28) return 'grass';
       if (slope < 0.2) return 'grass';
       return 'dirt';
     }
 
-    if (biome === 'desert' && biomeStr > 0.2) {
-      // Desert: sand dominates, rock on slopes
-      if (slope > 0.35) return 'rock';
-      if (height < 50 && slope < 0.3) return 'sand';
-      if (moisture < 0.6) return 'sand';
-      return 'dirt';
+    if (primary === 'rock') {
+      // Rock biomes (canyon, jagged-peaks) — flatter areas get secondary
+      if (slope < 0.15 && moisture > 0.4) return biome.secondarySurface;
+      return 'rock';
     }
 
-    if (biome === 'hollow' && biomeStr > 0.2) {
-      // Hollow: grass and dirt, darker and wetter feel
-      if (moisture > 0.3 && slope < 0.3) return 'grass';
-      if (slope > 0.4) return 'rock';
-      return 'dirt';
+    if (primary === 'sand') {
+      // Sand biomes (salt-flats, coast secondary) — almost entirely sand
+      if (slope > 0.3) return 'rock';
+      return 'sand';
     }
 
-    // Default biome rules
+    // Fallback — use sand basin influence for legacy compatibility
     if (sandBasinInfluence > 0.36 && slope < 0.3 && height < 34) return 'sand';
-    if (height < 14 && moisture < 0.46) return 'sand';
-    if (sandBasinInfluence > 0.18 && slope < 0.24 && moisture < 0.64) return 'sand';
     if (moisture > 0.58 && slope < 0.24) return 'grass';
     if (moisture > 0.5 && slope < 0.18) return 'grass';
-    if (height < 20 && moisture < 0.38) return 'sand';
-    return 'dirt';
+    return primary;
   }
 
   #sampleNoise(
@@ -536,52 +578,24 @@ export class Terrain {
 
   // ── Biome system ──
 
-  /** Returns the dominant biome and its influence at a world position. */
+  /** Returns the dominant biome and its influence at a world position.
+   *  Maps new BiomeName values to legacy BiomeType for backward compatibility. */
   getBiomeAt(x: number, z: number): { biome: BiomeType; influence: number } {
-    const meadow = this.#getMeadowInfluence(x, z);
-    const desert = this.#getDesertInfluence(x, z);
-    const hollow = this.#getHollowInfluence(x, z);
+    const sample = sampleBiome(x, z);
+    const influence = 1 - sample.blend;
+    const name = sample.primary.name;
 
-    if (meadow >= desert && meadow >= hollow && meadow > 0.15) {
-      return { biome: 'meadow', influence: meadow };
-    }
-    if (desert >= meadow && desert >= hollow && desert > 0.15) {
-      return { biome: 'desert', influence: desert };
-    }
-    if (hollow > 0.15) {
-      return { biome: 'hollow', influence: hollow };
-    }
+    // Map new biome names to legacy BiomeType for downstream consumers
+    if (name === 'alpine-meadows') return { biome: 'meadow', influence };
+    if (name === 'canyon' || name === 'salt-flats') return { biome: 'desert', influence };
+    if (name === 'jagged-peaks') return { biome: 'hollow', influence };
+    if (name === 'coast') return { biome: 'default', influence };
     return { biome: 'default', influence: 0 };
   }
 
-  /** Alpine Meadow — north-northwest, lush and cool. */
-  #getMeadowInfluence(x: number, z: number): number {
-    const cx = -100, cz = 280;
-    const dx = x - cx, dz = z - cz;
-    return THREE.MathUtils.clamp(
-      Math.exp(-((dx * dx) / (160 * 160) + (dz * dz) / (130 * 130))),
-      0, 1,
-    );
-  }
-
-  /** Rust Desert — southeast, hot and dry. */
-  #getDesertInfluence(x: number, z: number): number {
-    const cx = 160, cz = 140;
-    const dx = x - cx, dz = z - cz;
-    return THREE.MathUtils.clamp(
-      Math.exp(-((dx * dx) / (140 * 140) + (dz * dz) / (120 * 120))),
-      0, 1,
-    );
-  }
-
-  /** Dark Hollow — southwest, shadowed and mossy. */
-  #getHollowInfluence(x: number, z: number): number {
-    const cx = -160, cz = 60;
-    const dx = x - cx, dz = z - cz;
-    return THREE.MathUtils.clamp(
-      Math.exp(-((dx * dx) / (130 * 130) + (dz * dz) / (110 * 110))),
-      0, 1,
-    );
+  /** Returns the full biome sample (primary, secondary, blend) at a position. */
+  getBiomeSampleAt(x: number, z: number): BiomeSample {
+    return sampleBiome(x, z);
   }
 
   #getSandBasinCenter(): THREE.Vector2 {
@@ -715,6 +729,73 @@ export class Terrain {
     return Math.hypot(x - closestX, z - closestZ);
   }
 
+  /** Compute vertex color from a biome's palette based on surface/height/slope. */
+  #vertexColorFromBiome(
+    out: THREE.Color,
+    biome: BiomeDefinition,
+    surface: SurfaceType,
+    height: number,
+    slope: number,
+    detail: number,
+    moisture: number,
+    roadInfluence: number,
+    x: number,
+    z: number,
+  ): void {
+    const palette = biome.palette;
+
+    if (surface === 'snow') {
+      out.set(0xf0f4fc);
+      const skyTint = new THREE.Color(0xa8b8c0);
+      const sunsetTint = new THREE.Color(0xf0a060);
+      out.lerp(skyTint, (1 - detail) * 0.12 + slope * 0.06);
+      out.lerp(sunsetTint, roadInfluence * 0.04 + detail * 0.03);
+      if (height > 110) {
+        const glacialBlend = THREE.MathUtils.clamp((height - 110) / 60, 0, 0.18);
+        out.offsetHSL(0, -glacialBlend * 0.5, glacialBlend);
+      }
+      return;
+    }
+
+    if (surface === 'rock') {
+      const rockBase = new THREE.Color(palette.slope);
+      const rockDark = new THREE.Color(palette.slope).offsetHSL(0, -0.05, -0.12);
+      const rockLight = new THREE.Color(palette.peak);
+      const heightBlend = THREE.MathUtils.clamp((height - 40) / 120, 0, 1);
+      out.copy(rockDark).lerp(rockBase, heightBlend * 0.72 + detail * 0.28);
+      out.lerp(rockLight, Math.max(0, heightBlend - 0.4) * 0.5);
+      out.lerp(rockDark, slope * 0.48);
+      if (height > 100) {
+        const alpineBlend = THREE.MathUtils.clamp((height - 100) / 80, 0, 0.35);
+        out.lerp(rockLight, alpineBlend);
+      }
+      return;
+    }
+
+    if (surface === 'sand') {
+      const sandBase = new THREE.Color(palette.accent);
+      const sandLight = new THREE.Color(palette.accent).offsetHSL(0, -0.02, 0.06);
+      out.copy(sandBase).lerp(sandLight, detail * 0.6);
+      return;
+    }
+
+    if (surface === 'grass') {
+      const grassBase = new THREE.Color(palette.ground);
+      const grassLight = new THREE.Color(palette.ground).offsetHSL(0.01, 0.04, 0.08);
+      out.copy(grassBase).lerp(grassLight, detail * 0.48 + moisture * 0.22);
+      return;
+    }
+
+    // Dirt / default
+    const dirtBase = new THREE.Color(palette.slope);
+    const dirtDark = new THREE.Color(palette.slope).offsetHSL(0, -0.02, -0.08);
+    const grassTint = new THREE.Color(palette.ground);
+    const sandTint = new THREE.Color(palette.accent);
+    out.copy(dirtBase).lerp(dirtDark, (1 - detail) * 0.2);
+    out.lerp(sandTint, THREE.MathUtils.clamp((0.3 - moisture) * 0.14, 0, 0.08));
+    out.lerp(grassTint, THREE.MathUtils.clamp((moisture - 0.3) * 0.32, 0, 0.22));
+  }
+
   #createMesh(): THREE.Mesh {
     const geometry = new THREE.PlaneGeometry(
       this.size,
@@ -737,31 +818,22 @@ export class Terrain {
     const roadMasks = new Float32Array(positions.count);
     const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
+    const secondaryColor = new THREE.Color();
 
-    // Patagonian steppe palette — warm earthy tones, golden grass, dusty atmosphere
-    const sand = new THREE.Color(0xe0d080);
-    const sandLight = new THREE.Color(0xe8dca0);
+    // Shared palette colors — used across all biomes for special surfaces
     const beachSand = new THREE.Color(0xe8d498);
     const beachWet = new THREE.Color(0xc0a068);
-    const dirt = new THREE.Color(0xa08058);      // warm brown earth
-    const dirtDark = new THREE.Color(0x785838);   // dark earth
-    const grass = new THREE.Color(0xb8a050);      // golden steppe
-    const grassLight = new THREE.Color(0xd0b860);  // light golden
-    const rock = new THREE.Color(0x887870);
-    const rockDark = new THREE.Color(0x585048);
-    const rockLight = new THREE.Color(0xa89888);
-    const snow = new THREE.Color(0xf0f4fc);
-    const skyTint = new THREE.Color(0xa8b8c0);    // muted dusty sky
+    const dirtDark = new THREE.Color(0x785838);
+    const snowColor = new THREE.Color(0xf0f4fc);
+    const skyTint = new THREE.Color(0xa8b8c0);
     const sunsetTint = new THREE.Color(0xf0a060);
+    const seaFloorTint = new THREE.Color(0x1a3838);
 
-    // Biome tint colors — earthy and warm
-    const meadowGrass = new THREE.Color(0xc0a048);   // golden steppe
-    const meadowDirt = new THREE.Color(0x8a6840);    // brown earth
-    const desertSand = new THREE.Color(0xc8a040);
-    const desertRock = new THREE.Color(0x907850);
-    const hollowGrass = new THREE.Color(0x607848);   // olive-brown
-    const hollowDirt = new THREE.Color(0x485038);     // dark sage
-    const biomeColor = new THREE.Color();
+    // Reusable scratch colors for biome palette lookups
+    const groundCol = new THREE.Color();
+    const slopeCol = new THREE.Color();
+    const peakCol = new THREE.Color();
+    const accentCol = new THREE.Color();
 
     for (let index = 0; index < positions.count; index += 1) {
       const x = positions.getX(index);
@@ -773,6 +845,7 @@ export class Terrain {
       const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
       const roadInfluence = this.getRoadInfluence(x, z);
       const surface = this.getSurfaceAt(x, z);
+      const biomeSample = sampleBiome(x, z);
       const parallaxRoadMask = THREE.MathUtils.clamp(
         surface === 'rock' ? 0 : roadInfluence,
         0,
@@ -786,74 +859,35 @@ export class Terrain {
         1,
       );
 
+      // Compute biome-palette-driven color for a given biome
+      this.#vertexColorFromBiome(
+        color, biomeSample.primary, surface, height, slope, detail, moisture,
+        roadInfluence, x, z,
+      );
+
+      // Blend with secondary biome in transition zones
+      if (biomeSample.secondary && biomeSample.blend > 0) {
+        this.#vertexColorFromBiome(
+          secondaryColor, biomeSample.secondary, surface, height, slope, detail,
+          moisture, roadInfluence, x, z,
+        );
+        color.lerp(secondaryColor, biomeSample.blend);
+      }
+
+      // Coastal beach override — wet sand near waterline
       if (surface === 'sand') {
-        // Coastal beach uses warmer sand tones
         const vertexDist = Math.hypot(x, z);
         const isCoastal = vertexDist > ISLAND_EDGE - 80 && height < SEA_LEVEL + 4;
         if (isCoastal) {
-          // Wet sand near waterline, dry sand higher up
           const wetBlend = THREE.MathUtils.clamp(
             1 - (height - SEA_LEVEL) / 3, 0, 0.7,
           );
           color.copy(beachSand).lerp(beachWet, wetBlend);
-          color.lerp(sandLight, detail * 0.3);
-        } else {
-          color.copy(sand).lerp(sandLight, detail * 0.6);
-        }
-      } else if (surface === 'grass') {
-        color.copy(grass).lerp(grassLight, detail * 0.48 + moisture * 0.22);
-      } else if (surface === 'rock') {
-        // Height-based grey: darker at base, lighter at peaks
-        const heightBlend = THREE.MathUtils.clamp((height - 40) / 120, 0, 1);
-        color.copy(rockDark).lerp(rock, heightBlend * 0.72 + detail * 0.28);
-        color.lerp(rockLight, Math.max(0, heightBlend - 0.4) * 0.5);
-        // Slope darkening — steeper faces are darker crevices
-        color.lerp(rockDark, slope * 0.48);
-        // High-altitude rock lightens toward alpine grey
-        if (height > 100) {
-          const alpineBlend = THREE.MathUtils.clamp((height - 100) / 80, 0, 0.35);
-          color.lerp(rockLight, alpineBlend);
-        }
-      } else if (surface === 'snow') {
-        color.copy(snow)
-          .lerp(skyTint, (1 - detail) * 0.12 + slope * 0.06)
-          .lerp(sunsetTint, roadInfluence * 0.04 + detail * 0.03);
-        // High-altitude snow is brighter — glacial white
-        if (height > 110) {
-          const glacialBlend = THREE.MathUtils.clamp((height - 110) / 60, 0, 0.18);
-          color.offsetHSL(0, -glacialBlend * 0.5, glacialBlend);
-        }
-      } else {
-        // Dirt — green-earth base, blends heavily toward grass
-        color.copy(dirt).lerp(dirtDark, (1 - detail) * 0.2);
-        color.lerp(sand, THREE.MathUtils.clamp((0.3 - moisture) * 0.14, 0, 0.08));
-        color.lerp(grass, THREE.MathUtils.clamp((moisture - 0.3) * 0.32, 0, 0.22));
-      }
-
-      // Biome color tinting
-      const { biome, influence: biomeStr } = this.getBiomeAt(x, z);
-      if (biomeStr > 0.1 && surface !== 'snow' && surface !== 'rock') {
-        const tintAmount = biomeStr * 0.45;
-        if (biome === 'meadow') {
-          biomeColor.copy(surface === 'grass' ? meadowGrass : meadowDirt);
-          color.lerp(biomeColor, tintAmount);
-          // Meadow is slightly cooler/brighter
-          color.offsetHSL(-0.01 * biomeStr, 0.04 * biomeStr, 0.02 * biomeStr);
-        } else if (biome === 'desert') {
-          biomeColor.copy(surface === 'sand' ? desertSand : desertRock);
-          color.lerp(biomeColor, tintAmount);
-          // Desert is warmer/more saturated
-          color.offsetHSL(0.02 * biomeStr, 0.06 * biomeStr, -0.01 * biomeStr);
-        } else if (biome === 'hollow') {
-          biomeColor.copy(surface === 'grass' ? hollowGrass : hollowDirt);
-          color.lerp(biomeColor, tintAmount);
-          // Hollow is darker/more desaturated
-          color.offsetHSL(0.005 * biomeStr, -0.04 * biomeStr, -0.04 * biomeStr);
+          color.lerp(new THREE.Color(biomeSample.primary.palette.accent), detail * 0.3);
         }
       }
 
       if (roadInfluence > 0.08 && surface !== 'rock') {
-        // Subtle road darkening — paths are worn but still green-tinted
         color.lerp(dirtDark, roadInfluence * 0.22);
       }
 
@@ -861,13 +895,13 @@ export class Terrain {
         const snowDust = surface === 'snow'
           ? 1
           : snowCoverage * THREE.MathUtils.lerp(0.78, 0.16, roadInfluence);
-        color.lerp(snow, THREE.MathUtils.clamp(snowDust, 0, 0.94));
+        color.lerp(snowColor, THREE.MathUtils.clamp(snowDust, 0, 0.94));
       }
 
       // Underwater terrain darkening — sea floor tint
       if (height < SEA_LEVEL) {
         const submerge = THREE.MathUtils.clamp((SEA_LEVEL - height) / 8, 0, 0.8);
-        color.lerp(new THREE.Color(0x1a3838), submerge);
+        color.lerp(seaFloorTint, submerge);
       }
 
       color.offsetHSL(
@@ -877,7 +911,6 @@ export class Terrain {
       );
 
       // Atmospheric perspective — distant/high terrain blue-shifts and desaturates
-      // Onset pushed out so mid-ground stays rich; only far mountains get hazy
       const distFromCenter = Math.hypot(x, z);
       const atmosphereBlend = THREE.MathUtils.clamp(
         (distFromCenter - 220) / 360 + (height - 80) / 220,
