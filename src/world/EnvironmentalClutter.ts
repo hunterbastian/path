@@ -68,6 +68,7 @@ export class EnvironmentalClutter {
     this.#placeWreckedVehicles(scene, random);
     this.#placeRoadSigns(scene, random);
     this.#placeDebrisClusters(scene, random);
+    this.#placePowerTowers(scene, random);
 
     // Merge each group's children into a single mesh to reduce draw calls
     for (const group of this.#groups) {
@@ -690,6 +691,196 @@ export class EnvironmentalClutter {
     }
 
     return { root, materials, x: 0, z: 0 };
+  }
+
+  // ── Power Towers & Lines ─────────────────────────────────
+
+  #placePowerTowers(scene: THREE.Scene, random: SeededRandom): void {
+    const positions = this.#sampleRoadPositions(random, 8, 85);
+    if (positions.length < 2) return;
+
+    // Sort by distance from origin so wires connect in a sensible order
+    positions.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+
+    const towerTops: THREE.Vector3[] = [];
+
+    for (let i = 0; i < positions.length; i++) {
+      const { x, z, tangentAngle } = positions[i]!;
+
+      // Offset from road
+      const side = i % 2 === 0 ? 1 : -1;
+      const perpAngle = tangentAngle + Math.PI * 0.5;
+      const tx = x + Math.cos(perpAngle) * (6 + random.range(0, 4)) * side;
+      const tz = z + Math.sin(perpAngle) * (6 + random.range(0, 4)) * side;
+      if (!this.#terrain.isWithinBounds(tx, tz)) continue;
+
+      const ty = this.#terrain.getHeightAt(tx, tz);
+      if (ty < SEA_LEVEL) continue;
+
+      const towerHeight = random.range(12, 16);
+      const group = this.#createPowerTower(random, towerHeight);
+
+      group.root.position.set(tx, ty, tz);
+      group.root.rotation.y = tangentAngle + random.range(-0.15, 0.15);
+
+      group.x = tx;
+      group.z = tz;
+      scene.add(group.root);
+      this.#groups.push(group);
+
+      // Tower base collision
+      this.#colliders.push({
+        x: tx, z: tz, radius: 1.2, height: towerHeight,
+        groupIndex: this.#groups.length - 1,
+      });
+
+      towerTops.push(new THREE.Vector3(tx, ty + towerHeight - 0.5, tz));
+    }
+
+    // Connect sequential towers with sagging power lines
+    if (towerTops.length >= 2) {
+      this.#createPowerLines(scene, towerTops);
+    }
+  }
+
+  #createPowerTower(random: SeededRandom, height: number): ClutterGroup {
+    const root = new THREE.Group();
+    const rustColor = RUST_COLORS[Math.floor(random.next() * RUST_COLORS.length)]!;
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x4a4440 });
+    const rustMat = new THREE.MeshLambertMaterial({ color: rustColor });
+    const materials: THREE.Material[] = [frameMat, rustMat];
+
+    // Four legs tapering inward
+    const baseSpread = 1.4;
+    const topSpread = 0.4;
+    const legPositions = [
+      [-1, -1], [1, -1], [1, 1], [-1, 1],
+    ];
+
+    for (const [lx, lz] of legPositions) {
+      const bottomX = lx! * baseSpread;
+      const bottomZ = lz! * baseSpread;
+      const topX = lx! * topSpread;
+      const topZ = lz! * topSpread;
+      // Approximate tapered leg with a thin box, tilted
+      const legLen = Math.hypot(topX - bottomX, height, topZ - bottomZ);
+      const leg = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, legLen, 0.12),
+        random.next() > 0.6 ? rustMat : frameMat,
+      );
+      leg.position.set(
+        (bottomX + topX) * 0.5,
+        height * 0.5,
+        (bottomZ + topZ) * 0.5,
+      );
+      // Tilt the leg inward
+      leg.rotation.x = Math.atan2(topZ - bottomZ, height);
+      leg.rotation.z = -Math.atan2(topX - bottomX, height);
+      leg.receiveShadow = true;
+      root.add(leg);
+    }
+
+    // Horizontal cross braces at intervals
+    const braceCount = Math.floor(height / 3);
+    for (let b = 1; b <= braceCount; b++) {
+      const t = b / (braceCount + 1);
+      const spread = THREE.MathUtils.lerp(baseSpread, topSpread, t);
+      const by = t * height;
+
+      // X-axis brace
+      const braceX = new THREE.Mesh(
+        new THREE.BoxGeometry(spread * 2, 0.06, 0.06),
+        frameMat,
+      );
+      braceX.position.set(0, by, 0);
+      root.add(braceX);
+
+      // Z-axis brace
+      const braceZ = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.06, spread * 2),
+        frameMat,
+      );
+      braceZ.position.set(0, by, 0);
+      root.add(braceZ);
+
+      // Diagonal brace (X pattern) — one per level
+      if (b % 2 === 0) {
+        const diagLen = Math.hypot(spread * 2, height / (braceCount + 1));
+        const diag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.05, diagLen, 0.05),
+          rustMat,
+        );
+        diag.position.set(0, by - height / (braceCount + 1) * 0.5, spread * 0.5);
+        diag.rotation.z = Math.atan2(spread * 2, height / (braceCount + 1));
+        root.add(diag);
+      }
+    }
+
+    // Cross arm at top — wire attachment points
+    const armWidth = random.range(2.4, 3.6);
+    const crossArm = new THREE.Mesh(
+      new THREE.BoxGeometry(armWidth, 0.1, 0.14),
+      frameMat,
+    );
+    crossArm.position.set(0, height - 0.5, 0);
+    root.add(crossArm);
+
+    // Insulators (small cylinders hanging from cross arm ends)
+    const insulatorMat = new THREE.MeshLambertMaterial({ color: 0x6a8a8a });
+    materials.push(insulatorMat);
+    for (const side of [-1, 0, 1]) {
+      const insulator = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.04, 0.28, 6),
+        insulatorMat,
+      );
+      insulator.position.set(side * armWidth * 0.4, height - 0.7, 0);
+      root.add(insulator);
+    }
+
+    return { root, materials, x: 0, z: 0 };
+  }
+
+  #createPowerLines(scene: THREE.Scene, towerTops: THREE.Vector3[]): void {
+    const wireMat = new THREE.LineBasicMaterial({
+      color: 0x2a2828,
+      transparent: true,
+      opacity: 0.7,
+    });
+
+    for (let i = 0; i < towerTops.length - 1; i++) {
+      const a = towerTops[i]!;
+      const b = towerTops[i + 1]!;
+      const dist = a.distanceTo(b);
+      if (dist > 160) continue; // Skip if towers too far apart
+
+      // Three wires per span (left, center, right)
+      for (const offset of [-0.8, 0, 0.8]) {
+        const points: THREE.Vector3[] = [];
+        const segments = 16;
+
+        for (let s = 0; s <= segments; s++) {
+          const t = s / segments;
+          const x = THREE.MathUtils.lerp(a.x, b.x, t);
+          const y = THREE.MathUtils.lerp(a.y, b.y, t);
+          const z = THREE.MathUtils.lerp(a.z, b.z, t);
+
+          // Catenary sag — parabolic approximation
+          const sag = dist * 0.04 * (4 * t * (1 - t)); // peaks at midpoint
+          const perpX = -(b.z - a.z) / dist;
+          const perpZ = (b.x - a.x) / dist;
+
+          points.push(new THREE.Vector3(
+            x + perpX * offset,
+            y - sag,
+            z + perpZ * offset,
+          ));
+        }
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, wireMat);
+        scene.add(line);
+      }
+    }
   }
 
   // ── Placement Helpers ─────────────────────────────────────

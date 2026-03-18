@@ -254,16 +254,16 @@ export class ValleyFog {
     const dawnPeak = this.#bellCurve(t, 0.26, 0.06) * 1.0;
     // Morning burn-off
     const morningBurn = this.#bellCurve(t, 0.40, 0.08) * 0.52;
-    // Midday minimum — never fully clear
-    const middayClear = this.#bellCurve(t, 0.50, 0.06) * 0.24;
-    // Golden hour return
-    const goldenHour = this.#bellCurve(t, 0.70, 0.06) * 0.82;
+    // Midday minimum — dusty steppe haze lingers
+    const middayClear = this.#bellCurve(t, 0.50, 0.06) * 0.38;
+    // Golden hour return — thick amber dust
+    const goldenHour = this.#bellCurve(t, 0.70, 0.06) * 0.88;
     // Dusk peak — almost as thick as dawn
     const duskPeak = this.#bellCurve(t, 0.80, 0.05) * 0.95;
-    // Night — persistent haze
-    const night = this.#bellCurve(t, 0.0, 0.12) * 0.65;
+    // Night — persistent dust haze
+    const night = this.#bellCurve(t, 0.0, 0.12) * 0.72;
     // Also catch wrap-around night
-    const nightWrap = this.#bellCurve(t, 1.0, 0.12) * 0.65;
+    const nightWrap = this.#bellCurve(t, 1.0, 0.12) * 0.72;
 
     return Math.max(dawnPeak, morningBurn, middayClear, goldenHour, duskPeak, night, nightWrap);
   }

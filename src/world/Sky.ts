@@ -505,11 +505,11 @@ export class Sky {
     this.#sun = new THREE.DirectionalLight(0xffd6aa, 1.95);
     this.#sun.position.set(180, 140, 70);
     this.#sun.castShadow = false; // Enabled dynamically in #updateSunPosition when sun > horizon
-    this.#sun.shadow.mapSize.set(1024, 1024);
-    this.#sun.shadow.camera.left = -28;
-    this.#sun.shadow.camera.right = 28;
-    this.#sun.shadow.camera.top = 28;
-    this.#sun.shadow.camera.bottom = -28;
+    this.#sun.shadow.mapSize.set(512, 512);
+    this.#sun.shadow.camera.left = -20;
+    this.#sun.shadow.camera.right = 20;
+    this.#sun.shadow.camera.top = 20;
+    this.#sun.shadow.camera.bottom = -20;
     this.#sun.shadow.camera.near = 10;
     this.#sun.shadow.camera.far = 280;
     this.#sun.shadow.bias = -0.001;

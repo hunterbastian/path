@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { GameTuning } from '../config/GameTuning';
+import type { GameTuning, SurfaceHandlingTuning } from '../config/GameTuning';
 import { expDecay, expLerp } from '../core/math';
 import { InputManager } from '../core/InputManager';
 import type { WeatherSnapshot } from '../gameplay/WeatherState';
@@ -99,6 +99,13 @@ export class VehicleController {
   #drownTimer = 0;
   /** Smoothed vertical sink offset when in deep ocean. */
   #oceanSink = 0;
+  /** Reusable surface tuning object — avoids per-frame spread allocation. */
+  readonly #surfaceTuningCache: SurfaceHandlingTuning = {
+    acceleration: 0, grip: 0, drag: 0, turn: 0, speed: 0,
+    steerResponse: 0, slip: 0, yawDamping: 0, counterSteer: 0,
+  };
+  /** Reusable wheel penalty object — avoids per-frame allocation from getter. */
+  readonly #wheelPenaltyCache = { traction: 1, steerPull: 0, speedCap: 1, yawNoise: 0, count: 4 };
 
   get heading(): number {
     return this.#heading;
@@ -120,43 +127,29 @@ export class VehicleController {
    * Compute physics penalties from missing wheels.
    * FL=0, FR=1, RL=2, RR=3
    */
-  get #wheelPenalty(): {
-    /** 0–1 traction multiplier (fewer wheels = less grip/accel) */
-    traction: number;
-    /** Steering pull: negative = pulls left, positive = pulls right */
-    steerPull: number;
-    /** 0–1 max speed multiplier */
-    speedCap: number;
-    /** Extra yaw instability added per frame */
-    yawNoise: number;
-    /** How many wheels remain */
-    count: number;
-  } {
+  get #wheelPenalty(): { traction: number; steerPull: number; speedCap: number; yawNoise: number; count: number } {
     const fl = this.#wheelAttached[0] ? 1 : 0;
     const fr = this.#wheelAttached[1] ? 1 : 0;
     const rl = this.#wheelAttached[2] ? 1 : 0;
     const rr = this.#wheelAttached[3] ? 1 : 0;
     const count = fl + fr + rl + rr;
-
-    // Each wheel contributes 25% traction, but losing the first is less punishing
-    // than losing the third — exponential penalty curve
     const fraction = count / 4;
-    const traction = fraction * fraction; // 4→1.0, 3→0.56, 2→0.25, 1→0.06, 0→0
 
-    // Steering pull: missing a left wheel pulls left (negative), right pulls right
-    // Front wheels have more steering influence than rear
     const frontBias = ((fr - fl) * 0.7);
     const rearBias = ((rr - rl) * 0.3);
-    const steerPull = frontBias + rearBias;
 
-    // Speed cap degrades with missing wheels
     const speedCap = THREE.MathUtils.lerp(0.15, 1, fraction);
 
     // Missing rear wheels cause fishtailing
     const rearMissing = (rl === 0 ? 1 : 0) + (rr === 0 ? 1 : 0);
-    const yawNoise = rearMissing * 0.35;
 
-    return { traction, steerPull, speedCap, yawNoise, count };
+    const cache = this.#wheelPenaltyCache;
+    cache.traction = fraction * fraction;
+    cache.steerPull = frontBias + rearBias;
+    cache.speedCap = speedCap;
+    cache.yawNoise = rearMissing * 0.35;
+    cache.count = count;
+    return cache;
   }
 
   get surfaceFeedback(): { roadInfluence: number; rutPullStrength: number } {
@@ -352,17 +345,17 @@ export class VehicleController {
       : this.state.surface;
     const vehicleTuning = this.#tuning.vehicle;
     const surfaceTuning = vehicleTuning.surfaces[currentSurface];
-    const tuning = {
-      ...surfaceTuning,
-      acceleration: surfaceTuning.acceleration * vehicleTuning.accelerationMultiplier,
-      grip:
-        surfaceTuning.grip
-        * vehicleTuning.gripMultiplier
-        * weather.gripMultiplier,
-      drag: surfaceTuning.drag * weather.dragMultiplier,
-      speed: surfaceTuning.speed * vehicleTuning.speedMultiplier,
-      yawDamping: surfaceTuning.yawDamping * vehicleTuning.yawDampingMultiplier,
-    };
+    // Reuse the cached tuning object to avoid per-frame allocation
+    const tuning = this.#surfaceTuningCache;
+    tuning.acceleration = surfaceTuning.acceleration * vehicleTuning.accelerationMultiplier;
+    tuning.grip = surfaceTuning.grip * vehicleTuning.gripMultiplier * weather.gripMultiplier;
+    tuning.drag = surfaceTuning.drag * weather.dragMultiplier;
+    tuning.turn = surfaceTuning.turn;
+    tuning.speed = surfaceTuning.speed * vehicleTuning.speedMultiplier;
+    tuning.steerResponse = surfaceTuning.steerResponse;
+    tuning.slip = surfaceTuning.slip;
+    tuning.yawDamping = surfaceTuning.yawDamping * vehicleTuning.yawDampingMultiplier;
+    tuning.counterSteer = surfaceTuning.counterSteer;
     const wp = this.#wheelPenalty;
     let slopeMagnitude = 0;
     const steerInput = controlsEnabled ? input.steering + wp.steerPull * 0.18 : 0;
@@ -1006,7 +999,10 @@ export class VehicleController {
     this.state.boostLevel = this.#boostLevel;
     this.state.sinkDepth = this.#sinkDepth;
     this.state.surfaceBuildup = this.#surfaceBuildup;
-    this.state.wheelAttached = [...this.#wheelAttached];
+    this.state.wheelAttached[0] = this.#wheelAttached[0];
+    this.state.wheelAttached[1] = this.#wheelAttached[1];
+    this.state.wheelAttached[2] = this.#wheelAttached[2];
+    this.state.wheelAttached[3] = this.#wheelAttached[3];
   }
 
   #resolveSurface(x: number, z: number): DriveSurface {
@@ -1080,8 +1076,12 @@ export class VehicleController {
   }
 
   #updateWheelData(dt = 1 / 60): number {
-    const wheelCompression: [number, number, number, number] = [0, 0, 0, 0];
-    const wheelContact: [boolean, boolean, boolean, boolean] = [true, true, true, true];
+    const wheelCompression = this.state.wheelCompression;
+    const wheelContact = this.state.wheelContact;
+    wheelCompression[0] = 0; wheelCompression[1] = 0;
+    wheelCompression[2] = 0; wheelCompression[3] = 0;
+    wheelContact[0] = true; wheelContact[1] = true;
+    wheelContact[2] = true; wheelContact[3] = true;
     let wheelContactCount = 0;
 
     for (let index = 0; index < VEHICLE_WHEEL_OFFSETS.length; index += 1) {
@@ -1122,8 +1122,7 @@ export class VehicleController {
     this.#suspensionPitch = expLerp(this.#suspensionPitch, targetSuspPitch, 8, dt);
     this.#suspensionRoll = expLerp(this.#suspensionRoll, targetSuspRoll, 8, dt);
 
-    this.state.wheelCompression = wheelCompression;
-    this.state.wheelContact = wheelContact;
+    // wheelCompression and wheelContact are mutated in place — no reassignment needed
     return wheelContactCount;
   }
 }

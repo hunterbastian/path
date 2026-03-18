@@ -59,6 +59,7 @@ import { Water } from '../world/Water';
 import { EnvironmentalClutter } from '../world/EnvironmentalClutter';
 import { WorldStreamer, type WorldStreamSnapshot } from '../world/WorldStreamer';
 import { AudioManager } from './AudioManager';
+import { SampleAudio } from '../audio/SampleAudio';
 import { EffectsCoordinator } from './EffectsCoordinator';
 import { ValleyFog } from '../world/ValleyFog';
 
@@ -85,6 +86,7 @@ export class PathGame {
   readonly #controller: VehicleController;
   readonly #camera: ThirdPersonCamera;
   readonly #audio: AudioManager;
+  readonly #sampleAudio = new SampleAudio();
   readonly #effects: EffectsCoordinator;
   readonly #damageHud: DamageHud;
   readonly #loop: FixedStepLoop;
@@ -372,6 +374,7 @@ export class PathGame {
     this.#input.dispose();
     this.#camera.dispose();
     this.#audio.dispose();
+    this.#sampleAudio.dispose();
     this.#effects.dispose();
     this.#grassField.dispose();
     this.#clutter.dispose();
@@ -393,6 +396,7 @@ export class PathGame {
   start(): void {
     if (this.#runSession.mode === 'driving') return;
     void this.#audio.activate();
+    this.#sampleAudio.activate();
     this.#audio.uiAudio?.playConfirm();
     this.#activeScenario = 'spawn';
     this.#runSession.start();
@@ -873,6 +877,7 @@ export class PathGame {
       this.#controller.state,
       this.#vehicle.damage.totalHealth,
     );
+    this.#sampleAudio.update(dt, this.#controller.state);
 
     // Landing burst (audio already handles landing sound)
     if (this.#controller.state.wasAirborne) {

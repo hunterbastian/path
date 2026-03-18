@@ -15,7 +15,7 @@ export type BiomeType = 'default' | 'meadow' | 'desert' | 'hollow';
 export class Terrain {
   readonly mesh: THREE.Mesh;
   readonly size = 920;
-  readonly segments = 160;
+  readonly segments = 100;
   readonly landmarkCenter = new THREE.Vector2(44, 360);
   readonly cityCenter: THREE.Vector2;
   readonly objectiveCenter: THREE.Vector2;
@@ -161,17 +161,12 @@ export class Terrain {
    * and only evicts entries older than 2 frames to handle movement.
    */
   flushHeightCache(): void {
-    // Evict only when caches grow too large — avoids thrashing when stationary
-    const cacheLimit = 8000;
-    if (
-      this.#heightCache.size > cacheLimit ||
-      this.#surfaceCache.size > cacheLimit ||
-      this.#roadInfluenceCache.size > cacheLimit
-    ) {
-      this.#heightCache.clear();
-      this.#surfaceCache.clear();
-      this.#roadInfluenceCache.clear();
-    }
+    // Evict each cache independently — don't nuke all three when one grows
+    const cacheLimit = 6000;
+    if (this.#heightCache.size > cacheLimit) this.#heightCache.clear();
+    if (this.#surfaceCache.size > cacheLimit) this.#surfaceCache.clear();
+    // Road influence is static geometry — never changes, so allow it to grow larger
+    if (this.#roadInfluenceCache.size > 12000) this.#roadInfluenceCache.clear();
   }
 
   getHeightAt(x: number, z: number): number {

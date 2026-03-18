@@ -16,6 +16,7 @@ interface GamepadStateSnapshot {
   steering: number;
   brake: boolean;
   boost: boolean;
+  handbrake: boolean;
   activity: number;
   connected: boolean;
   label: string | null;
@@ -100,7 +101,7 @@ export class InputManager {
         : gamepad.steering;
     this.#brake = gamepad.brake;
     this.#boost = keyboardBoost || gamepad.boost;
-    this.#handbrake = keyboardHandbrake;
+    this.#handbrake = keyboardHandbrake || gamepad.handbrake;
 
     if (keyboardActivity > 0.08) {
       this.#lastSource = 'keyboard';
@@ -258,6 +259,7 @@ export class InputManager {
         steering: 0,
         brake: false,
         boost: false,
+        handbrake: false,
         activity: 0,
         connected: false,
         label: null,
@@ -317,6 +319,7 @@ export class InputManager {
       steering,
       brake,
       boost,
+      handbrake: handbrakeButton,
       activity,
       connected: true,
       label: gamepad.id || 'Gamepad',

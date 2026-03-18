@@ -38,7 +38,7 @@ export class Engine {
     // Tone mapping handled in post-process shader (GritPostProcess) for HDR bloom
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
 
