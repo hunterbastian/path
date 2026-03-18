@@ -115,7 +115,7 @@ export const BIOME_ALPINE_MEADOWS: BiomeDefinition = {
     density: 0.35,
   },
   skyTint: {
-    goldenHour: 0x331a00,  // warm orange boost
+    goldenHour: 0x663400,  // warm orange boost
     night: 0x0a0a14,       // neutral dark
     noon: 0x000000,        // no tint
   },
@@ -158,8 +158,8 @@ export const BIOME_CANYON: BiomeDefinition = {
     density: 0.7,
   },
   skyTint: {
-    goldenHour: 0x4a2000,  // deep orange
-    night: 0x140a18,       // purple tint
+    goldenHour: 0x944000,  // deep orange
+    night: 0x281430,       // purple tint
     noon: 0x000000,
   },
   weather: {
@@ -203,7 +203,7 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
   skyTint: {
     goldenHour: 0x1a1000,
     night: 0x0a0c18,      // pale blue
-    noon: 0x0a0a08,        // harsh white boost
+    noon: 0x141410,        // harsh white boost
   },
   weather: {
     conditions: [],
@@ -244,8 +244,8 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
     density: 0.9,
   },
   skyTint: {
-    goldenHour: 0x200a10,  // pink alpenglow
-    night: 0x0a1020,       // cold blue
+    goldenHour: 0x401420,  // pink alpenglow
+    night: 0x142040,       // cold blue
     noon: 0x000000,
   },
   weather: {
@@ -287,7 +287,7 @@ export const BIOME_COAST: BiomeDefinition = {
     density: 0.5,
   },
   skyTint: {
-    goldenHour: 0x2a1800,  // warm amber
+    goldenHour: 0x543000,  // warm amber
     night: 0x0a0e14,       // grey-blue
     noon: 0x000000,
   },
@@ -312,7 +312,7 @@ export const BIOMES: readonly BiomeDefinition[] = [
 export const MEADOWS_RADIUS = 120;
 
 /** Width of transition blend between biomes */
-export const BIOME_TRANSITION = 30;
+export const BIOME_TRANSITION = 40;
 
 export interface BiomeSample {
   /** Primary biome at this location */
