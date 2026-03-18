@@ -75,6 +75,9 @@ export class ThirdPersonCamera {
   #shakeDirectionX = 0;
   #shakeDirectionZ = 0;
 
+  /** Multiplier for all shake effects. 0 = disabled, 1 = normal. */
+  shakeScale = 1;
+
   // Speed pull-back
   #speedPullBack = 0;
   #speedLiftUp = 0;
@@ -377,12 +380,13 @@ export class ThirdPersonCamera {
     const shakeWave = Math.sin(this.#shakePhase);
     const shakeWave2 = Math.cos(this.#shakePhase * 1.3 + 1.0);
     // Translational shake (reduced amplitudes)
-    this.#shakeOffsetX = this.#shakeAmplitude * (shakeWave * 0.10 + this.#shakeDirectionX * 0.18);
-    this.#shakeOffsetY = this.#shakeAmplitude * shakeWave2 * 0.14;
-    this.#shakeOffsetZ = this.#shakeAmplitude * (shakeWave2 * 0.07 + this.#shakeDirectionZ * 0.14);
+    const s = this.shakeScale;
+    this.#shakeOffsetX = s * this.#shakeAmplitude * (shakeWave * 0.10 + this.#shakeDirectionX * 0.18);
+    this.#shakeOffsetY = s * this.#shakeAmplitude * shakeWave2 * 0.14;
+    this.#shakeOffsetZ = s * this.#shakeAmplitude * (shakeWave2 * 0.07 + this.#shakeDirectionZ * 0.14);
     // Angular shake (reduced)
-    this.#shakeRollOffset = this.#shakeAmplitude * shakeWave * 0.010;
-    this.#shakePitchOffset = this.#shakeAmplitude * shakeWave2 * 0.007;
+    this.#shakeRollOffset = s * this.#shakeAmplitude * shakeWave * 0.010;
+    this.#shakePitchOffset = s * this.#shakeAmplitude * shakeWave2 * 0.007;
 
     // 2. Speed pull-back — camera retreats as speed increases
     const maxSpeed = 34;
