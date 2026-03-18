@@ -5,6 +5,7 @@ export interface HudSnapshot {
   driveLabel: string;
   landmarkLabel: string;
   boostLabel: string;
+  boostLevel: number;
   weatherLabel: string;
   weatherCondition: 'cloudy' | 'rainy' | 'sunny';
   routeLabel: string;
@@ -13,6 +14,7 @@ export interface HudSnapshot {
   achievementsLabel: string;
   playersLabel: string;
   timerLabel: string;
+  heading: number;
 }
 
 export interface ArrivalSnapshot {
@@ -86,24 +88,25 @@ interface AppShellElements {
   arrivalDistance: HTMLSpanElement;
   arrivalProfile: HTMLSpanElement;
   titleCareer: HTMLSpanElement;
-  speed: HTMLSpanElement;
-  routeLabel: HTMLDivElement;
-  traction: HTMLSpanElement;
-  surface: HTMLSpanElement;
-  drive: HTMLSpanElement;
-  landmark: HTMLSpanElement;
-  boost: HTMLSpanElement;
-  weather: HTMLSpanElement;
-  weatherGlyph: HTMLSpanElement;
+  compassLeft: HTMLSpanElement;
+  compassCenter: HTMLSpanElement;
+  compassRight: HTMLSpanElement;
+  boostFill: HTMLDivElement;
+  boostValue: HTMLSpanElement;
+  driftValue: HTMLSpanElement;
+  surfaceValue: HTMLSpanElement;
+  weatherIcon: HTMLSpanElement;
+  weatherText: HTMLSpanElement;
+  expandedRelay: HTMLSpanElement;
+  expandedTimer: HTMLSpanElement;
+  expandedMapped: HTMLSpanElement;
+  expandedAchievements: HTMLSpanElement;
+  expandedPlayers: HTMLSpanElement;
+  hudExpanded: HTMLDivElement;
   mapDevice: HTMLDivElement;
   mapCanvas: HTMLCanvasElement;
   mapStatus: HTMLSpanElement;
   error: HTMLDivElement;
-  driftTotal: HTMLSpanElement;
-  mappedPercent: HTMLSpanElement;
-  achievements: HTMLSpanElement;
-  players: HTMLSpanElement;
-  timer: HTMLSpanElement;
   radioLog: HTMLDivElement;
   driftScorePopup: HTMLDivElement;
   speedoValue: HTMLSpanElement;
@@ -112,8 +115,8 @@ interface AppShellElements {
   damageVignette: HTMLDivElement;
   settingVolume: HTMLInputElement;
   settingVolumeValue: HTMLSpanElement;
-  settingQuality: HTMLSelectElement;
-  settingCameraShake: HTMLInputElement;
+  settingQuality: HTMLDivElement;
+  settingCameraShake: HTMLDivElement;
   settingInputSource: HTMLSpanElement;
   settingGamepadRow: HTMLDivElement;
   settingGamepadLabel: HTMLSpanElement;
@@ -151,6 +154,7 @@ export class AppShell {
   readonly #mapContext: CanvasRenderingContext2D;
   readonly #fogCanvas: HTMLCanvasElement;
   readonly #fogContext: CanvasRenderingContext2D;
+  readonly #minimapContext: CanvasRenderingContext2D | null;
   #mapLayout: MapLayoutSnapshot | null = null;
   #achievementToastContainer: HTMLDivElement | null = null;
   #crosshairLockHandler: (() => void) | null = null;
@@ -173,85 +177,60 @@ export class AppShell {
           class="screen title-screen"
           aria-hidden="true"
         >
-          <div class="title-card">
-            <div class="title-topline">
-              <div class="title-kicker">PATH</div>
+          <div class="title-device">
+            <div class="device-header">
+              <div class="device-header-left">
+                <span class="amber-led" aria-hidden="true"></span>
+                <span class="device-header-label">PATH · Navigator Terminal</span>
+              </div>
+              <span class="device-header-version">SYS 0.4.1</span>
             </div>
-            <div class="title-hero">
-              <div class="title-copy-block">
-                <div class="title-region">tower basin / live weather cycle</div>
-                <div class="title-name">PATH</div>
-                <div class="title-rule"></div>
-                <p class="title-copy">
-                  Drive the last dirt line below Tower Mountain and bring the
-                  summit relay back online.
-                </p>
-              </div>
+
+            <div class="device-screen">
+              <div class="device-screen-phosphor" aria-hidden="true"></div>
+              <div class="crt-scanlines" aria-hidden="true"></div>
+              <span class="device-screen-status">▸ Terrain preview active</span>
             </div>
-            <div class="title-facts">
-              <div class="title-fact title-fact--conditions">
-                <span class="title-fact-label">Weather</span>
-                <span id="title-weather" class="title-fact-value">Cloudy now, rainy next in 1:30</span>
+
+            <div class="device-data-row">
+              <div class="device-data-cell">
+                <span class="device-data-label">Region</span>
+                <span class="device-data-value">Patagonia</span>
               </div>
-              <div class="title-fact title-fact--audio">
-                <span class="title-fact-label">Audio</span>
-                <span id="title-audio" class="title-fact-value">Tap or press a key to enable</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Grid</span>
+                <span class="device-data-value">920 × 920</span>
               </div>
-              <div class="title-fact title-fact--objective">
-                <span class="title-fact-label">Objective</span>
-                <span class="title-fact-value">Bring the summit relay online</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Conditions</span>
+                <span id="title-weather" class="device-data-value">Clear</span>
               </div>
-              <div class="title-fact title-fact--terrain">
-                <span class="title-fact-label">Terrain</span>
-                <span class="title-fact-value">Dirt paths, snow, meltwater</span>
-              </div>
-              <div class="title-fact title-fact--career">
-                <span class="title-fact-label">Career</span>
-                <span id="title-career" class="title-fact-value">No runs yet</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Relay</span>
+                <span id="title-audio" class="device-data-value">Online</span>
               </div>
             </div>
-            <div class="title-actions">
-              <div class="title-name-input-row">
-                <label for="player-name-input" class="title-name-label">Driver name</label>
-                <input
-                  id="player-name-input"
-                  class="player-name-input"
-                  type="text"
-                  maxlength="24"
-                  placeholder="Anonymous"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </div>
-              <button id="start-button" class="start-button" type="button">
-                Enter Route
+
+            <div class="device-title-block">
+              <div class="device-title">PATH</div>
+              <div class="device-subtitle">Open-world driving · autonomous navigation</div>
+              <span id="title-career" class="device-career">No runs yet</span>
+            </div>
+
+            <div class="device-footer">
+              <label for="player-name-input" class="device-footer-label">Callsign</label>
+              <input
+                id="player-name-input"
+                class="player-name-input device-input"
+                type="text"
+                maxlength="24"
+                placeholder="Anonymous"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="start-button" class="start-button device-button" type="button">
+                Initialize
               </button>
-              <div class="title-meta">Press Enter, Start, or A</div>
-            </div>
-            <div class="title-controls">
-              <div class="title-controls-heading">Quick keys</div>
-              <div class="title-controls-grid">
-                <div class="title-control-item">
-                  <span>Drive</span>
-                  <strong>WASD or arrow keys</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Handbrake / Boost</span>
-                  <strong>Space handbrake (drift), Shift boost</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Camera</span>
-                  <strong>Click to freelook, auto-returns behind you</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Menu</span>
-                  <strong>M map, Esc pause, R reset</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Gamepad</span>
-                  <strong>Left stick steers, RT drives, LT brakes, A boosts</strong>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -326,131 +305,103 @@ export class AppShell {
           aria-hidden="true"
           hidden
         >
-          <div class="pause-card">
-            <div class="pause-eyebrow">Field menu</div>
-            <div class="pause-title">Route Paused</div>
-            <p class="pause-copy">
-              Hold your line, check the weather, or start the basin route over
-              from the trailhead.
-            </p>
-            <div class="pause-actions">
-              <button id="pause-resume-button" class="start-button" type="button">
-                Resume Drive
-              </button>
-              <button
-                id="pause-god-mode-button"
-                class="start-button start-button--secondary"
-                type="button"
-              >
-                Enter God Mode
-              </button>
-              <button
-                id="pause-restart-button"
-                class="start-button start-button--secondary"
-                type="button"
-              >
-                Restart Run
-              </button>
+          <div class="pause-device">
+            <div class="device-header">
+              <div class="device-header-left">
+                <span class="amber-led" aria-hidden="true"></span>
+                <span class="device-header-label">System</span>
+              </div>
+              <span class="device-header-version">Esc · close</span>
             </div>
 
-            <div class="settings-panel">
-              <div class="settings-heading">Settings</div>
-              <div class="settings-grid">
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-volume">Master volume</label>
-                  <input id="setting-volume" class="settings-range" type="range" min="0" max="100" value="70" />
-                  <span id="setting-volume-value" class="settings-value">70%</span>
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-quality">Graphics</label>
-                  <select id="setting-quality" class="settings-select">
-                    <option value="high">High</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-camera-shake">Camera shake</label>
-                  <input id="setting-camera-shake" class="settings-toggle" type="checkbox" checked />
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label">Input</label>
-                  <span id="setting-input-source" class="settings-value">Keyboard</span>
-                </div>
-                <div class="settings-row" id="setting-gamepad-row" hidden>
-                  <label class="settings-label">Controller</label>
-                  <span id="setting-gamepad-label" class="settings-value">--</span>
-                </div>
-                <div class="settings-row" id="setting-deadzone-row" hidden>
-                  <label class="settings-label" for="setting-deadzone">Stick deadzone</label>
-                  <input id="setting-deadzone" class="settings-range" type="range" min="5" max="35" value="16" />
-                  <span id="setting-deadzone-value" class="settings-value">0.16</span>
+            <div class="device-settings">
+              <div class="device-setting-row">
+                <span class="device-setting-label">Volume</span>
+                <input id="setting-volume" class="device-slider" type="range" min="0" max="100" value="70" />
+                <span id="setting-volume-value" class="device-setting-value">70</span>
+              </div>
+              <div class="device-setting-row">
+                <span class="device-setting-label">Graphics</span>
+                <div class="device-segmented" id="setting-quality" data-value="medium">
+                  <button class="device-segment" data-val="low" type="button">Low</button>
+                  <button class="device-segment is-active" data-val="medium" type="button">Med</button>
+                  <button class="device-segment" data-val="high" type="button">High</button>
                 </div>
               </div>
+              <div class="device-setting-row">
+                <span class="device-setting-label">Cam Shake</span>
+                <div class="device-toggle" id="setting-camera-shake" data-on="true">
+                  <div class="device-toggle-knob"></div>
+                </div>
+                <span class="device-toggle-label">ON</span>
+              </div>
+              <div class="device-setting-row" id="setting-deadzone-row" hidden>
+                <span class="device-setting-label">Deadzone</span>
+                <input id="setting-deadzone" class="device-slider" type="range" min="5" max="35" value="16" />
+                <span id="setting-deadzone-value" class="device-setting-value">.16</span>
+              </div>
+              <div class="device-setting-row" id="setting-gamepad-row" hidden>
+                <span class="device-setting-label">Gamepad</span>
+                <span id="setting-gamepad-label" class="device-setting-value" style="flex:1">--</span>
+              </div>
+              <span id="setting-input-source" hidden>Keyboard</span>
             </div>
 
-            <div class="pause-meta">Press Esc or Start to close. Esc in god mode returns to drive.</div>
+            <div class="device-actions">
+              <button id="pause-resume-button" class="device-action device-action--primary" type="button">
+                &#9658; Resume
+              </button>
+              <button id="pause-restart-button" class="device-action" type="button">
+                Restart run
+              </button>
+              <button id="pause-god-mode-button" class="device-action" type="button">
+                Free camera
+              </button>
+            </div>
           </div>
         </section>
 
         <div id="fps-counter" class="fps-counter">-- fps</div>
-        <aside id="hud" class="hud" aria-live="polite">
-          <div class="hud-panel">
-            <div class="hud-main">
-              <div class="speed-readout">
-                <div class="hud-subtitle">Speed</div>
-                <span id="speed" class="speed-value">0 km/h</span>
-              </div>
-              <div id="hud-route-label" class="hud-subtitle hud-route-label">Route to summit relay</div>
-            </div>
-            <div class="hud-grid">
-              <div class="hud-stack">
-                <span class="status-label">Contact</span>
-                <span id="status-ground" class="status-value">Grounded</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Surface</span>
-                <span id="status-surface" class="status-value">Dirt</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Status</span>
-                <span id="status-drive" class="status-value">Cruising</span>
-              </div>
-              <div class="hud-stack hud-stack-objective">
-                <span class="status-label status-label--icon"><span class="hud-glyph hud-glyph--relay" aria-hidden="true"></span>Relay</span>
-                <span id="status-landmark" class="status-value">0 m away</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Boost</span>
-                <span id="status-boost" class="status-value">Ready</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label status-label--icon"><span id="status-weather-glyph" class="hud-glyph hud-glyph--weather" data-condition="cloudy" aria-hidden="true"></span>Weather</span>
-                <span id="status-weather" class="status-value">Cloudy</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Drift</span>
-                <span id="status-drift-total" class="status-value" data-tone="stable">0</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Mapped</span>
-                <span id="status-mapped" class="status-value" data-tone="stable">0%</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Unlocked</span>
-                <span id="status-achievements" class="status-value" data-tone="stable">0/22</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Players</span>
-                <span id="status-players" class="status-value" data-tone="stable">offline</span>
-              </div>
-              <div class="hud-stack hud-stack-timer">
-                <span class="status-label">Time</span>
-                <span id="status-timer" class="status-value" data-tone="stable">0:00</span>
-              </div>
-            </div>
+        <div class="hud-compass" id="hud-compass">
+          <div class="hud-compass-labels">
+            <span class="hud-compass-side" id="compass-left"></span>
+            <span class="hud-compass-center" id="compass-center">N</span>
+            <span class="hud-compass-side" id="compass-right"></span>
           </div>
-        </aside>
+          <div class="hud-compass-track">
+            <div class="hud-compass-marker"></div>
+          </div>
+        </div>
+
+        <div class="hud-boost" id="hud-boost">
+          <span class="hud-boost-label">Boost</span>
+          <div class="hud-boost-bar"><div class="hud-boost-fill" id="boost-fill"></div></div>
+          <span class="hud-boost-value" id="boost-value">78%</span>
+        </div>
+
+        <div class="hud-drift" id="hud-drift">
+          <span class="hud-drift-label">Drift</span>
+          <span class="hud-drift-value" id="drift-value">0</span>
+        </div>
+
+        <div class="hud-surface" id="hud-surface">
+          <span id="surface-value">Dirt</span>
+        </div>
+
+        <div class="hud-weather" id="hud-weather">
+          <span class="hud-weather-icon" id="weather-icon">◌</span>
+          <span class="hud-weather-text" id="weather-text">Cloudy</span>
+        </div>
+
+        <div class="hud-expanded" id="hud-expanded" hidden>
+          <div class="hud-expanded-grid">
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Relay</span><span class="hud-expanded-value" id="expanded-relay">--</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Timer</span><span class="hud-expanded-value" id="expanded-timer">0:00</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Mapped</span><span class="hud-expanded-value" id="expanded-mapped">0%</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Unlocked</span><span class="hud-expanded-value" id="expanded-achievements">0/0</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Players</span><span class="hud-expanded-value" id="expanded-players">offline</span></div>
+          </div>
+        </div>
 
         <div id="drift-score-popup" class="drift-score-popup" aria-hidden="true"></div>
 
@@ -460,6 +411,10 @@ export class AppShell {
           <div class="speedo-bar">
             <div id="speedo-fill" class="speedo-fill"></div>
           </div>
+        </div>
+
+        <div class="hud-minimap" id="hud-minimap">
+          <canvas id="minimap-canvas" width="96" height="96"></canvas>
         </div>
 
         <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
@@ -513,24 +468,25 @@ export class AppShell {
       arrivalDistance: this.#query(root, '#arrival-distance'),
       arrivalProfile: this.#query(root, '#arrival-profile'),
       titleCareer: this.#query(root, '#title-career'),
-      speed: this.#query(root, '#speed'),
-      routeLabel: this.#query(root, '#hud-route-label'),
-      traction: this.#query(root, '#status-ground'),
-      surface: this.#query(root, '#status-surface'),
-      drive: this.#query(root, '#status-drive'),
-      landmark: this.#query(root, '#status-landmark'),
-      boost: this.#query(root, '#status-boost'),
-      weather: this.#query(root, '#status-weather'),
-      weatherGlyph: this.#query(root, '#status-weather-glyph'),
+      compassLeft: this.#query(root, '#compass-left'),
+      compassCenter: this.#query(root, '#compass-center'),
+      compassRight: this.#query(root, '#compass-right'),
+      boostFill: this.#query(root, '#boost-fill'),
+      boostValue: this.#query(root, '#boost-value'),
+      driftValue: this.#query(root, '#drift-value'),
+      surfaceValue: this.#query(root, '#surface-value'),
+      weatherIcon: this.#query(root, '#weather-icon'),
+      weatherText: this.#query(root, '#weather-text'),
+      expandedRelay: this.#query(root, '#expanded-relay'),
+      expandedTimer: this.#query(root, '#expanded-timer'),
+      expandedMapped: this.#query(root, '#expanded-mapped'),
+      expandedAchievements: this.#query(root, '#expanded-achievements'),
+      expandedPlayers: this.#query(root, '#expanded-players'),
+      hudExpanded: this.#query(root, '#hud-expanded'),
       mapDevice: this.#query(root, '#map-device'),
       mapCanvas: this.#query(root, '#map-canvas'),
       mapStatus: this.#query(root, '#map-status'),
       error: this.#query(root, '.error-banner'),
-      driftTotal: this.#query(root, '#status-drift-total'),
-      mappedPercent: this.#query(root, '#status-mapped'),
-      achievements: this.#query(root, '#status-achievements'),
-      players: this.#query(root, '#status-players'),
-      timer: this.#query(root, '#status-timer'),
       radioLog: this.#query(root, '#radio-log'),
       driftScorePopup: this.#query(root, '#drift-score-popup'),
       speedoValue: this.#query(root, '#speedo-value'),
@@ -560,16 +516,37 @@ export class AppShell {
       throw new Error('Unable to create fog canvas context.');
     }
     this.#fogContext = fogCtx;
+    const minimapCanvas = root.querySelector<HTMLCanvasElement>('#minimap-canvas');
+    this.#minimapContext = minimapCanvas?.getContext('2d') ?? null;
     this.#drawMap(null);
     this.#achievementToastContainer = root.querySelector('#achievement-toasts');
 
     // Settings panel interactivity
     this.elements.settingVolume.addEventListener('input', () => {
-      this.elements.settingVolumeValue.textContent = `${this.elements.settingVolume.value}%`;
+      this.elements.settingVolumeValue.textContent = this.elements.settingVolume.value;
     });
     this.elements.settingDeadzone.addEventListener('input', () => {
       const val = Number(this.elements.settingDeadzone.value) / 100;
       this.elements.settingDeadzoneValue.textContent = val.toFixed(2);
+    });
+
+    // Segmented toggle: graphics quality
+    const qualityContainer = this.elements.settingQuality;
+    qualityContainer.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.device-segment') as HTMLButtonElement | null;
+      if (!btn) return;
+      qualityContainer.querySelectorAll('.device-segment').forEach((s) => s.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      qualityContainer.dataset.value = btn.dataset.val ?? 'medium';
+    });
+
+    // Square toggle: camera shake
+    const shakeToggle = this.elements.settingCameraShake;
+    shakeToggle.addEventListener('click', () => {
+      const isOn = shakeToggle.dataset.on === 'true';
+      shakeToggle.dataset.on = String(!isOn);
+      const label = shakeToggle.nextElementSibling as HTMLElement | null;
+      if (label) label.textContent = isOn ? 'OFF' : 'ON';
     });
 
     // Toggle crosshair visibility based on pointer lock
@@ -750,8 +727,8 @@ export class AppShell {
   getSettingsValues(): { volume: number; quality: string; cameraShake: boolean; deadzone: number } {
     return {
       volume: Number(this.elements.settingVolume.value) / 100,
-      quality: this.elements.settingQuality.value,
-      cameraShake: this.elements.settingCameraShake.checked,
+      quality: this.elements.settingQuality.dataset.value ?? 'medium',
+      cameraShake: this.elements.settingCameraShake.dataset.on === 'true',
       deadzone: Number(this.elements.settingDeadzone.value) / 100,
     };
   }
@@ -788,24 +765,7 @@ export class AppShell {
   }
 
   updateHud(snapshot: HudSnapshot): void {
-    this.elements.speed.textContent = snapshot.speedLabel;
-    this.elements.traction.textContent = snapshot.tractionLabel;
-    this.elements.surface.textContent = snapshot.surfaceLabel;
-    this.elements.drive.textContent = snapshot.driveLabel;
-    this.elements.landmark.textContent = snapshot.landmarkLabel;
-    this.elements.boost.textContent = snapshot.boostLabel;
-    this.elements.weather.textContent = snapshot.weatherLabel;
-    this.elements.weatherGlyph.dataset.condition = snapshot.weatherCondition;
-    this.elements.routeLabel.textContent = snapshot.routeLabel;
-    this.elements.driftTotal.textContent = snapshot.driftTotalLabel;
-    this.elements.mappedPercent.textContent = snapshot.mappedLabel;
-    this.elements.achievements.textContent = snapshot.achievementsLabel;
-    this.elements.players.textContent = snapshot.playersLabel;
-    this.elements.timer.textContent = snapshot.timerLabel;
-
     const speedKmh = Number.parseInt(snapshot.speedLabel, 10);
-    this.elements.speed.dataset.intensity =
-      speedKmh > 95 ? 'high' : '';
 
     // Bottom speedometer
     this.elements.speedoValue.textContent = String(speedKmh || 0);
@@ -813,48 +773,72 @@ export class AppShell {
     this.elements.speedoFill.style.width = `${speedFraction * 100}%`;
     this.elements.speedo.dataset.intensity =
       speedKmh > 100 ? 'red' : speedKmh > 70 ? 'warm' : '';
-    this.elements.traction.dataset.tone =
-      snapshot.tractionLabel === 'Airborne' ? 'warn' : 'stable';
-    this.elements.surface.dataset.tone =
-      snapshot.surfaceLabel === 'Water' ? 'cool'
-        : snapshot.surfaceLabel === 'Snow' ? 'cool'
+
+    // Floating HUD elements
+    this.elements.boostFill.style.width = `${Math.round(snapshot.boostLevel * 100)}%`;
+    this.elements.boostValue.textContent = snapshot.boostLabel;
+    this.elements.driftValue.textContent = snapshot.driftTotalLabel;
+    this.elements.surfaceValue.textContent = snapshot.surfaceLabel;
+
+    // Surface color
+    this.elements.surfaceValue.dataset.surface =
+      snapshot.surfaceLabel === 'Water' ? 'water'
+        : snapshot.surfaceLabel === 'Snow' ? 'snow'
         : snapshot.surfaceLabel === 'Sand' ? 'sand'
         : snapshot.surfaceLabel === 'Rock' ? 'rock'
-        : 'stable';
-    this.elements.drive.dataset.tone =
-      snapshot.driveLabel === 'Arrived'
-        ? 'goal'
-        : snapshot.driveLabel.startsWith('Traffic')
-          ? 'warn'
-        : snapshot.driveLabel === 'Boosting'
-          ? 'boost'
-          : snapshot.driveLabel === 'Airborne'
-            ? 'warn'
-            : snapshot.driveLabel === 'Drifting'
-              ? 'active'
-              : snapshot.driveLabel === 'Braking'
-                ? 'cool'
-                : 'stable';
-    this.elements.landmark.dataset.tone =
-      snapshot.landmarkLabel === 'Reached' ? 'goal' : 'objective';
-    this.elements.boost.dataset.tone =
-      snapshot.boostLabel === 'Ready'
-        ? 'boost'
-        : snapshot.boostLabel.endsWith('%') && Number.parseInt(snapshot.boostLabel, 10) < 25
-          ? 'warn'
-          : 'stable';
-    this.elements.weather.dataset.tone =
-      snapshot.weatherLabel.startsWith('Rainy')
-        ? 'cool'
-        : snapshot.weatherLabel.startsWith('Sunny')
-          ? 'boost'
-          : 'stable';
-    this.elements.driftTotal.dataset.tone =
-      snapshot.driftTotalLabel !== '0' ? 'active' : 'stable';
-    this.elements.players.dataset.tone =
-      snapshot.playersLabel === 'offline' ? 'stable'
-        : snapshot.playersLabel === 'solo' ? 'stable'
-        : 'cool';
+        : 'dirt';
+
+    // Weather
+    const weatherIcon =
+      snapshot.weatherCondition === 'sunny' ? '\u25CB'   // ○
+        : snapshot.weatherCondition === 'rainy' ? '\u2261' // ≡
+        : '\u25CC';                                        // ◌
+    this.elements.weatherIcon.textContent = weatherIcon;
+    this.elements.weatherText.textContent = snapshot.weatherLabel;
+
+    // Compass
+    this.updateCompass(snapshot.heading);
+
+    // Expanded grid
+    this.elements.expandedRelay.textContent = snapshot.landmarkLabel;
+    this.elements.expandedTimer.textContent = snapshot.timerLabel;
+    this.elements.expandedMapped.textContent = snapshot.mappedLabel;
+    this.elements.expandedAchievements.textContent = snapshot.achievementsLabel;
+    this.elements.expandedPlayers.textContent = snapshot.playersLabel;
+  }
+
+  updateCompass(heading: number): void {
+    // Normalize to 0-360
+    const deg = ((heading % 360) + 360) % 360;
+
+    const cardinals: Array<[string, number]> = [
+      ['N', 0], ['NE', 45], ['E', 90], ['SE', 135],
+      ['S', 180], ['SW', 225], ['W', 270], ['NW', 315],
+    ];
+
+    // Find the closest cardinal
+    let closestIdx = 0;
+    let closestDist = 360;
+    for (let i = 0; i < cardinals.length; i++) {
+      let dist = Math.abs(deg - cardinals[i]![1]);
+      if (dist > 180) dist = 360 - dist;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestIdx = i;
+      }
+    }
+
+    const prevIdx = (closestIdx - 1 + cardinals.length) % cardinals.length;
+    const nextIdx = (closestIdx + 1) % cardinals.length;
+
+    this.elements.compassLeft.textContent = cardinals[prevIdx]![0];
+    this.elements.compassCenter.textContent = cardinals[closestIdx]![0];
+    this.elements.compassRight.textContent = cardinals[nextIdx]![0];
+  }
+
+  toggleHudExpanded(): void {
+    const el = this.elements.hudExpanded;
+    el.hidden = !el.hidden;
   }
 
   setTitleWeather(label: string): void {
@@ -936,6 +920,43 @@ export class AppShell {
   updateMap(snapshot: MapRuntimeSnapshot): void {
     this.elements.mapStatus.textContent = snapshot.statusLabel;
     this.#drawMap(snapshot);
+  }
+
+  updateMinimap(
+    cells: Uint8Array,
+    columns: number,
+    rows: number,
+    playerX: number,
+    playerZ: number,
+    worldSize: number,
+  ): void {
+    const ctx = this.#minimapContext;
+    if (!ctx) return;
+    const w = 96, h = 96;
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw fog grid
+    const cellW = w / columns;
+    const cellH = h / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < columns; c++) {
+        const discovered = (cells[r * columns + c] ?? 0) > 0;
+        ctx.fillStyle = discovered
+          ? 'rgba(212, 167, 74, 0.08)'
+          : 'rgba(10, 12, 16, 0.6)';
+        ctx.fillRect(c * cellW, r * cellH, cellW, cellH);
+      }
+    }
+
+    // Player dot (amber with glow)
+    const half = worldSize * 0.5;
+    const px = ((playerX + half) / worldSize) * w;
+    const pz = ((playerZ + half) / worldSize) * h;
+    ctx.fillStyle = 'rgba(212, 167, 74, 0.9)';
+    ctx.shadowColor = 'rgba(212, 167, 74, 0.4)';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(px - 2, pz - 2, 4, 4);
+    ctx.shadowBlur = 0;
   }
 
   showError(message: string): void {

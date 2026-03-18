@@ -22,10 +22,11 @@ interface GamepadStateSnapshot {
   label: string | null;
 }
 
-const GAMEPAD_AXIS_DEADZONE = 0.16;
+const DEFAULT_GAMEPAD_AXIS_DEADZONE = 0.16;
 const GAMEPAD_TRIGGER_DEADZONE = 0.08;
 
 export class InputManager {
+  gamepadDeadzone = DEFAULT_GAMEPAD_AXIS_DEADZONE;
   readonly #keys = new Set<string>();
   readonly #pressedThisFrame = new Set<string>();
   readonly #queuedPresses = new Set<string>();
@@ -42,6 +43,7 @@ export class InputManager {
     'Backquote',
     'BracketLeft',
     'BracketRight',
+    'Tab',
   ]);
   readonly #gamepadButtonStates = new Map<string, boolean>();
   #throttle = 0;
@@ -189,6 +191,10 @@ export class InputManager {
     return this.#consumePressed('BracketRight');
   }
 
+  consumeHudExpand(): boolean {
+    return this.#consumePressed('Tab');
+  }
+
   isDown(code: string): boolean {
     return this.#keys.has(code);
   }
@@ -266,8 +272,8 @@ export class InputManager {
       };
     }
 
-    const stickX = this.#withDeadzone(gamepad.axes[0] ?? 0, GAMEPAD_AXIS_DEADZONE);
-    const stickY = this.#withDeadzone(-(gamepad.axes[1] ?? 0), GAMEPAD_AXIS_DEADZONE);
+    const stickX = this.#withDeadzone(gamepad.axes[0] ?? 0, this.gamepadDeadzone);
+    const stickY = this.#withDeadzone(-(gamepad.axes[1] ?? 0), this.gamepadDeadzone);
     const dpadLeft = this.#buttonPressed(gamepad.buttons[14]) ? 1 : 0;
     const dpadRight = this.#buttonPressed(gamepad.buttons[15]) ? 1 : 0;
     const dpadUp = this.#buttonPressed(gamepad.buttons[12]) ? 1 : 0;

@@ -92,6 +92,29 @@ export class Engine {
     );
   }
 
+  setQualityPreset(preset: 'low' | 'medium' | 'high'): void {
+    switch (preset) {
+      case 'low':
+        this.#maxPixelRatio = 0.8;
+        this.#minPixelRatio = 0.5;
+        this.renderer.shadowMap.enabled = false;
+        break;
+      case 'medium':
+        this.#maxPixelRatio = MAX_RENDER_PIXEL_RATIO;
+        this.#minPixelRatio = MIN_RENDER_PIXEL_RATIO;
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        break;
+      case 'high':
+        this.#maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+        this.#minPixelRatio = 1;
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        break;
+    }
+    this.#syncPixelRatioBounds();
+  }
+
   dispose(): void {
     this.#resizeObserver.disconnect();
     this.postProcess.dispose();

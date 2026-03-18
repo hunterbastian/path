@@ -54,12 +54,16 @@ Arcade driving game built with Three.js + TypeScript + Vite. Focus on experience
 - Vercel: https://drive-path.vercel.app
 - `vercel --prod` to deploy
 
+## UI — Amber Terminal
+- Retro-futuristic device aesthetic (Teenage Engineering-inspired): amber-on-dark palette, CRT scanlines, Geist Mono, square elements (no border-radius)
+- Title screen: "The Device" — centered panel with live preview, data row, "Initialize" button
+- Pause screen: "Compact Console" — settings only (no run stats), square toggle/slider controls
+- Settings wired to: SampleAudio (volume), Engine (quality preset), ThirdPersonCamera (shakeScale), InputManager (gamepadDeadzone). Values persist to localStorage.
+
 ## HUD
-- Cartographic visual language: paper textures, ink colors, gold accents, Geist Mono throughout
-- Grid stats: Contact, Surface (color-coded per type), Status (live drift score), Relay distance, Boost, Weather, Drift total, Mapped %, Unlocked achievements, Players online, Run timer
-- Speed value glows above 95 km/h
+- Always visible: Speedometer (bottom center), Compass (top center), Boost gauge, Drift total, Surface type, Weather indicator, Corner minimap (96px fog-of-war grid)
+- Tab key expands full stat grid: Relay distance, Timer, Mapped %, Achievements, Players online
 - Drift popup: live counter during drift (pulsing), final score flash on end (scale + fade)
-- Drive label shows `Drift +N` with live points during active drift
 
 ## Key Patterns
 - GLB models loaded via `Vehicle.loadModel()` static method.

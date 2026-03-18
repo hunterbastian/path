@@ -329,7 +329,7 @@ export class PathGame {
     );
 
     this.#damageHud = new DamageHud();
-    const hudPanel = this.#shell.elements.speed.closest('.hud-panel');
+    const hudPanel = this.#shell.elements.speedo.closest('.hud-panel');
     if (hudPanel) {
       hudPanel.appendChild(this.#damageHud.element);
     }
@@ -365,6 +365,19 @@ export class PathGame {
     this.#shell.updateArrival(this.#buildArrivalSnapshot());
     this.#shell.updateMap(this.#buildMapRuntimeSnapshot());
     this.#debugPanel.updateTelemetry(this.#buildDebugTelemetrySnapshot());
+
+    // Restore saved settings
+    const saved = localStorage.getItem('path-settings');
+    if (saved) {
+      try {
+        const settings = JSON.parse(saved);
+        if (settings.volume !== undefined) this.#sampleAudio.setMasterVolume(settings.volume);
+        if (settings.quality) this.#engine.setQualityPreset(settings.quality);
+        if (settings.cameraShake !== undefined) this.#camera.shakeScale = settings.cameraShake ? 1 : 0;
+        if (settings.deadzone !== undefined) this.#input.gamepadDeadzone = settings.deadzone;
+      } catch { /* ignore corrupt data */ }
+    }
+
     this.#loop.start();
   }
 
@@ -1221,6 +1234,17 @@ export class PathGame {
   #setPauseVisible(visible: boolean): void {
     const shouldPause =
       visible && this.#runSession.mode === 'driving' && !this.#godModeActive;
+
+    // Apply settings when closing the pause menu
+    if (!visible && this.#pauseVisible) {
+      const settings = this.#shell.getSettingsValues();
+      this.#sampleAudio.setMasterVolume(settings.volume);
+      this.#engine.setQualityPreset(settings.quality as 'low' | 'medium' | 'high');
+      this.#camera.shakeScale = settings.cameraShake ? 1 : 0;
+      this.#input.gamepadDeadzone = settings.deadzone;
+      localStorage.setItem('path-settings', JSON.stringify(settings));
+    }
+
     this.#pauseVisible = shouldPause;
     if (shouldPause) {
       this.#mapVisible = false;
@@ -1352,6 +1376,14 @@ export class PathGame {
         && !this.#godModeActive,
     );
     this.#shell.updateMap(this.#buildMapRuntimeSnapshot());
+    this.#shell.updateMinimap(
+      this.#mapDiscovery.cells,
+      this.#mapDiscovery.columns,
+      this.#mapDiscovery.rows,
+      this.#controller.position.x,
+      this.#controller.position.z,
+      this.#terrain.size,
+    );
     this.#debugPanel.updateTelemetry(this.#buildDebugTelemetrySnapshot());
   }
 
@@ -1454,6 +1486,14 @@ export class PathGame {
       timerLabel: this.#runSession.mode === 'driving'
         ? this.#formatTimer(this.#runSession.snapshot.elapsedSeconds)
         : '0:00',
+      boostLevel: state.boostLevel,
+      heading: (() => {
+        const q = this.#controller.pose.quaternion;
+        return Math.atan2(
+          2 * (q.w * q.y + q.x * q.z),
+          1 - 2 * (q.y * q.y + q.z * q.z),
+        ) * (180 / Math.PI);
+      })(),
     };
   }
 
