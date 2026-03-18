@@ -1814,6 +1814,26 @@ body.pause-menu-open .speedo {
   background: linear-gradient(90deg, rgba(212, 167, 74, 0.6), rgba(255, 120, 60, 0.8));
 }
 
+/* ── Corner Minimap ── */
+
+.hud-minimap {
+  position: fixed;
+  bottom: calc(24px + var(--safe-bottom));
+  left: calc(16px + var(--safe-left));
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--amber-dim);
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+body.game-started .hud-minimap { opacity: 1; }
+body.game-arrived .hud-minimap,
+body.map-open .hud-minimap,
+body.pause-menu-open .hud-minimap { opacity: 0; }
+
 /* ── Damage Vignette ── */
 
 .damage-vignette {

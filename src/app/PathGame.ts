@@ -1376,6 +1376,14 @@ export class PathGame {
         && !this.#godModeActive,
     );
     this.#shell.updateMap(this.#buildMapRuntimeSnapshot());
+    this.#shell.updateMinimap(
+      this.#mapDiscovery.cells,
+      this.#mapDiscovery.columns,
+      this.#mapDiscovery.rows,
+      this.#controller.position.x,
+      this.#controller.position.z,
+      this.#terrain.size,
+    );
     this.#debugPanel.updateTelemetry(this.#buildDebugTelemetrySnapshot());
   }
 

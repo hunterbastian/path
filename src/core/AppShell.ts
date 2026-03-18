@@ -154,6 +154,7 @@ export class AppShell {
   readonly #mapContext: CanvasRenderingContext2D;
   readonly #fogCanvas: HTMLCanvasElement;
   readonly #fogContext: CanvasRenderingContext2D;
+  readonly #minimapContext: CanvasRenderingContext2D | null;
   #mapLayout: MapLayoutSnapshot | null = null;
   #achievementToastContainer: HTMLDivElement | null = null;
   #crosshairLockHandler: (() => void) | null = null;
@@ -412,6 +413,10 @@ export class AppShell {
           </div>
         </div>
 
+        <div class="hud-minimap" id="hud-minimap">
+          <canvas id="minimap-canvas" width="96" height="96"></canvas>
+        </div>
+
         <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
 
         <aside id="map-device" class="map-device" aria-hidden="true" hidden>
@@ -511,6 +516,8 @@ export class AppShell {
       throw new Error('Unable to create fog canvas context.');
     }
     this.#fogContext = fogCtx;
+    const minimapCanvas = root.querySelector<HTMLCanvasElement>('#minimap-canvas');
+    this.#minimapContext = minimapCanvas?.getContext('2d') ?? null;
     this.#drawMap(null);
     this.#achievementToastContainer = root.querySelector('#achievement-toasts');
 
@@ -913,6 +920,43 @@ export class AppShell {
   updateMap(snapshot: MapRuntimeSnapshot): void {
     this.elements.mapStatus.textContent = snapshot.statusLabel;
     this.#drawMap(snapshot);
+  }
+
+  updateMinimap(
+    cells: Uint8Array,
+    columns: number,
+    rows: number,
+    playerX: number,
+    playerZ: number,
+    worldSize: number,
+  ): void {
+    const ctx = this.#minimapContext;
+    if (!ctx) return;
+    const w = 96, h = 96;
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw fog grid
+    const cellW = w / columns;
+    const cellH = h / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < columns; c++) {
+        const discovered = (cells[r * columns + c] ?? 0) > 0;
+        ctx.fillStyle = discovered
+          ? 'rgba(212, 167, 74, 0.08)'
+          : 'rgba(10, 12, 16, 0.6)';
+        ctx.fillRect(c * cellW, r * cellH, cellW, cellH);
+      }
+    }
+
+    // Player dot (amber with glow)
+    const half = worldSize * 0.5;
+    const px = ((playerX + half) / worldSize) * w;
+    const pz = ((playerZ + half) / worldSize) * h;
+    ctx.fillStyle = 'rgba(212, 167, 74, 0.9)';
+    ctx.shadowColor = 'rgba(212, 167, 74, 0.4)';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(px - 2, pz - 2, 4, 4);
+    ctx.shadowBlur = 0;
   }
 
   showError(message: string): void {
