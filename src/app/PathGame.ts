@@ -1110,6 +1110,7 @@ export class PathGame {
       dt,
       this.#lastWorldStreamSnapshot.routeActivity,
       this.#lastWeatherSnapshot.rainDensity,
+      this.#controller.position,
     );
     this.#valleyFog.setDayTime(this.#sky.dayTime);
     this.#valleyFog.setWeather(this.#lastWeatherSnapshot.condition);

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { WeatherCondition } from '../config/GameTuning';
+import { sampleBiome } from './BiomeConfig';
+import type { BiomeSkyTint } from './BiomeConfig';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -466,6 +468,55 @@ const ENV_TEXTURE_INTERVAL = 8;
 /** Sun orbit radius for directional light positioning. */
 const SUN_ORBIT_RADIUS = 220;
 
+/** Lerp speed for biome sky tint transitions (~3 seconds to converge). */
+const BIOME_SKY_LERP_SPEED = 0.35;
+
+// ---------------------------------------------------------------------------
+// Biome sky tint helpers
+// ---------------------------------------------------------------------------
+
+const _tintA = new THREE.Color();
+const _tintB = new THREE.Color();
+const _tintTarget = new THREE.Color();
+
+/**
+ * Compute time-of-day phase weights for biome sky tinting.
+ * Returns { goldenHour, night, noon } weights that sum to 1.
+ *
+ * Phase regions (dayTime 0-1):
+ *  - Night: roughly 0.0-0.15 and 0.88-1.0
+ *  - Golden hour (dawn): 0.18-0.30
+ *  - Noon: 0.38-0.62
+ *  - Golden hour (dusk): 0.65-0.82
+ *  - Between these: smooth transitions
+ */
+function computePhaseWeights(dayTime: number): { goldenHour: number; night: number; noon: number } {
+  // Dawn golden hour peaks at 0.25, dusk golden hour peaks at 0.75
+  // Night peaks at 0.0 (midnight), noon peaks at 0.5
+  const dawnDist = Math.min(Math.abs(dayTime - 0.25), 1 - Math.abs(dayTime - 0.25));
+  const duskDist = Math.min(Math.abs(dayTime - 0.75), 1 - Math.abs(dayTime - 0.75));
+  const goldenDist = Math.min(dawnDist, duskDist);
+
+  // Night: distance from midnight (handle wrap)
+  const nightDist = dayTime <= 0.5 ? dayTime : 1.0 - dayTime;
+
+  // Noon: distance from 0.5
+  const noonDist = Math.abs(dayTime - 0.5);
+
+  // Convert distances to weights using gaussian-like falloff
+  const goldenW = Math.exp(-goldenDist * goldenDist * 120); // tight peak around golden hours
+  const nightW = Math.exp(-nightDist * nightDist * 18);      // broader night region
+  const noonW = Math.exp(-noonDist * noonDist * 28);          // moderate noon region
+
+  // Normalize
+  const sum = goldenW + nightW + noonW;
+  return {
+    goldenHour: goldenW / sum,
+    night: nightW / sum,
+    noon: noonW / sum,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Sky class
 // ---------------------------------------------------------------------------
@@ -496,6 +547,10 @@ export class Sky {
   #baseFogNear = 46;
   #baseFogFar = 480;
   #valleyFogPush = 0;
+  /** Current smoothly interpolated biome sky tint (additive). */
+  readonly #currentBiomeTint = new THREE.Color(0x000000);
+  /** Target biome sky tint (recomputed each frame from biome + phase). */
+  readonly #targetBiomeTint = new THREE.Color(0x000000);
 
   constructor(scene: THREE.Scene) {
     this.#scene = scene;
@@ -568,6 +623,12 @@ export class Sky {
     // Compute blended mood from time + weather
     const mood = this.#computeBlendedMood();
     this.#applyMood(mood);
+
+    // Per-biome sky tint (additive, on top of time-of-day mood)
+    if (playerPosition) {
+      this.#updateBiomeSkyTint(playerPosition.x, playerPosition.z, dt);
+      this.#applyBiomeSkyTint();
+    }
 
     // Update sun position based on time-of-day orbit
     this.#updateSunPosition();
@@ -722,6 +783,61 @@ export class Sky {
     // At night (elevation < 0): scale drops to ~0.45 (tighter fog, more intimate)
     if (sunElevation >= 0) return 1;
     return THREE.MathUtils.lerp(1, 0.45, Math.min(-sunElevation, 1));
+  }
+
+  // -----------------------------------------------------------------------
+  // Biome sky tint
+  // -----------------------------------------------------------------------
+
+  /** Sample biome at player position, compute phase-weighted tint, smooth toward it. */
+  #updateBiomeSkyTint(playerX: number, playerZ: number, dt: number): void {
+    const sample = sampleBiome(playerX, playerZ);
+    const weights = computePhaseWeights(this.#dayTime);
+
+    // Compute weighted tint for primary biome
+    const primaryTint = sample.primary.skyTint;
+    this.#computeWeightedTint(_tintA, primaryTint, weights);
+
+    if (sample.secondary && sample.blend > 0) {
+      // Blend with secondary biome tint
+      const secondaryTint = sample.secondary.skyTint;
+      this.#computeWeightedTint(_tintB, secondaryTint, weights);
+      _tintA.lerp(_tintB, sample.blend);
+    }
+
+    this.#targetBiomeTint.copy(_tintA);
+
+    // Smooth interpolation (~3 seconds to converge)
+    const lerpFactor = 1 - Math.exp(-BIOME_SKY_LERP_SPEED * dt);
+    this.#currentBiomeTint.lerp(this.#targetBiomeTint, lerpFactor);
+  }
+
+  /** Combine a BiomeSkyTint's three channels using time-of-day phase weights. */
+  #computeWeightedTint(
+    out: THREE.Color,
+    tint: BiomeSkyTint,
+    weights: { goldenHour: number; night: number; noon: number },
+  ): void {
+    // Start from golden hour contribution
+    out.setHex(tint.goldenHour);
+    out.multiplyScalar(weights.goldenHour);
+
+    // Add night contribution
+    _tintTarget.setHex(tint.night);
+    _tintTarget.multiplyScalar(weights.night);
+    out.add(_tintTarget);
+
+    // Add noon contribution
+    _tintTarget.setHex(tint.noon);
+    _tintTarget.multiplyScalar(weights.noon);
+    out.add(_tintTarget);
+  }
+
+  /** Apply the current biome tint additively to fog, hemisphere sky, and hemisphere ground. */
+  #applyBiomeSkyTint(): void {
+    this.#fog.color.add(this.#currentBiomeTint);
+    this.#hemisphere.color.add(this.#currentBiomeTint);
+    this.#hemisphere.groundColor.add(this.#currentBiomeTint);
   }
 
   // -----------------------------------------------------------------------
