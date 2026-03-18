@@ -329,7 +329,7 @@ export class PathGame {
     );
 
     this.#damageHud = new DamageHud();
-    const hudPanel = this.#shell.elements.speed.closest('.hud-panel');
+    const hudPanel = this.#shell.elements.speedo.closest('.hud-panel');
     if (hudPanel) {
       hudPanel.appendChild(this.#damageHud.element);
     }
@@ -1478,6 +1478,14 @@ export class PathGame {
       timerLabel: this.#runSession.mode === 'driving'
         ? this.#formatTimer(this.#runSession.snapshot.elapsedSeconds)
         : '0:00',
+      boostLevel: state.boostLevel,
+      heading: (() => {
+        const q = this.#controller.pose.quaternion;
+        return Math.atan2(
+          2 * (q.w * q.y + q.x * q.z),
+          1 - 2 * (q.y * q.y + q.z * q.z),
+        ) * (180 / Math.PI);
+      })(),
     };
   }
 

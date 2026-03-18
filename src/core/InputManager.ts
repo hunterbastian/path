@@ -43,6 +43,7 @@ export class InputManager {
     'Backquote',
     'BracketLeft',
     'BracketRight',
+    'Tab',
   ]);
   readonly #gamepadButtonStates = new Map<string, boolean>();
   #throttle = 0;
@@ -188,6 +189,10 @@ export class InputManager {
 
   consumeRenderDebugNext(): boolean {
     return this.#consumePressed('BracketRight');
+  }
+
+  consumeHudExpand(): boolean {
+    return this.#consumePressed('Tab');
   }
 
   isDown(code: string): boolean {

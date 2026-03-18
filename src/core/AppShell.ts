@@ -5,6 +5,7 @@ export interface HudSnapshot {
   driveLabel: string;
   landmarkLabel: string;
   boostLabel: string;
+  boostLevel: number;
   weatherLabel: string;
   weatherCondition: 'cloudy' | 'rainy' | 'sunny';
   routeLabel: string;
@@ -13,6 +14,7 @@ export interface HudSnapshot {
   achievementsLabel: string;
   playersLabel: string;
   timerLabel: string;
+  heading: number;
 }
 
 export interface ArrivalSnapshot {
@@ -86,24 +88,25 @@ interface AppShellElements {
   arrivalDistance: HTMLSpanElement;
   arrivalProfile: HTMLSpanElement;
   titleCareer: HTMLSpanElement;
-  speed: HTMLSpanElement;
-  routeLabel: HTMLDivElement;
-  traction: HTMLSpanElement;
-  surface: HTMLSpanElement;
-  drive: HTMLSpanElement;
-  landmark: HTMLSpanElement;
-  boost: HTMLSpanElement;
-  weather: HTMLSpanElement;
-  weatherGlyph: HTMLSpanElement;
+  compassLeft: HTMLSpanElement;
+  compassCenter: HTMLSpanElement;
+  compassRight: HTMLSpanElement;
+  boostFill: HTMLDivElement;
+  boostValue: HTMLSpanElement;
+  driftValue: HTMLSpanElement;
+  surfaceValue: HTMLSpanElement;
+  weatherIcon: HTMLSpanElement;
+  weatherText: HTMLSpanElement;
+  expandedRelay: HTMLSpanElement;
+  expandedTimer: HTMLSpanElement;
+  expandedMapped: HTMLSpanElement;
+  expandedAchievements: HTMLSpanElement;
+  expandedPlayers: HTMLSpanElement;
+  hudExpanded: HTMLDivElement;
   mapDevice: HTMLDivElement;
   mapCanvas: HTMLCanvasElement;
   mapStatus: HTMLSpanElement;
   error: HTMLDivElement;
-  driftTotal: HTMLSpanElement;
-  mappedPercent: HTMLSpanElement;
-  achievements: HTMLSpanElement;
-  players: HTMLSpanElement;
-  timer: HTMLSpanElement;
   radioLog: HTMLDivElement;
   driftScorePopup: HTMLDivElement;
   speedoValue: HTMLSpanElement;
@@ -358,63 +361,46 @@ export class AppShell {
         </section>
 
         <div id="fps-counter" class="fps-counter">-- fps</div>
-        <aside id="hud" class="hud" aria-live="polite">
-          <div class="hud-panel">
-            <div class="hud-main">
-              <div class="speed-readout">
-                <div class="hud-subtitle">Speed</div>
-                <span id="speed" class="speed-value">0 km/h</span>
-              </div>
-              <div id="hud-route-label" class="hud-subtitle hud-route-label">Route to summit relay</div>
-            </div>
-            <div class="hud-grid">
-              <div class="hud-stack">
-                <span class="status-label">Contact</span>
-                <span id="status-ground" class="status-value">Grounded</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Surface</span>
-                <span id="status-surface" class="status-value">Dirt</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Status</span>
-                <span id="status-drive" class="status-value">Cruising</span>
-              </div>
-              <div class="hud-stack hud-stack-objective">
-                <span class="status-label status-label--icon"><span class="hud-glyph hud-glyph--relay" aria-hidden="true"></span>Relay</span>
-                <span id="status-landmark" class="status-value">0 m away</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Boost</span>
-                <span id="status-boost" class="status-value">Ready</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label status-label--icon"><span id="status-weather-glyph" class="hud-glyph hud-glyph--weather" data-condition="cloudy" aria-hidden="true"></span>Weather</span>
-                <span id="status-weather" class="status-value">Cloudy</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Drift</span>
-                <span id="status-drift-total" class="status-value" data-tone="stable">0</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Mapped</span>
-                <span id="status-mapped" class="status-value" data-tone="stable">0%</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Unlocked</span>
-                <span id="status-achievements" class="status-value" data-tone="stable">0/22</span>
-              </div>
-              <div class="hud-stack">
-                <span class="status-label">Players</span>
-                <span id="status-players" class="status-value" data-tone="stable">offline</span>
-              </div>
-              <div class="hud-stack hud-stack-timer">
-                <span class="status-label">Time</span>
-                <span id="status-timer" class="status-value" data-tone="stable">0:00</span>
-              </div>
-            </div>
+        <div class="hud-compass" id="hud-compass">
+          <div class="hud-compass-labels">
+            <span class="hud-compass-side" id="compass-left"></span>
+            <span class="hud-compass-center" id="compass-center">N</span>
+            <span class="hud-compass-side" id="compass-right"></span>
           </div>
-        </aside>
+          <div class="hud-compass-track">
+            <div class="hud-compass-marker"></div>
+          </div>
+        </div>
+
+        <div class="hud-boost" id="hud-boost">
+          <span class="hud-boost-label">Boost</span>
+          <div class="hud-boost-bar"><div class="hud-boost-fill" id="boost-fill"></div></div>
+          <span class="hud-boost-value" id="boost-value">78%</span>
+        </div>
+
+        <div class="hud-drift" id="hud-drift">
+          <span class="hud-drift-label">Drift</span>
+          <span class="hud-drift-value" id="drift-value">0</span>
+        </div>
+
+        <div class="hud-surface" id="hud-surface">
+          <span id="surface-value">Dirt</span>
+        </div>
+
+        <div class="hud-weather" id="hud-weather">
+          <span class="hud-weather-icon" id="weather-icon">◌</span>
+          <span class="hud-weather-text" id="weather-text">Cloudy</span>
+        </div>
+
+        <div class="hud-expanded" id="hud-expanded" hidden>
+          <div class="hud-expanded-grid">
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Relay</span><span class="hud-expanded-value" id="expanded-relay">--</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Timer</span><span class="hud-expanded-value" id="expanded-timer">0:00</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Mapped</span><span class="hud-expanded-value" id="expanded-mapped">0%</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Unlocked</span><span class="hud-expanded-value" id="expanded-achievements">0/0</span></div>
+            <div class="hud-expanded-cell"><span class="hud-expanded-label">Players</span><span class="hud-expanded-value" id="expanded-players">offline</span></div>
+          </div>
+        </div>
 
         <div id="drift-score-popup" class="drift-score-popup" aria-hidden="true"></div>
 
@@ -477,24 +463,25 @@ export class AppShell {
       arrivalDistance: this.#query(root, '#arrival-distance'),
       arrivalProfile: this.#query(root, '#arrival-profile'),
       titleCareer: this.#query(root, '#title-career'),
-      speed: this.#query(root, '#speed'),
-      routeLabel: this.#query(root, '#hud-route-label'),
-      traction: this.#query(root, '#status-ground'),
-      surface: this.#query(root, '#status-surface'),
-      drive: this.#query(root, '#status-drive'),
-      landmark: this.#query(root, '#status-landmark'),
-      boost: this.#query(root, '#status-boost'),
-      weather: this.#query(root, '#status-weather'),
-      weatherGlyph: this.#query(root, '#status-weather-glyph'),
+      compassLeft: this.#query(root, '#compass-left'),
+      compassCenter: this.#query(root, '#compass-center'),
+      compassRight: this.#query(root, '#compass-right'),
+      boostFill: this.#query(root, '#boost-fill'),
+      boostValue: this.#query(root, '#boost-value'),
+      driftValue: this.#query(root, '#drift-value'),
+      surfaceValue: this.#query(root, '#surface-value'),
+      weatherIcon: this.#query(root, '#weather-icon'),
+      weatherText: this.#query(root, '#weather-text'),
+      expandedRelay: this.#query(root, '#expanded-relay'),
+      expandedTimer: this.#query(root, '#expanded-timer'),
+      expandedMapped: this.#query(root, '#expanded-mapped'),
+      expandedAchievements: this.#query(root, '#expanded-achievements'),
+      expandedPlayers: this.#query(root, '#expanded-players'),
+      hudExpanded: this.#query(root, '#hud-expanded'),
       mapDevice: this.#query(root, '#map-device'),
       mapCanvas: this.#query(root, '#map-canvas'),
       mapStatus: this.#query(root, '#map-status'),
       error: this.#query(root, '.error-banner'),
-      driftTotal: this.#query(root, '#status-drift-total'),
-      mappedPercent: this.#query(root, '#status-mapped'),
-      achievements: this.#query(root, '#status-achievements'),
-      players: this.#query(root, '#status-players'),
-      timer: this.#query(root, '#status-timer'),
       radioLog: this.#query(root, '#radio-log'),
       driftScorePopup: this.#query(root, '#drift-score-popup'),
       speedoValue: this.#query(root, '#speedo-value'),
@@ -771,24 +758,7 @@ export class AppShell {
   }
 
   updateHud(snapshot: HudSnapshot): void {
-    this.elements.speed.textContent = snapshot.speedLabel;
-    this.elements.traction.textContent = snapshot.tractionLabel;
-    this.elements.surface.textContent = snapshot.surfaceLabel;
-    this.elements.drive.textContent = snapshot.driveLabel;
-    this.elements.landmark.textContent = snapshot.landmarkLabel;
-    this.elements.boost.textContent = snapshot.boostLabel;
-    this.elements.weather.textContent = snapshot.weatherLabel;
-    this.elements.weatherGlyph.dataset.condition = snapshot.weatherCondition;
-    this.elements.routeLabel.textContent = snapshot.routeLabel;
-    this.elements.driftTotal.textContent = snapshot.driftTotalLabel;
-    this.elements.mappedPercent.textContent = snapshot.mappedLabel;
-    this.elements.achievements.textContent = snapshot.achievementsLabel;
-    this.elements.players.textContent = snapshot.playersLabel;
-    this.elements.timer.textContent = snapshot.timerLabel;
-
     const speedKmh = Number.parseInt(snapshot.speedLabel, 10);
-    this.elements.speed.dataset.intensity =
-      speedKmh > 95 ? 'high' : '';
 
     // Bottom speedometer
     this.elements.speedoValue.textContent = String(speedKmh || 0);
@@ -796,48 +766,72 @@ export class AppShell {
     this.elements.speedoFill.style.width = `${speedFraction * 100}%`;
     this.elements.speedo.dataset.intensity =
       speedKmh > 100 ? 'red' : speedKmh > 70 ? 'warm' : '';
-    this.elements.traction.dataset.tone =
-      snapshot.tractionLabel === 'Airborne' ? 'warn' : 'stable';
-    this.elements.surface.dataset.tone =
-      snapshot.surfaceLabel === 'Water' ? 'cool'
-        : snapshot.surfaceLabel === 'Snow' ? 'cool'
+
+    // Floating HUD elements
+    this.elements.boostFill.style.width = `${Math.round(snapshot.boostLevel * 100)}%`;
+    this.elements.boostValue.textContent = snapshot.boostLabel;
+    this.elements.driftValue.textContent = snapshot.driftTotalLabel;
+    this.elements.surfaceValue.textContent = snapshot.surfaceLabel;
+
+    // Surface color
+    this.elements.surfaceValue.dataset.surface =
+      snapshot.surfaceLabel === 'Water' ? 'water'
+        : snapshot.surfaceLabel === 'Snow' ? 'snow'
         : snapshot.surfaceLabel === 'Sand' ? 'sand'
         : snapshot.surfaceLabel === 'Rock' ? 'rock'
-        : 'stable';
-    this.elements.drive.dataset.tone =
-      snapshot.driveLabel === 'Arrived'
-        ? 'goal'
-        : snapshot.driveLabel.startsWith('Traffic')
-          ? 'warn'
-        : snapshot.driveLabel === 'Boosting'
-          ? 'boost'
-          : snapshot.driveLabel === 'Airborne'
-            ? 'warn'
-            : snapshot.driveLabel === 'Drifting'
-              ? 'active'
-              : snapshot.driveLabel === 'Braking'
-                ? 'cool'
-                : 'stable';
-    this.elements.landmark.dataset.tone =
-      snapshot.landmarkLabel === 'Reached' ? 'goal' : 'objective';
-    this.elements.boost.dataset.tone =
-      snapshot.boostLabel === 'Ready'
-        ? 'boost'
-        : snapshot.boostLabel.endsWith('%') && Number.parseInt(snapshot.boostLabel, 10) < 25
-          ? 'warn'
-          : 'stable';
-    this.elements.weather.dataset.tone =
-      snapshot.weatherLabel.startsWith('Rainy')
-        ? 'cool'
-        : snapshot.weatherLabel.startsWith('Sunny')
-          ? 'boost'
-          : 'stable';
-    this.elements.driftTotal.dataset.tone =
-      snapshot.driftTotalLabel !== '0' ? 'active' : 'stable';
-    this.elements.players.dataset.tone =
-      snapshot.playersLabel === 'offline' ? 'stable'
-        : snapshot.playersLabel === 'solo' ? 'stable'
-        : 'cool';
+        : 'dirt';
+
+    // Weather
+    const weatherIcon =
+      snapshot.weatherCondition === 'sunny' ? '\u25CB'   // ○
+        : snapshot.weatherCondition === 'rainy' ? '\u2261' // ≡
+        : '\u25CC';                                        // ◌
+    this.elements.weatherIcon.textContent = weatherIcon;
+    this.elements.weatherText.textContent = snapshot.weatherLabel;
+
+    // Compass
+    this.updateCompass(snapshot.heading);
+
+    // Expanded grid
+    this.elements.expandedRelay.textContent = snapshot.landmarkLabel;
+    this.elements.expandedTimer.textContent = snapshot.timerLabel;
+    this.elements.expandedMapped.textContent = snapshot.mappedLabel;
+    this.elements.expandedAchievements.textContent = snapshot.achievementsLabel;
+    this.elements.expandedPlayers.textContent = snapshot.playersLabel;
+  }
+
+  updateCompass(heading: number): void {
+    // Normalize to 0-360
+    const deg = ((heading % 360) + 360) % 360;
+
+    const cardinals: Array<[string, number]> = [
+      ['N', 0], ['NE', 45], ['E', 90], ['SE', 135],
+      ['S', 180], ['SW', 225], ['W', 270], ['NW', 315],
+    ];
+
+    // Find the closest cardinal
+    let closestIdx = 0;
+    let closestDist = 360;
+    for (let i = 0; i < cardinals.length; i++) {
+      let dist = Math.abs(deg - cardinals[i]![1]);
+      if (dist > 180) dist = 360 - dist;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestIdx = i;
+      }
+    }
+
+    const prevIdx = (closestIdx - 1 + cardinals.length) % cardinals.length;
+    const nextIdx = (closestIdx + 1) % cardinals.length;
+
+    this.elements.compassLeft.textContent = cardinals[prevIdx]![0];
+    this.elements.compassCenter.textContent = cardinals[closestIdx]![0];
+    this.elements.compassRight.textContent = cardinals[nextIdx]![0];
+  }
+
+  toggleHudExpanded(): void {
+    const el = this.elements.hudExpanded;
+    el.hidden = !el.hidden;
   }
 
   setTitleWeather(label: string): void {
