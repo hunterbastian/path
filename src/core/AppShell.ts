@@ -112,8 +112,8 @@ interface AppShellElements {
   damageVignette: HTMLDivElement;
   settingVolume: HTMLInputElement;
   settingVolumeValue: HTMLSpanElement;
-  settingQuality: HTMLSelectElement;
-  settingCameraShake: HTMLInputElement;
+  settingQuality: HTMLDivElement;
+  settingCameraShake: HTMLDivElement;
   settingInputSource: HTMLSpanElement;
   settingGamepadRow: HTMLDivElement;
   settingGamepadLabel: HTMLSpanElement;
@@ -301,70 +301,59 @@ export class AppShell {
           aria-hidden="true"
           hidden
         >
-          <div class="pause-card">
-            <div class="pause-eyebrow">Field menu</div>
-            <div class="pause-title">Route Paused</div>
-            <p class="pause-copy">
-              Hold your line, check the weather, or start the basin route over
-              from the trailhead.
-            </p>
-            <div class="pause-actions">
-              <button id="pause-resume-button" class="start-button" type="button">
-                Resume Drive
-              </button>
-              <button
-                id="pause-god-mode-button"
-                class="start-button start-button--secondary"
-                type="button"
-              >
-                Enter God Mode
-              </button>
-              <button
-                id="pause-restart-button"
-                class="start-button start-button--secondary"
-                type="button"
-              >
-                Restart Run
-              </button>
+          <div class="pause-device">
+            <div class="device-header">
+              <div class="device-header-left">
+                <span class="amber-led" aria-hidden="true"></span>
+                <span class="device-header-label">System</span>
+              </div>
+              <span class="device-header-version">Esc · close</span>
             </div>
 
-            <div class="settings-panel">
-              <div class="settings-heading">Settings</div>
-              <div class="settings-grid">
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-volume">Master volume</label>
-                  <input id="setting-volume" class="settings-range" type="range" min="0" max="100" value="70" />
-                  <span id="setting-volume-value" class="settings-value">70%</span>
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-quality">Graphics</label>
-                  <select id="setting-quality" class="settings-select">
-                    <option value="high">High</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label" for="setting-camera-shake">Camera shake</label>
-                  <input id="setting-camera-shake" class="settings-toggle" type="checkbox" checked />
-                </div>
-                <div class="settings-row">
-                  <label class="settings-label">Input</label>
-                  <span id="setting-input-source" class="settings-value">Keyboard</span>
-                </div>
-                <div class="settings-row" id="setting-gamepad-row" hidden>
-                  <label class="settings-label">Controller</label>
-                  <span id="setting-gamepad-label" class="settings-value">--</span>
-                </div>
-                <div class="settings-row" id="setting-deadzone-row" hidden>
-                  <label class="settings-label" for="setting-deadzone">Stick deadzone</label>
-                  <input id="setting-deadzone" class="settings-range" type="range" min="5" max="35" value="16" />
-                  <span id="setting-deadzone-value" class="settings-value">0.16</span>
+            <div class="device-settings">
+              <div class="device-setting-row">
+                <span class="device-setting-label">Volume</span>
+                <input id="setting-volume" class="device-slider" type="range" min="0" max="100" value="70" />
+                <span id="setting-volume-value" class="device-setting-value">70</span>
+              </div>
+              <div class="device-setting-row">
+                <span class="device-setting-label">Graphics</span>
+                <div class="device-segmented" id="setting-quality" data-value="medium">
+                  <button class="device-segment" data-val="low" type="button">Low</button>
+                  <button class="device-segment is-active" data-val="medium" type="button">Med</button>
+                  <button class="device-segment" data-val="high" type="button">High</button>
                 </div>
               </div>
+              <div class="device-setting-row">
+                <span class="device-setting-label">Cam Shake</span>
+                <div class="device-toggle" id="setting-camera-shake" data-on="true">
+                  <div class="device-toggle-knob"></div>
+                </div>
+                <span class="device-toggle-label">ON</span>
+              </div>
+              <div class="device-setting-row" id="setting-deadzone-row" hidden>
+                <span class="device-setting-label">Deadzone</span>
+                <input id="setting-deadzone" class="device-slider" type="range" min="5" max="35" value="16" />
+                <span id="setting-deadzone-value" class="device-setting-value">.16</span>
+              </div>
+              <div class="device-setting-row" id="setting-gamepad-row" hidden>
+                <span class="device-setting-label">Gamepad</span>
+                <span id="setting-gamepad-label" class="device-setting-value" style="flex:1">--</span>
+              </div>
+              <span id="setting-input-source" hidden>Keyboard</span>
             </div>
 
-            <div class="pause-meta">Press Esc or Start to close. Esc in god mode returns to drive.</div>
+            <div class="device-actions">
+              <button id="pause-resume-button" class="device-action device-action--primary" type="button">
+                &#9658; Resume
+              </button>
+              <button id="pause-restart-button" class="device-action" type="button">
+                Restart run
+              </button>
+              <button id="pause-god-mode-button" class="device-action" type="button">
+                Free camera
+              </button>
+            </div>
           </div>
         </section>
 
@@ -540,11 +529,30 @@ export class AppShell {
 
     // Settings panel interactivity
     this.elements.settingVolume.addEventListener('input', () => {
-      this.elements.settingVolumeValue.textContent = `${this.elements.settingVolume.value}%`;
+      this.elements.settingVolumeValue.textContent = this.elements.settingVolume.value;
     });
     this.elements.settingDeadzone.addEventListener('input', () => {
       const val = Number(this.elements.settingDeadzone.value) / 100;
       this.elements.settingDeadzoneValue.textContent = val.toFixed(2);
+    });
+
+    // Segmented toggle: graphics quality
+    const qualityContainer = this.elements.settingQuality;
+    qualityContainer.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.device-segment') as HTMLButtonElement | null;
+      if (!btn) return;
+      qualityContainer.querySelectorAll('.device-segment').forEach((s) => s.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      qualityContainer.dataset.value = btn.dataset.val ?? 'medium';
+    });
+
+    // Square toggle: camera shake
+    const shakeToggle = this.elements.settingCameraShake;
+    shakeToggle.addEventListener('click', () => {
+      const isOn = shakeToggle.dataset.on === 'true';
+      shakeToggle.dataset.on = String(!isOn);
+      const label = shakeToggle.nextElementSibling as HTMLElement | null;
+      if (label) label.textContent = isOn ? 'OFF' : 'ON';
     });
 
     // Toggle crosshair visibility based on pointer lock
@@ -725,8 +733,8 @@ export class AppShell {
   getSettingsValues(): { volume: number; quality: string; cameraShake: boolean; deadzone: number } {
     return {
       volume: Number(this.elements.settingVolume.value) / 100,
-      quality: this.elements.settingQuality.value,
-      cameraShake: this.elements.settingCameraShake.checked,
+      quality: this.elements.settingQuality.dataset.value ?? 'medium',
+      cameraShake: this.elements.settingCameraShake.dataset.on === 'true',
       deadzone: Number(this.elements.settingDeadzone.value) / 100,
     };
   }
