@@ -64,6 +64,9 @@ import { SampleAudio } from '../audio/SampleAudio';
 import { EffectsCoordinator } from './EffectsCoordinator';
 import { ValleyFog } from '../world/ValleyFog';
 import { sampleBiome, type BiomeName } from '../world/BiomeConfig';
+import { ProgressionSystem } from '../gameplay/ProgressionSystem';
+import { LevelGateSystem } from '../gameplay/LevelGate';
+import { ViewpointSystem } from '../gameplay/ViewpointSystem';
 
 const PHYSICS_STEP_SECONDS = 1 / 60;
 const SCENARIO_IDS: ScenarioFixtureId[] = [
@@ -116,6 +119,9 @@ export class PathGame {
   readonly #weatherState: WeatherState;
   readonly #achievements: AchievementSystem;
   readonly #driftScore = new DriftScoreSystem();
+  readonly #progression = new ProgressionSystem();
+  readonly #levelGates = new LevelGateSystem();
+  readonly #viewpoints = new ViewpointSystem();
   #pollen: PollenSystem | null = null;
   #trees: TreeSystem | null = null;
   #birds: BirdSystem | null = null;
@@ -387,6 +393,7 @@ export class PathGame {
   }
 
   dispose(): void {
+    this.#progression.save();
     this.#loop.stop();
     this.#network.disconnect();
     this.#input.dispose();
@@ -1071,6 +1078,37 @@ export class PathGame {
       if (scoredDrift) {
         this.#shell.showDriftScore(scoredDrift.points, scoredDrift.duration);
       }
+
+      // Progression: XP from driving
+      const metersDriven = this.#controller.state.speed * dt;
+      this.#progression.addDriveXP(metersDriven);
+      this.#progression.addDiscoveryXP(this.#mapDiscovery.cells, this.#mapDiscovery.columns);
+      this.#progression.tickSave(dt);
+
+      // Level-up notification
+      const newLevel = this.#progression.consumeLevelUp();
+      if (newLevel !== null) {
+        this.#shell.showAchievementToast(`Level ${newLevel}`, 'Your driving skills have grown', `${newLevel}`);
+      }
+
+      // Viewpoint check
+      const vpPos = this.#controller.pose.position;
+      const viewpoint = this.#viewpoints.check(vpPos.x, vpPos.z);
+      if (viewpoint) {
+        this.#shell.showDiscoveryToast(`Viewpoint: ${viewpoint.name}`);
+        this.#mapDiscovery.reveal(vpPos.x, vpPos.z, viewpoint.revealRadius);
+        this.#progression.grantBonusXP(viewpoint.xpReward);
+      }
+
+      // Level gate check
+      const gateLabel = this.#levelGates.check(vpPos.x, vpPos.z, this.#progression.level);
+      if (gateLabel) {
+        const push = this.#levelGates.getPushBack(vpPos.x, vpPos.z, this.#progression.level);
+        if (push) {
+          // Gentle push-back — reduce speed and nudge away
+          this.#controller.state.speed *= 0.9;
+        }
+      }
     }
 
     this.#syncShell();
@@ -1511,6 +1549,8 @@ export class PathGame {
           1 - 2 * (q.y * q.y + q.z * q.z),
         ) * (180 / Math.PI);
       })(),
+      level: this.#progression.level,
+      levelProgress: this.#progression.levelProgress,
     };
   }
 
