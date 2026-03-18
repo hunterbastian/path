@@ -890,6 +890,7 @@ export class PathGame {
     // Screen effects
     if (this.#controller.state.impactMagnitude > 2) {
       this.#damageFlash = Math.min(this.#controller.state.impactMagnitude / 8, 1);
+      this.#shell.flashDamage(this.#damageFlash);
     }
     this.#damageFlash *= Math.exp(-6 * dt);
     if (this.#damageFlash < 0.01) this.#damageFlash = 0;

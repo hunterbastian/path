@@ -106,6 +106,10 @@ interface AppShellElements {
   timer: HTMLSpanElement;
   radioLog: HTMLDivElement;
   driftScorePopup: HTMLDivElement;
+  speedoValue: HTMLSpanElement;
+  speedoFill: HTMLDivElement;
+  speedo: HTMLDivElement;
+  damageVignette: HTMLDivElement;
 }
 
 // ── Topo map palette ──
@@ -403,6 +407,16 @@ export class AppShell {
 
         <div id="drift-score-popup" class="drift-score-popup" aria-hidden="true"></div>
 
+        <div id="speedo" class="speedo" aria-hidden="true">
+          <span id="speedo-value" class="speedo-value">0</span>
+          <span class="speedo-unit">km/h</span>
+          <div class="speedo-bar">
+            <div id="speedo-fill" class="speedo-fill"></div>
+          </div>
+        </div>
+
+        <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
+
         <aside id="map-device" class="map-device" aria-hidden="true" hidden>
           <div class="map-shell">
             <div class="map-screen-wrap">
@@ -472,6 +486,10 @@ export class AppShell {
       timer: this.#query(root, '#status-timer'),
       radioLog: this.#query(root, '#radio-log'),
       driftScorePopup: this.#query(root, '#drift-score-popup'),
+      speedoValue: this.#query(root, '#speedo-value'),
+      speedoFill: this.#query(root, '#speedo-fill'),
+      speedo: this.#query(root, '#speedo'),
+      damageVignette: this.#query(root, '#damage-vignette'),
     };
 
     const mapContext = this.elements.mapCanvas.getContext('2d');
@@ -631,6 +649,17 @@ export class AppShell {
     this.elements.startButton.addEventListener('click', handler);
   }
 
+  flashDamage(intensity: number): void {
+    const el = this.elements.damageVignette;
+    el.style.opacity = String(Math.min(intensity, 0.7));
+    el.classList.add('active');
+    // Let CSS transition handle fade-out
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.classList.remove('active'), 400);
+    }, 80);
+  }
+
   getPlayerName(): string {
     return this.elements.playerNameInput.value.trim() || 'Anonymous';
   }
@@ -670,6 +699,13 @@ export class AppShell {
     const speedKmh = Number.parseInt(snapshot.speedLabel, 10);
     this.elements.speed.dataset.intensity =
       speedKmh > 95 ? 'high' : '';
+
+    // Bottom speedometer
+    this.elements.speedoValue.textContent = String(speedKmh || 0);
+    const speedFraction = Math.min(speedKmh / 140, 1);
+    this.elements.speedoFill.style.width = `${speedFraction * 100}%`;
+    this.elements.speedo.dataset.intensity =
+      speedKmh > 100 ? 'red' : speedKmh > 70 ? 'warm' : '';
     this.elements.traction.dataset.tone =
       snapshot.tractionLabel === 'Airborne' ? 'warn' : 'stable';
     this.elements.surface.dataset.tone =
