@@ -173,85 +173,60 @@ export class AppShell {
           class="screen title-screen"
           aria-hidden="true"
         >
-          <div class="title-card">
-            <div class="title-topline">
-              <div class="title-kicker">PATH</div>
+          <div class="title-device">
+            <div class="device-header">
+              <div class="device-header-left">
+                <span class="amber-led" aria-hidden="true"></span>
+                <span class="device-header-label">PATH · Navigator Terminal</span>
+              </div>
+              <span class="device-header-version">SYS 0.4.1</span>
             </div>
-            <div class="title-hero">
-              <div class="title-copy-block">
-                <div class="title-region">tower basin / live weather cycle</div>
-                <div class="title-name">PATH</div>
-                <div class="title-rule"></div>
-                <p class="title-copy">
-                  Drive the last dirt line below Tower Mountain and bring the
-                  summit relay back online.
-                </p>
-              </div>
+
+            <div class="device-screen">
+              <div class="device-screen-phosphor" aria-hidden="true"></div>
+              <div class="crt-scanlines" aria-hidden="true"></div>
+              <span class="device-screen-status">▸ Terrain preview active</span>
             </div>
-            <div class="title-facts">
-              <div class="title-fact title-fact--conditions">
-                <span class="title-fact-label">Weather</span>
-                <span id="title-weather" class="title-fact-value">Cloudy now, rainy next in 1:30</span>
+
+            <div class="device-data-row">
+              <div class="device-data-cell">
+                <span class="device-data-label">Region</span>
+                <span class="device-data-value">Patagonia</span>
               </div>
-              <div class="title-fact title-fact--audio">
-                <span class="title-fact-label">Audio</span>
-                <span id="title-audio" class="title-fact-value">Tap or press a key to enable</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Grid</span>
+                <span class="device-data-value">920 × 920</span>
               </div>
-              <div class="title-fact title-fact--objective">
-                <span class="title-fact-label">Objective</span>
-                <span class="title-fact-value">Bring the summit relay online</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Conditions</span>
+                <span id="title-weather" class="device-data-value">Clear</span>
               </div>
-              <div class="title-fact title-fact--terrain">
-                <span class="title-fact-label">Terrain</span>
-                <span class="title-fact-value">Dirt paths, snow, meltwater</span>
-              </div>
-              <div class="title-fact title-fact--career">
-                <span class="title-fact-label">Career</span>
-                <span id="title-career" class="title-fact-value">No runs yet</span>
+              <div class="device-data-cell">
+                <span class="device-data-label">Relay</span>
+                <span id="title-audio" class="device-data-value">Online</span>
               </div>
             </div>
-            <div class="title-actions">
-              <div class="title-name-input-row">
-                <label for="player-name-input" class="title-name-label">Driver name</label>
-                <input
-                  id="player-name-input"
-                  class="player-name-input"
-                  type="text"
-                  maxlength="24"
-                  placeholder="Anonymous"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </div>
-              <button id="start-button" class="start-button" type="button">
-                Enter Route
+
+            <div class="device-title-block">
+              <div class="device-title">PATH</div>
+              <div class="device-subtitle">Open-world driving · autonomous navigation</div>
+              <span id="title-career" class="device-career">No runs yet</span>
+            </div>
+
+            <div class="device-footer">
+              <label for="player-name-input" class="device-footer-label">Callsign</label>
+              <input
+                id="player-name-input"
+                class="player-name-input device-input"
+                type="text"
+                maxlength="24"
+                placeholder="Anonymous"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="start-button" class="start-button device-button" type="button">
+                Initialize
               </button>
-              <div class="title-meta">Press Enter, Start, or A</div>
-            </div>
-            <div class="title-controls">
-              <div class="title-controls-heading">Quick keys</div>
-              <div class="title-controls-grid">
-                <div class="title-control-item">
-                  <span>Drive</span>
-                  <strong>WASD or arrow keys</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Handbrake / Boost</span>
-                  <strong>Space handbrake (drift), Shift boost</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Camera</span>
-                  <strong>Click to freelook, auto-returns behind you</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Menu</span>
-                  <strong>M map, Esc pause, R reset</strong>
-                </div>
-                <div class="title-control-item">
-                  <span>Gamepad</span>
-                  <strong>Left stick steers, RT drives, LT brakes, A boosts</strong>
-                </div>
-              </div>
             </div>
           </div>
         </section>
