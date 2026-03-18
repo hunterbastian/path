@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { WeatherCondition } from '../config/GameTuning';
 import { SeededRandom } from '../core/SeededRandom';
-import { SEA_LEVEL, Terrain, type BiomeType } from './Terrain';
+import { sampleBiome } from './BiomeConfig';
+import { SEA_LEVEL, Terrain } from './Terrain';
 
 interface GrassPatch {
   position: THREE.Vector3;
@@ -340,6 +341,10 @@ export class GrassField {
     const halfSize = this.#terrain.size * 0.47;
     const cityCenter = this.#terrain.getCityCenterPosition();
     const outposts = this.#terrain.getOutpostPositions();
+    const baseColorA = new THREE.Color();
+    const baseColorB = new THREE.Color();
+    const tipColorA = new THREE.Color();
+    const tipColorB = new THREE.Color();
 
     for (let attempt = 0; attempt < 7000 && patches.length < 480; attempt += 1) {
       const x = random.range(-halfSize, halfSize);
@@ -351,6 +356,16 @@ export class GrassField {
       const supportsGrass = surface === 'grass' || surface === 'dirt';
       if (!supportsGrass) continue;
       if (roadInfluence > 0.38) continue;
+
+      // Per-biome density check — skip early for barren biomes
+      const biomeSample = sampleBiome(x, z);
+      const primaryGrass = biomeSample.primary.grass;
+      const secondaryGrass = biomeSample.secondary?.grass ?? null;
+      const biomeDensity = secondaryGrass
+        ? THREE.MathUtils.lerp(primaryGrass.density, secondaryGrass.density, biomeSample.blend)
+        : primaryGrass.density;
+      if (biomeDensity <= 0) continue;
+      if (random.next() > biomeDensity) continue;
 
       const slope = 1 - this.#terrain.getNormalAt(x, z).y;
       if (slope > 0.22) continue;
@@ -409,63 +424,40 @@ export class GrassField {
         this.#terrain.getHeightAt(x, z) + 0.03,
         z,
       );
-      // Biome-aware color palette
-      const { biome, influence: biomeStr } = this.#terrain.getBiomeAt(x, z);
-      const colorRoll = random.next();
-      let tintBase: THREE.Color;
 
-      if (biome === 'meadow' && biomeStr > 0.2) {
-        // Meadow: golden steppe, dried amber, warm straw
-        tintBase = colorRoll < 0.2
-          ? new THREE.Color(0xd0b058)  // pale golden
-          : colorRoll < 0.5
-            ? new THREE.Color(0xc0a048)  // warm straw
-            : new THREE.Color(0xa89040);  // amber
-      } else if (biome === 'desert' && biomeStr > 0.2) {
-        // Desert: sun-bleached, dry earth tones
-        tintBase = colorRoll < 0.4
-          ? new THREE.Color(0xb89838)  // dry straw
-          : colorRoll < 0.7
-            ? new THREE.Color(0xa08030)  // faded ochre
-            : new THREE.Color(0x888048);  // dusty olive
-      } else if (biome === 'hollow' && biomeStr > 0.2) {
-        // Hollow: dark sage, olive, muted earth
-        tintBase = colorRoll < 0.2
-          ? new THREE.Color(0x606838)  // dark olive
-          : colorRoll < 0.45
-            ? new THREE.Color(0x708040)  // sage
-            : new THREE.Color(0x586830);  // dark sage
+      // Per-biome color from grass config, with transition zone blending
+      baseColorA.setHex(primaryGrass.baseColor);
+      tipColorA.setHex(primaryGrass.tipColor);
+      let baseColor: THREE.Color;
+      let tipColor: THREE.Color;
+      if (secondaryGrass && biomeSample.blend > 0.01) {
+        baseColorB.setHex(secondaryGrass.baseColor);
+        tipColorB.setHex(secondaryGrass.tipColor);
+        baseColor = baseColorA.clone().lerp(baseColorB, biomeSample.blend);
+        tipColor = tipColorA.clone().lerp(tipColorB, biomeSample.blend);
       } else {
-        // Default palette — golden-brown steppe
-        tintBase = colorRoll < 0.08 && surface === 'dirt'
-          ? new THREE.Color(0xb09048)
-          : colorRoll < 0.18
-            ? new THREE.Color(0x909060)
-            : colorRoll < 0.28
-              ? new THREE.Color(0x808048)
-              : surface === 'grass'
-                ? new THREE.Color(0xb8a050)
-                : new THREE.Color(0xa09048);
+        baseColor = baseColorA.clone();
+        tipColor = tipColorA.clone();
       }
 
-      const tint = tintBase
-        .lerp(new THREE.Color(0xd0b860), random.range(0.08, 0.35))
-        .lerp(new THREE.Color(0x887040), random.range(0, 0.18));
+      // Tint varies between base and tip color, with slight random variation
+      const tipLerp = random.range(0.15, 0.55);
+      const tint = baseColor.lerp(tipColor, tipLerp);
+      // Add subtle random variation to break up uniformity
+      tint.offsetHSL(random.range(-0.02, 0.02), random.range(-0.04, 0.04), random.range(-0.04, 0.04));
 
-      // Biome affects height — meadow is chest-height Ghibli fields
-      const heightMin = biome === 'meadow' ? 1.8 : biome === 'desert' ? 0.36 : biome === 'hollow' ? 0.9 : 0.7;
-      const heightMax = biome === 'meadow' ? 3.2 : biome === 'desert' ? 0.72 : biome === 'hollow' ? 1.6 : 1.4;
-      // Meadow sways in long lazy waves, hollow barely moves
-      const swayMin = biome === 'meadow' ? 0.12 : biome === 'hollow' ? 0.03 : 0.07;
-      const swayMax = biome === 'meadow' ? 0.28 : biome === 'hollow' ? 0.10 : 0.18;
-      // Meadow blades are wider and more lush
-      const widthMin = biome === 'meadow' ? 0.52 : 0.34;
-      const widthMax = biome === 'meadow' ? 1.1 : biome === 'hollow' ? 0.72 : 0.68;
-
-      // Golden tip tint for meadow — blades lighten at the top (baked into tint)
-      if (biome === 'meadow' && biomeStr > 0.3) {
-        tint.lerp(new THREE.Color(0xe0c850), random.range(0.05, 0.18));
-      }
+      // Per-biome height from grass config
+      const biomeHeightScale = secondaryGrass
+        ? THREE.MathUtils.lerp(primaryGrass.heightScale, secondaryGrass.heightScale, biomeSample.blend)
+        : primaryGrass.heightScale;
+      const heightMin = 0.7 * biomeHeightScale;
+      const heightMax = 1.4 * biomeHeightScale;
+      // Alpine Meadows (heightScale 1.0) gets taller, lushier grass
+      const isLush = biomeHeightScale > 0.8;
+      const swayMin = isLush ? 0.12 : 0.05;
+      const swayMax = isLush ? 0.28 : 0.14;
+      const widthMin = isLush ? 0.52 : 0.34;
+      const widthMax = isLush ? 1.1 : 0.68;
 
       patches.push({
         position,
