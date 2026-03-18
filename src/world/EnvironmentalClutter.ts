@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SeededRandom } from '../core/SeededRandom';
+import { SEA_LEVEL } from './Terrain';
 import type { Terrain } from './Terrain';
 
 /**
@@ -216,6 +217,7 @@ export class EnvironmentalClutter {
       if (!this.#terrain.isWithinBounds(wx, wz)) continue;
 
       const wy = this.#terrain.getHeightAt(wx, wz);
+      if (wy < SEA_LEVEL) continue;
       const variant = i % 3;
       const group = variant === 0
         ? this.#createWreckSedan(random)
@@ -419,6 +421,7 @@ export class EnvironmentalClutter {
       if (!this.#terrain.isWithinBounds(sx, sz)) continue;
 
       const sy = this.#terrain.getHeightAt(sx, sz);
+      if (sy < SEA_LEVEL) continue;
       const text = SIGN_TEXTS[i % SIGN_TEXTS.length]!;
       const group = this.#createRoadSign(random, text);
 
@@ -531,6 +534,7 @@ export class EnvironmentalClutter {
       if (!this.#terrain.isWithinBounds(dx, dz)) continue;
 
       const dy = this.#terrain.getHeightAt(dx, dz);
+      if (dy < SEA_LEVEL) continue;
       const variant = i % 3;
       const group = variant === 0
         ? this.#createConcreteDebris(random)

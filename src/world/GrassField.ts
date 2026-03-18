@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { WeatherCondition } from '../config/GameTuning';
 import { SeededRandom } from '../core/SeededRandom';
-import { Terrain, type BiomeType } from './Terrain';
+import { SEA_LEVEL, Terrain, type BiomeType } from './Terrain';
 
 interface GrassPatch {
   position: THREE.Vector3;
@@ -30,7 +30,7 @@ export class GrassField {
   readonly #patchHidden: boolean[];
   readonly #dummy = new THREE.Object3D();
   readonly #windDirection = new THREE.Vector3(-1, 0, 0.35).normalize();
-  readonly #trampledTint = new THREE.Color(0xa89850); // yellowed/dried
+  readonly #trampledTint = new THREE.Color(0x907840); // dusty trampled earth
   readonly #tempColor = new THREE.Color();
   readonly #hiddenMatrix = new THREE.Matrix4().makeScale(0.0001, 0.0001, 0.0001);
   /** Spatial grid: each cell holds patch indices for fast neighborhood lookup. */
@@ -345,6 +345,7 @@ export class GrassField {
       const x = random.range(-halfSize, halfSize);
       const z = random.range(-halfSize, halfSize);
       if (!this.#terrain.isWithinBounds(x, z)) continue;
+      if (this.#terrain.getHeightAt(x, z) < SEA_LEVEL + 1) continue;
       const surface = this.#terrain.getSurfaceAt(x, z);
       const roadInfluence = this.#terrain.getRoadInfluence(x, z);
       const supportsGrass = surface === 'grass' || surface === 'dirt';
@@ -414,42 +415,42 @@ export class GrassField {
       let tintBase: THREE.Color;
 
       if (biome === 'meadow' && biomeStr > 0.2) {
-        // Meadow: luminous warm greens, golden highlights
-        tintBase = colorRoll < 0.15
-          ? new THREE.Color(0xb8e048)  // golden-green
-          : colorRoll < 0.35
-            ? new THREE.Color(0x68d860)  // bright lime
-            : new THREE.Color(0x58c050);  // vivid green
-      } else if (biome === 'desert' && biomeStr > 0.2) {
-        // Desert: sun-bleached straw, sparse dry tufts
-        tintBase = colorRoll < 0.4
-          ? new THREE.Color(0xc8a848)  // dry straw
-          : colorRoll < 0.7
-            ? new THREE.Color(0xa89040)  // faded amber
-            : new THREE.Color(0x8a9050);  // olive-brown
-      } else if (biome === 'hollow' && biomeStr > 0.2) {
-        // Hollow: deep emerald, mossy, mysterious
+        // Meadow: golden steppe, dried amber, warm straw
         tintBase = colorRoll < 0.2
-          ? new THREE.Color(0x1a5830)  // deep forest
+          ? new THREE.Color(0xd0b058)  // pale golden
+          : colorRoll < 0.5
+            ? new THREE.Color(0xc0a048)  // warm straw
+            : new THREE.Color(0xa89040);  // amber
+      } else if (biome === 'desert' && biomeStr > 0.2) {
+        // Desert: sun-bleached, dry earth tones
+        tintBase = colorRoll < 0.4
+          ? new THREE.Color(0xb89838)  // dry straw
+          : colorRoll < 0.7
+            ? new THREE.Color(0xa08030)  // faded ochre
+            : new THREE.Color(0x888048);  // dusty olive
+      } else if (biome === 'hollow' && biomeStr > 0.2) {
+        // Hollow: dark sage, olive, muted earth
+        tintBase = colorRoll < 0.2
+          ? new THREE.Color(0x606838)  // dark olive
           : colorRoll < 0.45
-            ? new THREE.Color(0x2a7040)  // dark emerald
-            : new THREE.Color(0x3a6838);  // moss
+            ? new THREE.Color(0x708040)  // sage
+            : new THREE.Color(0x586830);  // dark sage
       } else {
-        // Default palette
+        // Default palette — golden-brown steppe
         tintBase = colorRoll < 0.08 && surface === 'dirt'
-          ? new THREE.Color(0xc8a84a)
+          ? new THREE.Color(0xb09048)
           : colorRoll < 0.18
-            ? new THREE.Color(0x7a9868)
+            ? new THREE.Color(0x909060)
             : colorRoll < 0.28
-              ? new THREE.Color(0x2e6040)
+              ? new THREE.Color(0x808048)
               : surface === 'grass'
-                ? new THREE.Color(0x52b050)
-                : new THREE.Color(0x6ea050);
+                ? new THREE.Color(0xb8a050)
+                : new THREE.Color(0xa09048);
       }
 
       const tint = tintBase
-        .lerp(new THREE.Color(0x8ee062), random.range(0.10, 0.48))
-        .lerp(new THREE.Color(0x3a8838), random.range(0, 0.20));
+        .lerp(new THREE.Color(0xd0b860), random.range(0.08, 0.35))
+        .lerp(new THREE.Color(0x887040), random.range(0, 0.18));
 
       // Biome affects height — meadow is chest-height Ghibli fields
       const heightMin = biome === 'meadow' ? 1.8 : biome === 'desert' ? 0.36 : biome === 'hollow' ? 0.9 : 0.7;
@@ -463,7 +464,7 @@ export class GrassField {
 
       // Golden tip tint for meadow — blades lighten at the top (baked into tint)
       if (biome === 'meadow' && biomeStr > 0.3) {
-        tint.lerp(new THREE.Color(0xd8e848), random.range(0.05, 0.18));
+        tint.lerp(new THREE.Color(0xe0c850), random.range(0.05, 0.18));
       }
 
       patches.push({
@@ -485,7 +486,7 @@ export class GrassField {
 
   #createMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0x50e040,
+      color: 0xb09848,
       map: this.#texture,
       alphaMap: this.#texture,
       alphaTest: 0.26,
@@ -494,7 +495,7 @@ export class GrassField {
       side: THREE.DoubleSide,
       roughness: 0.78,
       metalness: 0,
-      emissive: 0x288820,
+      emissive: 0x584820,
       emissiveIntensity: 0.42,
       flatShading: true,
       depthWrite: false,
@@ -536,13 +537,13 @@ export class GrassField {
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     const blade = context.createLinearGradient(48, 0, 48, 256);
-    blade.addColorStop(0, 'rgba(255, 255, 220, 0)');         // transparent tip
-    blade.addColorStop(0.04, 'rgba(255, 255, 200, 0.65)');   // golden glow at very tip
-    blade.addColorStop(0.10, 'rgba(255, 255, 230, 0.85)');   // luminous upper
-    blade.addColorStop(0.22, 'rgba(255, 255, 255, 0.96)');   // full opacity
-    blade.addColorStop(0.65, 'rgba(255, 255, 255, 0.94)');   // sustain
-    blade.addColorStop(0.88, 'rgba(240, 255, 240, 0.72)');   // fade toward base
-    blade.addColorStop(1, 'rgba(220, 240, 220, 0)');
+    blade.addColorStop(0, 'rgba(255, 240, 200, 0)');         // transparent tip
+    blade.addColorStop(0.04, 'rgba(255, 230, 180, 0.65)');   // warm glow at very tip
+    blade.addColorStop(0.10, 'rgba(255, 240, 210, 0.85)');   // luminous upper
+    blade.addColorStop(0.22, 'rgba(255, 250, 240, 0.96)');   // full opacity
+    blade.addColorStop(0.65, 'rgba(250, 240, 225, 0.94)');   // sustain
+    blade.addColorStop(0.88, 'rgba(230, 220, 195, 0.72)');   // fade toward base
+    blade.addColorStop(1, 'rgba(210, 200, 175, 0)');
     context.fillStyle = blade;
 
     context.beginPath();

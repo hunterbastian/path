@@ -4,6 +4,10 @@ import { SeededRandom } from '../core/SeededRandom';
 import { applyProceduralParallax } from '../render/applyProceduralParallax';
 import { VEHICLE_CLEARANCE } from '../vehicle/vehicleShared';
 
+export const SEA_LEVEL = 3;
+/** Average distance from center where coastline sits. */
+export const ISLAND_EDGE = 355;
+
 export type SurfaceType = 'sand' | 'dirt' | 'grass' | 'rock' | 'snow';
 export type BiomeType = 'default' | 'meadow' | 'desert' | 'hollow';
 
@@ -116,6 +120,12 @@ export class Terrain {
     return Math.abs(x) <= half && Math.abs(z) <= half;
   }
 
+  /** True if position is above sea level and within the island landmass. */
+  isOnLand(x: number, z: number): boolean {
+    if (!this.isWithinBounds(x, z)) return false;
+    return this.getHeightAt(x, z) >= SEA_LEVEL;
+  }
+
   getPathCenterX(z: number): number {
     const nz = z / this.size;
     return Math.sin(nz * Math.PI * 2.3) * 28 + Math.sin(nz * Math.PI * 0.9) * 14;
@@ -175,19 +185,11 @@ export class Terrain {
   }
 
   #computeHeightAt(x: number, z: number): number {
-    const pathCenter = this.getPathCenterX(z);
-    const valleyDistance = Math.abs(x - pathCenter);
-    const valleyWall = Math.pow(
-      THREE.MathUtils.clamp(valleyDistance / 165, 0, 1),
-      1.22,
-    ) * 52;
-
     const broad = this.#sampleNoise(x, z, 1.7, 12, -5) * 13;
     const medium = this.#sampleNoise(x, z, 4.6, -18, 7) * 8;
     const detail = this.#sampleNoise(x, z, 10.4, 4.3, -14.8) * 2.8;
-    const basin = THREE.MathUtils.clamp(Math.abs(z) / (this.size * 0.52), 0, 1) * 6;
 
-    let height = 8 + valleyWall + basin + broad + medium + detail;
+    let height = 8 + broad + medium + detail;
     const roadInfluence = this.getRoadInfluence(x, z);
     const roadHeight = 3.5 + broad * 0.45 + medium * 0.2 - roadInfluence * 0.8;
     height = THREE.MathUtils.lerp(height, roadHeight, roadInfluence * 0.8);
@@ -195,13 +197,31 @@ export class Terrain {
     const distFromSpawn = Math.hypot(x, z);
     if (distFromSpawn < 62) {
       const blend = Math.pow(1 - distFromSpawn / 62, 1.75);
-      height = THREE.MathUtils.lerp(height, 0, blend);
+      height = THREE.MathUtils.lerp(height, SEA_LEVEL + 3, blend);
     }
 
     height += this.#routeCrestContribution(x, z);
     height += this.#landmarkContribution(x, z);
     height += this.#mountainRangeContribution(x, z);
-    return Math.max(height, 0);
+
+    // Island falloff — terrain drops below sea level toward edges
+    const distFromCenter = Math.sqrt(x * x + z * z);
+    const coastNoise = this.#sampleNoise(x, z, 0.6, 42, -17) * 30;
+    const edgeRadius = ISLAND_EDGE + coastNoise;
+    const dropStart = edgeRadius - 25;
+    const dropEnd = edgeRadius + 50;
+
+    if (distFromCenter > dropStart) {
+      const t = THREE.MathUtils.clamp(
+        (distFromCenter - dropStart) / (dropEnd - dropStart), 0, 1,
+      );
+      const falloff = t * t * (3 - 2 * t); // smoothstep
+      // Blend height toward sea floor
+      const seaFloor = -6 + this.#sampleNoise(x, z, 2.2, -8, 14) * 2;
+      height = THREE.MathUtils.lerp(height, seaFloor, falloff);
+    }
+
+    return height;
   }
 
   getNormalAt(x: number, z: number): THREE.Vector3 {
@@ -232,6 +252,12 @@ export class Terrain {
     const snowCoverage = this.#getMainAreaSnowCoverage(x, z, height, slope);
     const sandBasinInfluence = this.#getSandBasinInfluence(x, z);
     const { biome, influence: biomeStr } = this.getBiomeAt(x, z);
+
+    // Coastal beach — sand near sea level at island edges
+    if (height < SEA_LEVEL + 4 && height >= SEA_LEVEL - 1 && slope < 0.32) {
+      const distFromCenter = Math.sqrt(x * x + z * z);
+      if (distFromCenter > ISLAND_EDGE - 80) return 'sand';
+    }
 
     // Universal high-altitude rules
     if (height > 95) return 'snow';
@@ -479,29 +505,6 @@ export class Terrain {
     ];
   }
 
-  /** Full loop road waypoints for raider patrols — clockwise circuit. */
-  getLoopRoadWaypoints(): THREE.Vector3[] {
-    const waypoints: THREE.Vector3[] = [];
-    const addWaypoint = (x: number, z: number) => {
-      waypoints.push(new THREE.Vector3(x, this.getHeightAt(x, z) + VEHICLE_CLEARANCE, z));
-    };
-
-    // Main path — south to north
-    for (let z = -20; z <= this.objectiveCenter.y; z += 32) {
-      addWaypoint(this.getPathCenterX(z), z);
-    }
-    addWaypoint(this.objectiveCenter.x, this.objectiveCenter.y);
-
-    // Western return — north to south
-    addWaypoint(-110, this.objectiveCenter.y + 20);
-    addWaypoint(-155, (this.objectiveCenter.y + 130) * 0.5);
-    addWaypoint(-140, 100);
-    addWaypoint(-90, 30);
-    addWaypoint(this.getPathCenterX(-20), -20);
-
-    return waypoints;
-  }
-
   #findRouteOutpostCenter(targetZ: number, lateralOffset: number): THREE.Vector2 {
     let best = new THREE.Vector2(this.getPathCenterX(targetZ) + lateralOffset, targetZ);
     let bestScore = Number.POSITIVE_INFINITY;
@@ -740,27 +743,29 @@ export class Terrain {
     const snowMasks = new Float32Array(positions.count);
     const color = new THREE.Color();
 
-    // Ghibli palette — lush greens dominate, minimal brown
-    const sand = new THREE.Color(0xe8d888);
-    const sandLight = new THREE.Color(0xf0e4a8);
-    const dirt = new THREE.Color(0x78a060);      // green-earth instead of brown
-    const dirtDark = new THREE.Color(0x588848);   // mossy dark instead of brown
-    const grass = new THREE.Color(0x40d040);      // vivid green
-    const grassLight = new THREE.Color(0x68f050);  // bright lime
-    const rock = new THREE.Color(0x78888a);
-    const rockDark = new THREE.Color(0x4a5c5a);
-    const rockLight = new THREE.Color(0x98a8a4);
+    // Patagonian steppe palette — warm earthy tones, golden grass, dusty atmosphere
+    const sand = new THREE.Color(0xe0d080);
+    const sandLight = new THREE.Color(0xe8dca0);
+    const beachSand = new THREE.Color(0xe8d498);
+    const beachWet = new THREE.Color(0xc0a068);
+    const dirt = new THREE.Color(0xa08058);      // warm brown earth
+    const dirtDark = new THREE.Color(0x785838);   // dark earth
+    const grass = new THREE.Color(0xb8a050);      // golden steppe
+    const grassLight = new THREE.Color(0xd0b860);  // light golden
+    const rock = new THREE.Color(0x887870);
+    const rockDark = new THREE.Color(0x585048);
+    const rockLight = new THREE.Color(0xa89888);
     const snow = new THREE.Color(0xf0f4fc);
-    const skyTint = new THREE.Color(0x78c4f8);
-    const sunsetTint = new THREE.Color(0xffb070);
+    const skyTint = new THREE.Color(0xa8b8c0);    // muted dusty sky
+    const sunsetTint = new THREE.Color(0xf0a060);
 
-    // Biome tint colors — lush and vivid
-    const meadowGrass = new THREE.Color(0x38e050);
-    const meadowDirt = new THREE.Color(0x58b850);   // green, not brown
-    const desertSand = new THREE.Color(0xd8b048);
-    const desertRock = new THREE.Color(0x988858);
-    const hollowGrass = new THREE.Color(0x188830);
-    const hollowDirt = new THREE.Color(0x2a5828);    // dark green, not dark brown
+    // Biome tint colors — earthy and warm
+    const meadowGrass = new THREE.Color(0xc0a048);   // golden steppe
+    const meadowDirt = new THREE.Color(0x8a6840);    // brown earth
+    const desertSand = new THREE.Color(0xc8a040);
+    const desertRock = new THREE.Color(0x907850);
+    const hollowGrass = new THREE.Color(0x607848);   // olive-brown
+    const hollowDirt = new THREE.Color(0x485038);     // dark sage
     const biomeColor = new THREE.Color();
 
     for (let index = 0; index < positions.count; index += 1) {
@@ -787,7 +792,19 @@ export class Terrain {
       );
 
       if (surface === 'sand') {
-        color.copy(sand).lerp(sandLight, detail * 0.6);
+        // Coastal beach uses warmer sand tones
+        const vertexDist = Math.hypot(x, z);
+        const isCoastal = vertexDist > ISLAND_EDGE - 80 && height < SEA_LEVEL + 4;
+        if (isCoastal) {
+          // Wet sand near waterline, dry sand higher up
+          const wetBlend = THREE.MathUtils.clamp(
+            1 - (height - SEA_LEVEL) / 3, 0, 0.7,
+          );
+          color.copy(beachSand).lerp(beachWet, wetBlend);
+          color.lerp(sandLight, detail * 0.3);
+        } else {
+          color.copy(sand).lerp(sandLight, detail * 0.6);
+        }
       } else if (surface === 'grass') {
         color.copy(grass).lerp(grassLight, detail * 0.48 + moisture * 0.22);
       } else if (surface === 'rock') {
@@ -850,6 +867,12 @@ export class Terrain {
           ? 1
           : snowCoverage * THREE.MathUtils.lerp(0.78, 0.16, roadInfluence);
         color.lerp(snow, THREE.MathUtils.clamp(snowDust, 0, 0.94));
+      }
+
+      // Underwater terrain darkening — sea floor tint
+      if (height < SEA_LEVEL) {
+        const submerge = THREE.MathUtils.clamp((SEA_LEVEL - height) / 8, 0, 0.8);
+        color.lerp(new THREE.Color(0x1a3838), submerge);
       }
 
       color.offsetHSL(

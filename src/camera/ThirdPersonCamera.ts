@@ -429,11 +429,6 @@ export class ThirdPersonCamera {
     const targetVelocityYaw = THREE.MathUtils.clamp(velocityHeading * 0.35, -0.4, 0.4);
     this.#driftOffset = expLerp(this.#driftOffset, targetVelocityYaw + targetDriftOffset * 0.3, 4.5, dt);
 
-    // FOV scales subtly with speed (Forza-style velocity sensation)
-    const speedFov = 60 + speedFraction * 8; // 60 → 68 at max speed
-    camera.fov = THREE.MathUtils.lerp(camera.fov, speedFov, 1 - Math.exp(-2.5 * dt));
-    camera.updateProjectionMatrix();
-
     const localOffset = this.#localOffset.set(
       lateralOffset
         + Math.sin(this.#driveMotionTime * 1.8) * shakeAmount * 0.24

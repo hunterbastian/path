@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SeededRandom } from '../core/SeededRandom';
-import { Terrain } from './Terrain';
+import { ISLAND_EDGE, SEA_LEVEL, Terrain } from './Terrain';
 
 interface PoolSeed {
   z: number;
@@ -212,6 +212,10 @@ export class Water {
       if (distanceFromSpawn < 92) continue;
       if (distanceFromLandmark < 118) continue;
       if (floorHeight > 44 || slope > 0.34) continue;
+      // Skip pools near coast — they'd overlap with the ocean
+      const distFromCenter = Math.hypot(center.x, center.y);
+      if (distFromCenter > ISLAND_EDGE - 100) continue;
+      if (floorHeight < SEA_LEVEL + 2) continue;
 
       const surfaceHeight = this.#estimateSurfaceHeight(
         terrain,

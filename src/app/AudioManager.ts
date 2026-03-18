@@ -28,7 +28,6 @@ export class AudioManager {
   #exhaustAudio: ExhaustAudio | null = null;
   #scrapeAudio: ScrapeAudio | null = null;
   #uiAudio: UIAudio | null = null;
-  #honkCooldown = 0;
   #prevDamageHealth = 1;
   readonly #deps: AudioManagerDeps;
   readonly #handleUnlockGesture = (): void => {
@@ -89,7 +88,6 @@ export class AudioManager {
     mode: ShellMode,
     state: DrivingState,
     damageHealth: number,
-    nearestHonkDistance: number,
   ): void {
     // Impact audio triggers
     if (this.#impactAudio) {
@@ -108,13 +106,6 @@ export class AudioManager {
         this.#impactAudio.playCollision(mag);
       } else if (state.impactMagnitude > 0.3 && state.impactMagnitude <= 1.5) {
         this.#impactAudio.playScrape();
-      }
-
-      // Honk audio from NPCs
-      this.#honkCooldown = Math.max(0, this.#honkCooldown - dt);
-      if (this.#honkCooldown <= 0 && nearestHonkDistance >= 0) {
-        this.#impactAudio.playHonk(nearestHonkDistance);
-        this.#honkCooldown = 1.5;
       }
     }
 

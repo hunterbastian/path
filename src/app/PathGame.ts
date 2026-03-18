@@ -37,7 +37,10 @@ import { Vehicle } from '../vehicle/Vehicle';
 import { VehicleController } from '../vehicle/VehicleController';
 import { BirdSystem } from '../effects/BirdSystem';
 import { PollenSystem } from '../effects/PollenSystem';
+import { CloudSystem } from '../world/CloudSystem';
+import { CoastalRocks } from '../world/CoastalRocks';
 import { DirtRoads } from '../world/DirtRoads';
+import { Ocean } from '../world/Ocean';
 import { TreeSystem } from '../world/TreeSystem';
 import { WildflowerField } from '../world/WildflowerField';
 import { PointsOfInterest } from '../world/PointsOfInterest';
@@ -46,16 +49,12 @@ import { GhostPlayerSystem } from '../world/GhostPlayerSystem';
 import { NetworkManager } from '../network/NetworkManager';
 import { ObjectiveBeacon } from '../world/ObjectiveBeacon';
 import {
-  AmbientTrafficSystem,
-  type AmbientTrafficPlayerInteraction,
-} from '../world/AmbientTrafficSystem';
-import {
   ReactiveWorldPropsSystem,
   type ReactivePropInteraction,
 } from '../world/ReactiveWorldPropsSystem';
 import { Sky } from '../world/Sky';
 import { GrassField } from '../world/GrassField';
-import { Terrain } from '../world/Terrain';
+import { ISLAND_EDGE, Terrain } from '../world/Terrain';
 import { Water } from '../world/Water';
 import { EnvironmentalClutter } from '../world/EnvironmentalClutter';
 import { WorldStreamer, type WorldStreamSnapshot } from '../world/WorldStreamer';
@@ -97,7 +96,6 @@ export class PathGame {
   readonly #routeOutposts: ObjectiveBeacon[];
   readonly #objectiveBeacon: ObjectiveBeacon;
   readonly #mountainHub: MountainHub;
-  readonly #ambientTraffic: AmbientTrafficSystem;
   readonly #network: NetworkManager;
   readonly #ghostPlayers: GhostPlayerSystem;
   readonly #reactiveProps: ReactiveWorldPropsSystem;
@@ -118,6 +116,9 @@ export class PathGame {
   #trees: TreeSystem | null = null;
   #birds: BirdSystem | null = null;
   #wildflowers: WildflowerField | null = null;
+  #clouds: CloudSystem | null = null;
+  readonly #ocean: Ocean;
+  readonly #coastalRocks: CoastalRocks;
   readonly #driverProfile: DriverProfile;
   readonly #debugPanel: DebugPanel;
   readonly #radioLog: RadioLog;
@@ -133,21 +134,12 @@ export class PathGame {
   #prevWeatherCondition: string = '';
   #prevDamageHealth = 1;
   #discoveredSurfaces = new Set<string>();
+  #wasDrowning = false;
   #foundRoad = false;
   #prevDiscoveryPercent = 0;
   #trail: Array<{ x: number; z: number }> = [];
   #lastWeatherSnapshot: WeatherSnapshot;
   #lastWorldStreamSnapshot: WorldStreamSnapshot;
-  #lastTrafficInteraction: AmbientTrafficPlayerInteraction = {
-    nearestDistanceMeters: 999,
-    nearMiss: false,
-    blocking: false,
-    collision: false,
-    sourceId: null,
-    sourcePosition: null,
-    correction: new THREE.Vector3(),
-    impulse: new THREE.Vector3(),
-  };
   #lastPropInteraction: ReactivePropInteraction = {
     nearestDistanceMeters: 999,
     collision: false,
@@ -171,6 +163,9 @@ export class PathGame {
     this.#grassField = new GrassField(this.#engine.scene, this.#terrain);
     this.#clutter = new EnvironmentalClutter(this.#engine.scene, this.#terrain);
     this.#pois = new PointsOfInterest(this.#engine.scene, this.#terrain);
+    this.#ocean = new Ocean(this.#engine.scene, ISLAND_EDGE);
+    this.#coastalRocks = new CoastalRocks(this.#engine.scene, this.#terrain);
+    this.#clouds = new CloudSystem(this.#engine.scene);
     this.#pollen = new PollenSystem(this.#engine.scene);
     this.#trees = new TreeSystem(this.#engine.scene, this.#terrain);
     this.#birds = new BirdSystem(this.#engine.scene);
@@ -202,11 +197,6 @@ export class PathGame {
       this.#engine.scene,
       this.#cityCenterPosition,
       this.#objectivePosition,
-    );
-    this.#ambientTraffic = new AmbientTrafficSystem(
-      this.#engine.scene,
-      this.#terrain,
-      this.#outpostPositions,
     );
     // Multiplayer: network manager + ghost player rendering
     this.#network = new NetworkManager();
@@ -392,6 +382,9 @@ export class PathGame {
     this.#trees?.dispose();
     this.#birds?.dispose();
     this.#wildflowers?.dispose();
+    this.#clouds?.dispose();
+    this.#ocean.dispose();
+    this.#coastalRocks.dispose();
     this.#valleyFog.dispose();
     this.#ghostPlayers.dispose();
     this.#engine.dispose();
@@ -448,11 +441,6 @@ export class PathGame {
     this.#jumpToEncounter(encounter.position, encounter.heading);
   }
 
-  jumpToTraffic(): void {
-    const encounter = this.#ambientTraffic.getEncounterStart();
-    if (!encounter) return;
-    this.#jumpToEncounter(encounter.position, encounter.heading);
-  }
 
   jumpToFixture(fixtureId: string): void {
     const scenarioId = this.#resolveScenarioId(fixtureId);
@@ -670,17 +658,6 @@ export class PathGame {
           rutPullStrength: Number(surfaceFeedback.rutPullStrength.toFixed(2)),
           wetTrackStrength: Number(this.#lastWeatherSnapshot.rainDensity.toFixed(2)),
           skitteringDebrisStrength: Number(this.#effects.ambientSkitterStrength.toFixed(2)),
-          trafficImpactDebris: Number(this.#effects.recentTrafficImpactDebris.toFixed(2)),
-        },
-        ambientTrafficCount: this.#ambientTraffic.count,
-        ambientTrafficHeadlights: this.#ambientTraffic.count,
-        ambientTraffic: this.#ambientTraffic.getSnapshot(position),
-        trafficInteraction: {
-          nearestDistanceMeters: this.#lastTrafficInteraction.nearestDistanceMeters,
-          blocking: this.#lastTrafficInteraction.blocking,
-          nearMiss: this.#lastTrafficInteraction.nearMiss,
-          collision: this.#lastTrafficInteraction.collision,
-          sourceId: this.#lastTrafficInteraction.sourceId,
         },
         propInteraction: {
           nearestDistanceMeters: this.#lastPropInteraction.nearestDistanceMeters,
@@ -839,16 +816,7 @@ export class PathGame {
       }
     }
 
-    // Traffic + raiders
     const pose = this.#controller.pose;
-    this.#ambientTraffic.update(
-      dt,
-      this.#controller.position,
-      this.#controller.velocity,
-      this.#lastWeatherSnapshot,
-    );
-    this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
-    this.#controller.applyTrafficInteraction(this.#lastTrafficInteraction);
     // Multiplayer: broadcast position + update ghost rendering
     this.#network.update(
       dt,
@@ -899,15 +867,11 @@ export class PathGame {
     this.#controller.setAeroDragPenalty(aeroPenalty);
 
     // Audio
-    const nearestHonkDistance = this.#ambientTraffic.getNearestHonkDistance(
-      this.#controller.position,
-    );
     this.#audio.updateDriving(
       dt,
       this.#runSession.mode,
       this.#controller.state,
       this.#vehicle.damage.totalHealth,
-      nearestHonkDistance,
     );
 
     // Landing burst (audio already handles landing sound)
@@ -991,13 +955,13 @@ export class PathGame {
       this.#water,
       this.#lastWeatherSnapshot,
       this.#engine.camera.position,
-      this.#lastTrafficInteraction,
-      this.#ambientTraffic,
       false,
     );
 
     // World visuals
     const sunI = this.#sky.sunIntensity;
+    this.#ocean.update(dt, this.#sky.sunPosition, sunI);
+    this.#clouds?.update(dt, this.#engine.camera, sunI);
     this.#pollen?.update(dt, this.#engine.camera.position, sunI);
     this.#trees?.update(this.#engine.camera.position);
     this.#birds?.update(dt, this.#engine.camera.position);
@@ -1112,13 +1076,6 @@ export class PathGame {
 
     const pausedState = this.#buildPausedDrivingState();
     const pose = this.#controller.pose;
-    this.#ambientTraffic.update(
-      dt,
-      this.#controller.position,
-      this.#controller.velocity,
-      this.#lastWeatherSnapshot,
-    );
-    this.#lastTrafficInteraction = this.#ambientTraffic.playerInteraction;
     this.#reactiveProps.update(dt, this.#controller.position, this.#controller.velocity);
     this.#lastPropInteraction = this.#reactiveProps.playerInteraction;
     this.#vehicle.setPose(pose.position, pose.quaternion);
@@ -1148,11 +1105,11 @@ export class PathGame {
       dt,
       this.#lastWeatherSnapshot,
       this.#engine.camera.position,
-      this.#lastTrafficInteraction,
-      this.#ambientTraffic,
     );
 
     const godSunI = this.#sky.sunIntensity;
+    this.#ocean.update(dt, this.#sky.sunPosition, godSunI);
+    this.#clouds?.update(dt, this.#engine.camera, godSunI);
     this.#objectiveBeacon.update(dt, false, godSunI);
     for (const outpost of this.#routeOutposts) {
       outpost.update(dt, false, godSunI);
@@ -1223,16 +1180,6 @@ export class PathGame {
     this.#mapVisible = false;
     this.#checkpointBannerTime = 0;
     this.#checkpointBannerLabel = '';
-    this.#lastTrafficInteraction = {
-      nearestDistanceMeters: 999,
-      nearMiss: false,
-      blocking: false,
-      collision: false,
-      sourceId: null,
-      sourcePosition: null,
-      correction: new THREE.Vector3(),
-      impulse: new THREE.Vector3(),
-    };
     this.#lastPropInteraction = {
       nearestDistanceMeters: 999,
       collision: false,
@@ -1333,6 +1280,7 @@ export class PathGame {
     this.#prevWeatherCondition = '';
     this.#prevDamageHealth = 1;
     this.#discoveredSurfaces.clear();
+    this.#wasDrowning = false;
     this.#foundRoad = false;
     this.#prevDiscoveryPercent = 0;
     this.#trail = [];
@@ -1445,12 +1393,8 @@ export class PathGame {
           ? 'Paused'
         : this.#runSession.mode === 'arrived'
           ? 'Arrived'
-          : this.#lastTrafficInteraction.collision
-            ? 'Traffic Impact'
           : this.#lastPropInteraction.collision
             ? 'Route Impact'
-          : this.#lastTrafficInteraction.blocking || this.#lastTrafficInteraction.nearMiss
-            ? 'Traffic Near'
           : this.#checkpointBannerTime > 0
             ? this.#checkpointBannerLabel
           : !state.isGrounded
@@ -1786,6 +1730,12 @@ export class PathGame {
       this.#radioLog.push('water crossing — hold steady', 'water');
     }
 
+    // Ocean drowning warning
+    if (state.isDrowning && !this.#wasDrowning) {
+      this.#radioLog.push('too deep — turn back', 'water', 'alert');
+    }
+    this.#wasDrowning = state.isDrowning;
+
     // Weather change
     const currentCondition = this.#lastWeatherSnapshot.condition;
     if (this.#prevWeatherCondition && currentCondition !== this.#prevWeatherCondition) {
@@ -1900,6 +1850,9 @@ export class PathGame {
     }
 
     // Default
+    if (this.#controller.state.isDrowning) {
+      return 'Flooding — turn back';
+    }
     if (this.#controller.state.surface === 'water') {
       return 'Water crossing';
     }

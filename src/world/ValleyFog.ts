@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { type Terrain, type BiomeType } from './Terrain';
+import { SEA_LEVEL, type Terrain, type BiomeType } from './Terrain';
 import type { WeatherCondition } from '../config/GameTuning';
 
 // ---------------------------------------------------------------------------
@@ -137,10 +137,10 @@ const MIN_FOG_SIZE = 80;
 
 // Biome fog tint colors
 const BIOME_FOG_TINTS: Record<BiomeType, THREE.Color> = {
-  default: new THREE.Color(0xc8dcc8),   // green-tinted mist
-  meadow: new THREE.Color(0xd8e8d4),   // soft green-white
-  desert: new THREE.Color(0xd8c8a0),   // warm amber haze
-  hollow: new THREE.Color(0x98b8a8),   // deep green mist
+  default: new THREE.Color(0xd0c8b0),   // dusty warm mist
+  meadow: new THREE.Color(0xd8d0b8),    // warm steppe haze
+  desert: new THREE.Color(0xd0b890),    // amber dust
+  hollow: new THREE.Color(0xa09880),    // dark dusty mist
 };
 
 export class ValleyFog {
@@ -286,6 +286,7 @@ export class ValleyFog {
     for (let z = -half; z <= half; z += SCAN_STEP) {
       for (let x = -half; x <= half; x += SCAN_STEP) {
         const h = terrain.getHeightAt(x, z);
+        if (h < SEA_LEVEL) continue; // skip underwater terrain
         if (h < FOG_CEILING_MAX) {
           clusters.push({ x, z, height: h });
         }

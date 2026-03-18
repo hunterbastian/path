@@ -214,23 +214,23 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     time: 0.35,
     mood: {
-      fogColor: 0xb0dcc0,
-      hemisphereSky: 0xa0d8f0,
-      hemisphereGround: 0x48a048,
+      fogColor: 0xc8c0a0,
+      hemisphereSky: 0xa0c8e0,
+      hemisphereGround: 0x887050,
       hemisphereIntensity: 1.16,
       sunColor: 0xffe0a8,
       sunIntensity: 2.2,
-      fillColor: 0x90c0d0,
+      fillColor: 0xa0b8c0,
       fillIntensity: 0.94,
       rimColor: 0xd0b890,
       rimIntensity: 0.44,
       backgroundBlurriness: 0.05,
       gradientStops: [
-        { offset: 0, color: '#58b8e8' },
-        { offset: 0.20, color: '#88d0f0' },
-        { offset: 0.46, color: '#e0c8a0' },
-        { offset: 0.74, color: '#70a878' },
-        { offset: 1, color: '#488858' },
+        { offset: 0, color: '#68a8d0' },
+        { offset: 0.20, color: '#90c0d8' },
+        { offset: 0.46, color: '#d8c0a0' },
+        { offset: 0.74, color: '#a09070' },
+        { offset: 1, color: '#786848' },
       ],
       sunGlowInner: 'rgba(255, 244, 210, 0.78)',
       sunGlowMid: 'rgba(255, 210, 140, 0.38)',
@@ -243,27 +243,27 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
     },
   },
 
-  // ── Midday — vivid Ghibli blue sky ──
+  // ── Midday — warm dusty Patagonian sky ──
   {
     time: 0.50,
     mood: {
-      fogColor: 0xa8d8c0,
-      hemisphereSky: 0x90d0ff,
-      hemisphereGround: 0x48a048,
+      fogColor: 0xc8c0a8,
+      hemisphereSky: 0x88b8e0,
+      hemisphereGround: 0x887050,
       hemisphereIntensity: 1.35,
       sunColor: 0xfff0d0,
       sunIntensity: 2.6,
-      fillColor: 0xa0c4d8,
+      fillColor: 0xa8b8c0,
       fillIntensity: 1.15,
       rimColor: 0xe8c8a0,
       rimIntensity: 0.56,
       backgroundBlurriness: 0.04,
       gradientStops: [
-        { offset: 0, color: '#4aa8e8' },
-        { offset: 0.18, color: '#68c0f0' },
-        { offset: 0.42, color: '#e0d8b0' },
-        { offset: 0.72, color: '#78b888' },
-        { offset: 1, color: '#508868' },
+        { offset: 0, color: '#5898c8' },
+        { offset: 0.18, color: '#78b0d8' },
+        { offset: 0.42, color: '#d8c8a8' },
+        { offset: 0.72, color: '#a09070' },
+        { offset: 1, color: '#786848' },
       ],
       sunGlowInner: 'rgba(255, 250, 230, 0.92)',
       sunGlowMid: 'rgba(255, 220, 150, 0.44)',
@@ -522,7 +522,7 @@ export class Sky {
     // Boost hemisphere to compensate
     this.#hemisphere.intensity = 1.2;
 
-    this.#fog = new THREE.Fog(0xa8c8b8, 46, 480);
+    this.#fog = new THREE.Fog(0xa8c8b8, 46, 580);
     scene.fog = this.#fog;
     // Mist bands disabled for performance — fog provides atmosphere
     // this.#addMistBands(scene);
@@ -791,9 +791,9 @@ export class Sky {
     context.fillRect(0, h * 0.31, w, h * 1.01);
 
     const alpineMist = context.createLinearGradient(0, h * 0.82, 0, h * 1.68);
-    alpineMist.addColorStop(0, 'rgba(224, 231, 225, 0)');
-    alpineMist.addColorStop(0.4, 'rgba(197, 203, 192, 0.24)');
-    alpineMist.addColorStop(1, 'rgba(128, 135, 136, 0.34)');
+    alpineMist.addColorStop(0, 'rgba(224, 218, 205, 0)');
+    alpineMist.addColorStop(0.4, 'rgba(200, 192, 178, 0.24)');
+    alpineMist.addColorStop(1, 'rgba(140, 130, 118, 0.34)');
     context.fillStyle = alpineMist;
     context.fillRect(0, h * 0.82, w, h * 0.9);
 

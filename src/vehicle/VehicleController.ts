@@ -3,7 +3,13 @@ import type { GameTuning } from '../config/GameTuning';
 import { expDecay, expLerp } from '../core/math';
 import { InputManager } from '../core/InputManager';
 import type { WeatherSnapshot } from '../gameplay/WeatherState';
-import type { AmbientTrafficPlayerInteraction } from '../world/AmbientTrafficSystem';
+import { SEA_LEVEL } from '../world/Terrain';
+/** Minimal collision interaction shape used by applyReactiveWorldInteraction. */
+interface CollisionInteraction {
+  collision: boolean;
+  correction: THREE.Vector3;
+  impulse: THREE.Vector3;
+}
 import { Terrain } from '../world/Terrain';
 import { Water } from '../world/Water';
 import { createDefaultDrivingState, type DriveSurface, type DrivingState } from './DrivingState';
@@ -85,6 +91,14 @@ export class VehicleController {
   #waterEntrySpeed = 0;
   /** Whether the vehicle was in water last frame. */
   #wasInWater = false;
+  /** Last position on dry land — used for ocean drown respawn. */
+  readonly #lastLandPosition = new THREE.Vector3();
+  /** Heading when last on dry land. */
+  #lastLandHeading = 0;
+  /** Seconds spent submerged past the drown threshold. */
+  #drownTimer = 0;
+  /** Smoothed vertical sink offset when in deep ocean. */
+  #oceanSink = 0;
 
   get heading(): number {
     return this.#heading;
@@ -191,6 +205,10 @@ export class VehicleController {
     this.#waterDepth = 0;
     this.#waterEntrySpeed = 0;
     this.#wasInWater = false;
+    this.#drownTimer = 0;
+    this.#oceanSink = 0;
+    this.#lastLandPosition.copy(this.position);
+    this.#lastLandHeading = 0;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeBaseOrientation();
     this.#updateWheelData();
@@ -227,6 +245,8 @@ export class VehicleController {
     this.#waterDepth = 0;
     this.#waterEntrySpeed = 0;
     this.#wasInWater = false;
+    this.#drownTimer = 0;
+    this.#oceanSink = 0;
     this.#groundNormal.copy(this.#terrain.getNormalAt(this.position.x, this.position.z));
     this.#composeBaseOrientation();
     this.#updateWheelData();
@@ -235,6 +255,18 @@ export class VehicleController {
     this.state.boostLevel = this.#boostLevel;
     this.state.sinkDepth = this.#sinkDepth;
     this.state.surfaceBuildup = this.#surfaceBuildup;
+  }
+
+  /** Respawn at the last safe land position (used when drowning in ocean). */
+  #resetToShore(): void {
+    // If we never tracked a land position (shouldn't happen), fall back to spawn
+    const pos = this.#lastLandPosition.lengthSq() > 0
+      ? this.#lastLandPosition
+      : this.#spawn;
+    const heading = this.#lastLandPosition.lengthSq() > 0
+      ? this.#lastLandHeading
+      : 0;
+    this.teleport(pos, heading);
   }
 
   halt(): void {
@@ -256,20 +288,14 @@ export class VehicleController {
     this.state.isBraking = true;
   }
 
-  applyTrafficInteraction(
-    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
-  ): void {
-    this.#applyCollisionInteraction(interaction);
-  }
-
   applyReactiveWorldInteraction(
-    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
+    interaction: CollisionInteraction,
   ): void {
     this.#applyCollisionInteraction(interaction);
   }
 
   #applyCollisionInteraction(
-    interaction: Pick<AmbientTrafficPlayerInteraction, 'collision' | 'correction' | 'impulse'>,
+    interaction: CollisionInteraction,
   ): void {
     if (!interaction.collision) return;
 
@@ -737,11 +763,59 @@ export class VehicleController {
 
     const groundHeight = this.#terrain.getHeightAt(this.position.x, this.position.z);
     const waterHeight = this.#water.getWaterHeightAt(this.position.x, this.position.z);
-    const inWater = waterHeight !== null && waterHeight > groundHeight + 0.1;
+    const inPoolWater = waterHeight !== null && waterHeight > groundHeight + 0.1;
+    const inOcean = groundHeight < SEA_LEVEL;
+    const inWater = inPoolWater || inOcean;
     const surfaceBelow = inWater ? 'water' : this.#terrain.getSurfaceAt(this.position.x, this.position.z);
     const sandSinkOffset = surfaceBelow === 'sand' ? this.#sinkDepth * 0.38 : 0;
+
+    // --- Ocean drag, sinking, and drown reset ---
+    const DROWN_SUBMERSION = 0.35; // submersion level where drown timer starts
+    const DROWN_DURATION = 2.5;    // seconds submerged before forced reset
+    const SINK_RATE = 3.0;         // how fast oceanSink ramps up (units/s)
+    const MAX_SINK = 3.5;          // max vertical sink below ride height
+    let oceanSubmersion = 0;
+
+    if (inOcean) {
+      oceanSubmersion = THREE.MathUtils.clamp((SEA_LEVEL - groundHeight) / 6, 0, 1);
+
+      // Aggressive drag curve — quadratic ramp, crushing in deep water
+      const dragT = oceanSubmersion * oceanSubmersion;
+      const oceanDrag = THREE.MathUtils.lerp(0.94, 0.45, dragT);
+      const dragMul = Math.pow(oceanDrag, dt * 60);
+      this.velocity.x *= dragMul;
+      this.velocity.z *= dragMul;
+
+      // Vertical sinking — vehicle drops below the waves in deep water
+      const sinkTarget = oceanSubmersion > 0.25
+        ? (oceanSubmersion - 0.25) / 0.75 * MAX_SINK
+        : 0;
+      this.#oceanSink = expLerp(this.#oceanSink, sinkTarget, SINK_RATE, dt);
+
+      // Drown timer — deep submersion triggers forced respawn
+      if (oceanSubmersion > DROWN_SUBMERSION) {
+        this.#drownTimer += dt;
+        if (this.#drownTimer >= DROWN_DURATION) {
+          this.#resetToShore();
+          return;
+        }
+      } else {
+        this.#drownTimer = expDecay(this.#drownTimer, 2, dt);
+      }
+    } else {
+      // On land — track safe position and decay ocean state
+      this.#lastLandPosition.copy(this.position);
+      this.#lastLandHeading = this.#heading;
+      this.#drownTimer = 0;
+      this.#oceanSink = expDecay(this.#oceanSink, 8, dt);
+    }
+
+    this.state.oceanSubmersion = oceanSubmersion;
+    this.state.isDrowning = this.#drownTimer > 0.3;
+
     const desiredHeight =
-      groundHeight + VEHICLE_CLEARANCE + (inWater ? 0.08 : 0) - sandSinkOffset;
+      groundHeight + VEHICLE_CLEARANCE + (inWater ? 0.08 : 0) - sandSinkOffset - this.#oceanSink;
+
     const hoverDistance = this.position.y - desiredHeight;
     if (hoverDistance <= vehicleTuning.suspensionTravel) {
       const springCompression = Math.max(desiredHeight - this.position.y, 0);
@@ -803,7 +877,19 @@ export class VehicleController {
       this.position.z,
     );
     if (isGrounded) {
-      this.position.y = finalSurfaceSample.rideHeight;
+      // Smooth ride height — absorb micro-bumps instead of snapping to terrain
+      const targetY = finalSurfaceSample.rideHeight;
+      const heightDiff = targetY - this.position.y;
+      if (heightDiff > 0.4) {
+        // Big step up — snap to avoid clipping through terrain
+        this.position.y = targetY;
+      } else {
+        this.position.y = expLerp(this.position.y, targetY, 22, dt);
+      }
+      // Floor clamp — never sink below terrain
+      if (this.position.y < targetY) {
+        this.position.y = targetY;
+      }
       if (this.velocity.y < 0) {
         this.velocity.y = 0;
       }
@@ -856,8 +942,8 @@ export class VehicleController {
     // Integrate tumble while airborne
     if (!isGrounded && this.#isTumbling) {
       // Air drag — heavy vehicle doesn't spin forever
-      this.#tumblePitch *= 1 - 0.4 * dt;
-      this.#tumbleRoll *= 1 - 0.5 * dt;
+      this.#tumblePitch = expDecay(this.#tumblePitch, 0.4, dt);
+      this.#tumbleRoll = expDecay(this.#tumbleRoll, 0.5, dt);
       // Gravity pitches the nose down (like a real falling object with front-heavy mass)
       this.#tumblePitch += 1.8 * dt;
     }
@@ -867,7 +953,7 @@ export class VehicleController {
       isGrounded && Math.abs(lateralSpeed) > driftThreshold && planarSpeed > 6;
 
     this.#updateOrientation(dt, isGrounded);
-    const wheelContactCount = this.#updateWheelData();
+    const wheelContactCount = this.#updateWheelData(dt);
     if (!isGrounded && wheelContactCount >= 2 && this.position.y <= finalSurfaceSample.rideHeight + 0.12) {
       isGrounded = true;
       this.position.y = finalSurfaceSample.rideHeight;
@@ -940,7 +1026,7 @@ export class VehicleController {
   } {
     const groundHeight = this.#terrain.getHeightAt(x, z);
     const waterHeight = this.#water.getWaterHeightAt(x, z);
-    const inWater = waterHeight !== null && waterHeight > groundHeight + 0.1;
+    const inWater = (waterHeight !== null && waterHeight > groundHeight + 0.1) || groundHeight < SEA_LEVEL;
     const surface = inWater ? 'water' : this.#terrain.getSurfaceAt(x, z);
     const sandSinkOffset = surface === 'sand' ? this.#sinkDepth * 0.38 : 0;
     return {
@@ -965,7 +1051,7 @@ export class VehicleController {
       const targetNormal = grounded
         ? this.#terrain.getNormalAt(this.position.x, this.position.z)
         : this.#worldUp;
-      const blend = 1 - Math.exp(-(grounded ? 3.2 : 1.8) * dt);
+      const blend = 1 - Math.exp(-(grounded ? 5.0 : 1.8) * dt);
       this.#groundNormal.lerp(targetNormal, blend).normalize();
       this.#composeBaseOrientation();
     }
@@ -993,7 +1079,7 @@ export class VehicleController {
     }
   }
 
-  #updateWheelData(): number {
+  #updateWheelData(dt = 1 / 60): number {
     const wheelCompression: [number, number, number, number] = [0, 0, 0, 0];
     const wheelContact: [boolean, boolean, boolean, boolean] = [true, true, true, true];
     let wheelContactCount = 0;
@@ -1033,8 +1119,8 @@ export class VehicleController {
     const targetSuspPitch = (frontAvg - rearAvg) * 0.02;
     // Right compressed more than left = lean right (positive roll)
     const targetSuspRoll = (rightAvg - leftAvg) * 0.018;
-    this.#suspensionPitch = THREE.MathUtils.lerp(this.#suspensionPitch, targetSuspPitch, 0.03);
-    this.#suspensionRoll = THREE.MathUtils.lerp(this.#suspensionRoll, targetSuspRoll, 0.03);
+    this.#suspensionPitch = expLerp(this.#suspensionPitch, targetSuspPitch, 8, dt);
+    this.#suspensionRoll = expLerp(this.#suspensionRoll, targetSuspRoll, 8, dt);
 
     this.state.wheelCompression = wheelCompression;
     this.state.wheelContact = wheelContact;

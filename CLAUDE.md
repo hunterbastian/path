@@ -14,7 +14,10 @@ Arcade driving game built with Three.js + TypeScript + Vite. Focus on experience
 - `src/vehicle/VehicleController.ts` — physics, drift/grip model, boost, handbrake
 - `src/camera/ThirdPersonCamera.ts` — pointer-lock freelook with auto-return
 - `src/world/DirtRoads.ts` — terrain-hugging road strip meshes along all paths
-- `src/world/Terrain.ts` — procedural heightfield, surface types, #cacheKey helper for all caches
+- `src/world/Terrain.ts` — procedural island heightfield, surface types, beach biome, SEA_LEVEL/ISLAND_EDGE constants
+- `src/world/Ocean.ts` — ocean plane with Gerstner wave shader, depth coloring, shoreline foam, whitecaps, sky reflection
+- `src/world/CloudSystem.ts` — instanced billboard cumulus clouds, wind drift, day/night opacity
+- `src/world/CoastalRocks.ts` — merged-geometry boulders and sea stacks at the coastline
 - `src/network/NetworkManager.ts` — SpacetimeDB multiplayer
 - `src/world/GhostPlayerSystem.ts` — multiplayer ghost rendering (instanced)
 - `src/gameplay/DriftScoreSystem.ts` — drift scoring (lateralSpeed × forwardSpeed), run stats, live counter

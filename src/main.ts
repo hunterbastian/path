@@ -41,10 +41,6 @@ window.jumpPathToSand = () => {
   game.jumpToSand();
 };
 
-window.jumpPathToTraffic = () => {
-  game.jumpToTraffic();
-};
-
 window.jumpPathToCityCenter = () => {
   game.jumpToCityCenter();
 };

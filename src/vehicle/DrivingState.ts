@@ -31,6 +31,10 @@ export interface DrivingState {
   isTumbling: boolean;
   /** Which wheels are still attached (FL, FR, RL, RR). */
   wheelAttached: [boolean, boolean, boolean, boolean];
+  /** 0-1 how deep the vehicle is in ocean water (0 = on land or at shoreline). */
+  oceanSubmersion: number;
+  /** Whether the drown timer is active (vehicle is sinking in deep ocean). */
+  isDrowning: boolean;
 }
 
 export function createDefaultDrivingState(): DrivingState {
@@ -58,5 +62,7 @@ export function createDefaultDrivingState(): DrivingState {
     impactDirection: new THREE.Vector3(),
     isTumbling: false,
     wheelAttached: [true, true, true, true],
+    oceanSubmersion: 0,
+    isDrowning: false,
   };
 }

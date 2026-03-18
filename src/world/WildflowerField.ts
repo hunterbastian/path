@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../core/SeededRandom';
-import { Terrain, type BiomeType } from './Terrain';
+import { SEA_LEVEL, Terrain, type BiomeType } from './Terrain';
 
 /**
  * WildflowerField — tiny colored dots scattered across meadow and grass surfaces.
@@ -22,14 +22,14 @@ interface FlowerPatch {
 }
 
 const FLOWER_COLORS = [
-  0xf8e848,  // buttercup yellow
-  0xfff8e8,  // white daisy
-  0xd078d0,  // purple clover
-  0xf098a0,  // pink
-  0xf8d048,  // marigold
-  0xe8e8f0,  // pale white
-  0xb868c8,  // lavender
-  0xf0c040,  // dandelion gold
+  0xe0c048,  // dried buttercup
+  0xf0e8d0,  // pale straw
+  0xc09870,  // dusty mauve
+  0xd8b888,  // faded tan
+  0xe0b040,  // ochre
+  0xe8e0d0,  // bleached white
+  0xb8a080,  // dusty sage
+  0xd0a838,  // amber gold
 ];
 
 export class WildflowerField {
@@ -131,6 +131,7 @@ export class WildflowerField {
       if (surface !== 'grass') continue;
 
       const height = terrain.getHeightAt(x, z);
+      if (height < SEA_LEVEL + 1) continue;
       if (height > 50) continue;
 
       const slope = 1 - terrain.getNormalAt(x, z).y;

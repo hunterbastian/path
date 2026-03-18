@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../core/SeededRandom';
-import { Terrain, type BiomeType } from './Terrain';
+import { SEA_LEVEL, Terrain, type BiomeType } from './Terrain';
 
 /**
  * TreeSystem — instanced pine/spruce trees scattered across the landscape.
@@ -38,7 +38,7 @@ export class TreeSystem {
     // Trunk — cylinder, dark brown
     const trunkGeo = new THREE.CylinderGeometry(0.15, 0.25, 3.5, 6);
     trunkGeo.translate(0, 1.75, 0);
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x4a3828 });
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x503828 });
     this.#trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, this.#trees.length);
     this.#trunkMesh.frustumCulled = false;
     this.#trunkMesh.castShadow = true;
@@ -56,8 +56,8 @@ export class TreeSystem {
       const geo = new THREE.ConeGeometry(layer.radius, layer.height, 8);
       geo.translate(0, layer.y, 0);
       const mat = new THREE.MeshLambertMaterial({
-        color: 0x2a7838,
-        emissive: new THREE.Color(0x1a4820),
+        color: 0x607040,
+        emissive: new THREE.Color(0x3a3820),
         emissiveIntensity: 0.18,
       });
       const mesh = new THREE.InstancedMesh(geo, mat, this.#trees.length);
@@ -69,10 +69,10 @@ export class TreeSystem {
     });
 
     // Set biome-tinted colors per instance
-    const meadowGreen = new THREE.Color(0x38a048);
-    const hollowGreen = new THREE.Color(0x1a5830);
-    const defaultGreen = new THREE.Color(0x2a7838);
-    const desertGreen = new THREE.Color(0x5a8848);
+    const meadowGreen = new THREE.Color(0x708848);   // olive
+    const hollowGreen = new THREE.Color(0x485838);   // dark sage
+    const defaultGreen = new THREE.Color(0x607040);   // muted sage
+    const desertGreen = new THREE.Color(0x788048);    // dusty olive
     const tempColor = new THREE.Color();
 
     for (let i = 0; i < this.#trees.length; i++) {
@@ -174,6 +174,7 @@ export class TreeSystem {
       if (surface !== 'grass' && surface !== 'dirt') continue;
 
       const height = terrain.getHeightAt(x, z);
+      if (height < SEA_LEVEL + 2) continue; // no trees below sea level
       if (height > 70) continue; // no trees above treeline
 
       const roadInfluence = terrain.getRoadInfluence(x, z);

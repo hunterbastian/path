@@ -4,17 +4,15 @@ import { DustSystem, type DustConfig } from '../effects/DustSystem';
 import { SparkSystem } from '../effects/SparkSystem';
 import { RainSystem } from '../effects/RainSystem';
 import { SplashEmitter } from '../effects/SplashEmitter';
-import { SplashSystem } from '../effects/SplashSystem';
+import { SplashSystem, SHALLOW_SPLASH } from '../effects/SplashSystem';
 import { TireTrackSystem } from '../effects/TireTrackSystem';
 import { TireSmokeSystem } from '../effects/TireSmokeSystem';
 import { WindSystem } from '../effects/WindSystem';
 import { SeededRandom } from '../core/SeededRandom';
-import type { Terrain } from '../world/Terrain';
+import { SEA_LEVEL, type Terrain } from '../world/Terrain';
 import type { VehicleController } from '../vehicle/VehicleController';
 import type { Water } from '../world/Water';
-import type { AmbientTrafficSystem } from '../world/AmbientTrafficSystem';
 import type { WeatherSnapshot } from '../gameplay/WeatherState';
-import type { AmbientTrafficPlayerInteraction } from '../world/AmbientTrafficSystem';
 
 const SLOPE_SKITTER_DEBRIS: DustConfig = {
   size: 0.18,
@@ -23,15 +21,6 @@ const SLOPE_SKITTER_DEBRIS: DustConfig = {
   spread: 0.18,
   lift: 0.08,
   jitter: 0.16,
-};
-
-const TRAFFIC_IMPACT_DEBRIS: DustConfig = {
-  size: 0.3,
-  growth: 0.18,
-  life: 0.72,
-  spread: 0.34,
-  lift: 0.18,
-  jitter: 0.42,
 };
 
 const ENGINE_SMOKE_CONFIG: DustConfig = {
@@ -90,10 +79,13 @@ export class EffectsCoordinator {
   readonly #debrisLateral = new THREE.Vector3();
   readonly #debrisVelocity = new THREE.Vector3();
   readonly #worldUp = new THREE.Vector3(0, 1, 0);
+
+  // Shore spray state
+  readonly #shoreSprayOrigin = new THREE.Vector3();
+  readonly #shoreSprayVelocity = new THREE.Vector3();
+  #shoreSprayTimer = 0;
   #slopeDebrisTimer = 0;
   #ambientSkitterStrength = 0;
-  #recentTrafficImpactDebris = 0;
-  #lastTrafficCollisionSourceId: string | null = null;
 
   constructor(scene: THREE.Scene, terrain: Terrain, water: Water) {
     this.#terrain = terrain;
@@ -171,9 +163,6 @@ export class EffectsCoordinator {
     return this.#ambientSkitterStrength;
   }
 
-  get recentTrafficImpactDebris(): number {
-    return this.#recentTrafficImpactDebris;
-  }
 
   /** Debug particle counts */
   getDebugCounts(): {
@@ -199,14 +188,11 @@ export class EffectsCoordinator {
     water: Water,
     weather: WeatherSnapshot,
     cameraPosition: THREE.Vector3,
-    trafficInteraction: AmbientTrafficPlayerInteraction,
-    ambientTraffic: AmbientTrafficSystem,
     isGodMode: boolean,
   ): void {
     this.#updateAmbientDebris(
       dt,
       weather,
-      trafficInteraction,
       isGodMode ? cameraPosition : controller.position,
     );
 
@@ -219,6 +205,7 @@ export class EffectsCoordinator {
     this.#smokeSystem.update(dt);
     this.#fireSystem.update(dt);
     this.#splashEmitter.update(dt, controller, water);
+    this.#emitShoreSpray(dt, controller);
     this.#splashSystem.update(dt);
     this.#mudSplashSystem.update(dt);
     this.#tireTrackSystem.setWetness(weather.rainDensity);
@@ -228,9 +215,6 @@ export class EffectsCoordinator {
       state: controller.state,
       wheelWorldPositions: controller.wheelWorldPositions,
     }, dt);
-    for (const trackSource of ambientTraffic.getTrackSources()) {
-      this.#tireTrackSystem.updateSource(trackSource, dt);
-    }
 
     this.#windSystem.update(dt, cameraPosition);
     this.rainSystem.update(dt, cameraPosition);
@@ -241,10 +225,8 @@ export class EffectsCoordinator {
     dt: number,
     weather: WeatherSnapshot,
     cameraPosition: THREE.Vector3,
-    trafficInteraction: AmbientTrafficPlayerInteraction,
-    ambientTraffic: AmbientTrafficSystem,
   ): void {
-    this.#updateAmbientDebris(dt, weather, trafficInteraction, cameraPosition);
+    this.#updateAmbientDebris(dt, weather, cameraPosition);
 
     this.#dustSystem.update(dt);
     this.#snowSpraySystem.update(dt);
@@ -256,10 +238,6 @@ export class EffectsCoordinator {
     this.#mudSplashSystem.update(dt);
     this.#tireTrackSystem.setWetness(weather.rainDensity);
     this.#tireTrackSystem.update(dt);
-    for (const trackSource of ambientTraffic.getTrackSources()) {
-      this.#tireTrackSystem.updateSource(trackSource, dt);
-    }
-
     this.#windSystem.update(dt, cameraPosition);
     this.rainSystem.update(dt, cameraPosition);
   }
@@ -383,30 +361,15 @@ export class EffectsCoordinator {
   /** Reset transient debris state. */
   resetDebris(): void {
     this.#ambientSkitterStrength = 0;
-    this.#recentTrafficImpactDebris = 0;
-    this.#lastTrafficCollisionSourceId = null;
     this.#slopeDebrisTimer = 0;
   }
 
   #updateAmbientDebris(
     dt: number,
     weather: WeatherSnapshot,
-    trafficInteraction: AmbientTrafficPlayerInteraction,
     listenerPosition: THREE.Vector3,
   ): void {
-    this.#recentTrafficImpactDebris = Math.max(0, this.#recentTrafficImpactDebris - dt * 1.6);
     this.#ambientSkitterStrength = Math.max(0, this.#ambientSkitterStrength - dt * 1.25);
-
-    if (
-      trafficInteraction.collision
-      && trafficInteraction.sourceId
-      && trafficInteraction.sourceId !== this.#lastTrafficCollisionSourceId
-    ) {
-      this.#emitTrafficImpactDebris(trafficInteraction, listenerPosition);
-      this.#lastTrafficCollisionSourceId = trafficInteraction.sourceId;
-    } else if (!trafficInteraction.collision) {
-      this.#lastTrafficCollisionSourceId = null;
-    }
 
     this.#slopeDebrisTimer += dt;
     const spawnInterval = THREE.MathUtils.lerp(0.42, 0.16, weather.rainDensity);
@@ -487,47 +450,36 @@ export class EffectsCoordinator {
     }
   }
 
-  #emitTrafficImpactDebris(
-    trafficInteraction: AmbientTrafficPlayerInteraction,
-    playerPosition: THREE.Vector3,
-  ): void {
-    const sourcePosition = trafficInteraction.sourcePosition;
-    if (!sourcePosition) return;
+  /** Emit water spray when driving near the shoreline. */
+  #emitShoreSpray(dt: number, controller: VehicleController): void {
+    const height = this.#terrain.getHeightAt(controller.position.x, controller.position.z);
+    // Only spray when near the waterline and moving
+    if (height > SEA_LEVEL + 1.5 || height < SEA_LEVEL - 2) return;
+    const speed = Math.hypot(controller.velocity.x, controller.velocity.z);
+    if (speed < 3) return;
 
-    this.#debrisOrigin
-      .copy(playerPosition)
-      .lerp(sourcePosition, 0.52);
-    this.#debrisOrigin.y = Math.max(playerPosition.y, sourcePosition.y) + 0.45;
+    this.#shoreSprayTimer += dt;
+    const interval = THREE.MathUtils.lerp(0.08, 0.03, THREE.MathUtils.clamp(speed / 20, 0, 1));
+    if (this.#shoreSprayTimer < interval) return;
+    this.#shoreSprayTimer = 0;
 
-    this.#debrisVelocity.copy(trafficInteraction.impulse).setY(0);
-    if (this.#debrisVelocity.lengthSq() < 0.0001) {
-      this.#debrisVelocity.copy(playerPosition).sub(sourcePosition).setY(0);
+    // Spray from wheel positions, arcing outward
+    for (let w = 0; w < 4; w++) {
+      const wheelPos = controller.wheelWorldPositions[w];
+      if (!wheelPos) continue;
+      this.#shoreSprayOrigin.copy(wheelPos);
+      this.#shoreSprayOrigin.y = Math.max(this.#shoreSprayOrigin.y, SEA_LEVEL);
+
+      const lateral = (w % 2 === 0 ? 1 : -1) * (1 + Math.random() * 0.5);
+      this.#shoreSprayVelocity.set(
+        controller.velocity.x * 0.15 + lateral * 1.8,
+        2.4 + speed * 0.12 + Math.random() * 1.2,
+        controller.velocity.z * 0.15 + (Math.random() - 0.5) * 1.4,
+      );
+
+      const count = speed > 12 ? 3 : speed > 6 ? 2 : 1;
+      this.#splashSystem.emit(this.#shoreSprayOrigin, this.#shoreSprayVelocity, SHALLOW_SPLASH, count);
     }
-    if (this.#debrisVelocity.lengthSq() < 0.0001) {
-      this.#debrisVelocity.set(1, 0, 0);
-    }
-    this.#debrisVelocity.normalize();
-    this.#debrisLateral.crossVectors(this.#worldUp, this.#debrisVelocity);
-    if (this.#debrisLateral.lengthSq() < 0.0001) {
-      this.#debrisLateral.set(0, 0, 1);
-    } else {
-      this.#debrisLateral.normalize();
-    }
-
-    const impactStrength = Math.max(1, trafficInteraction.impulse.length());
-    const launchSpeed = THREE.MathUtils.clamp(impactStrength * 2.4, 2.6, 5.2);
-    this.#debrisVelocity
-      .multiplyScalar(launchSpeed)
-      .addScaledVector(this.#debrisLateral, this.#debrisRandom.signed() * 1.2)
-      .setY(this.#debrisRandom.range(0.18, 0.42));
-
-    this.#debrisSystem.emit(
-      this.#debrisOrigin,
-      this.#debrisVelocity,
-      TRAFFIC_IMPACT_DEBRIS,
-      8,
-    );
-    this.#recentTrafficImpactDebris = 1;
   }
 
   dispose(): void {
