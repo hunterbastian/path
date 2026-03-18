@@ -405,10 +405,7 @@ export class VehicleController {
       );
     }
 
-    const steeringResponse =
-      tuning.steerResponse
-      * (Math.abs(steerInput) < 0.01 ? 1.35 : 1)
-      * (planarSpeed < 8 ? 1.16 : 1);
+    const steeringResponse = tuning.steerResponse;
     this.#steering = expLerp(this.#steering, steerInput, steeringResponse, dt);
 
     if (driveThrottle !== 0) {
@@ -683,7 +680,7 @@ export class VehicleController {
       const yawAcceleration =
         (
           this.#steering
-            * 3.3
+            * 4.2
             * tuning.turn
             * (0.45 + steerScale * 0.95)
             * lowSpeedTurnBoost
@@ -716,24 +713,24 @@ export class VehicleController {
     const longitudinalAccel = driveThrottle * tuning.acceleration * (braking ? -1.8 : 1);
     const targetWeightPitch = previousGrounded
       ? THREE.MathUtils.clamp(
-          (braking ? 0.04 : 0)
-          + longitudinalAccel * -0.0018
-          + (isBoosting ? -0.02 : 0),
-          -0.06,
-          0.06,
+          (braking ? 0.065 : 0)
+          + longitudinalAccel * -0.003
+          + (isBoosting ? -0.03 : 0),
+          -0.09,
+          0.09,
         )
       : 0;
     // Lateral: turning at speed leans the body outward
     const targetWeightRoll = previousGrounded
       ? THREE.MathUtils.clamp(
-          this.#yawVelocity * planarSpeed * -0.0012
-          + lateralSpeed * 0.003,
-          -0.05,
-          0.05,
+          this.#yawVelocity * planarSpeed * -0.002
+          + lateralSpeed * 0.005,
+          -0.08,
+          0.08,
         )
       : 0;
-    this.#weightPitch = expLerp(this.#weightPitch, targetWeightPitch, 5, dt);
-    this.#weightRoll = expLerp(this.#weightRoll, targetWeightRoll, 4, dt);
+    this.#weightPitch = expLerp(this.#weightPitch, targetWeightPitch, 8, dt);
+    this.#weightRoll = expLerp(this.#weightRoll, targetWeightRoll, 6, dt);
 
     const maxSpeed =
       (isBoosting ? vehicleTuning.maxBoostSpeed : vehicleTuning.maxCruiseSpeed)
