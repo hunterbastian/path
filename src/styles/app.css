@@ -36,6 +36,17 @@
   --amber-glow: 0 0 8px rgba(212, 167, 74, 0.4);
   --te-orange: #e8622c;
 
+  /* Legacy compat — used by loading, arrival, debug, map, toasts (not yet restyled) */
+  --ink: #0f1626;
+  --line: rgba(86, 98, 123, 0.42);
+  --line-strong: rgba(193, 163, 98, 0.62);
+  --shadow: rgba(15, 22, 38, 0.16);
+  --label: #64728d;
+  --value: #172238;
+  --accent: #d4a74a;
+  --accent-bright: #c49230;
+  --panel-strong: rgba(246, 243, 236, 0.95);
+
   --text-2xs: 9px;
   --text-xs: 10px;
   --text-sm: 11px;
@@ -182,7 +193,6 @@ body {
   pointer-events: none;
 }
 
-.hud,
 .map-device,
 .debug-panel,
 .error-banner {
@@ -690,14 +700,6 @@ body {
   transform: translateY(1px) scale(0.995);
 }
 
-.start-button--secondary {
-  color: #34435f;
-  border-color: rgba(100, 111, 137, 0.6);
-  background:
-    linear-gradient(180deg, rgba(250, 250, 248, 0.96), rgba(229, 231, 236, 0.96)),
-    rgba(241, 242, 245, 0.96);
-}
-
 /* ── Arrival Screen ── */
 
 .arrival-card {
@@ -995,248 +997,8 @@ body {
   font-weight: 700;
 }
 
-/* ── HUD ── */
-
-.hud {
-  position: absolute;
-  left: calc(clamp(10px, 1.5vw, 16px) + var(--safe-left));
-  right: calc(clamp(10px, 1.5vw, 16px) + var(--safe-right));
-  top: calc(clamp(10px, 1.5vw, 16px) + var(--safe-top));
-  display: flex;
-  justify-content: flex-end;
-  align-items: flex-start;
-  gap: 8px;
-  pointer-events: none;
-  z-index: 10;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition:
-    opacity 220ms ease,
-    transform 220ms ease;
-}
-
-body.game-started .hud {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-body.game-arrived .hud {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-body.map-open .hud {
-  opacity: 0;
-  pointer-events: none;
-}
-
-body.pause-menu-open .hud {
-  opacity: 0.22;
-  transform: translateY(-6px);
-}
-
-.hud-panel {
-  display: grid;
-  gap: 8px;
-  min-width: min(298px, calc(100vw - 22px));
-  max-width: min(396px, calc(100vw - 22px));
-  padding: 10px;
-}
-
-.hud-main {
-  display: flex;
-  gap: 10px;
-  align-items: end;
-  justify-content: space-between;
-}
-
-.speed-readout {
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  min-width: min(148px, 100%);
-}
-
-.speed-value {
-  font-size: var(--text-md);
-  line-height: 1.2;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font-weight: 800;
-  color: var(--accent-bright);
-  transition: text-shadow 0.3s ease;
-}
-
-.speed-value[data-intensity="high"] {
-  text-shadow: 0 0 6px rgba(196, 146, 48, 0.3);
-}
-
-.hud-route-label {
-  max-width: 18ch;
-  text-align: right;
-  text-wrap: balance;
-  color: var(--label);
-}
-
-.hud-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.hud-stack-objective,
-.hud-stack-timer {
-  grid-column: span 2;
-}
-
 .status-label {
   color: var(--label);
-}
-
-.status-label--icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hud .status-value {
-  color: var(--value);
-}
-
-.hud .status-value[data-tone="stable"] {
-  color: var(--value);
-}
-
-.hud .status-value[data-tone="objective"],
-.hud .status-value[data-tone="goal"] {
-  color: var(--accent-bright);
-}
-
-.hud .status-value[data-tone="boost"] {
-  color: #9b7c20;
-}
-
-.hud .status-value[data-tone="active"] {
-  color: #a07028;
-}
-
-.hud .status-value[data-tone="cool"] {
-  color: #4a6d7a;
-}
-
-.hud .status-value[data-tone="warn"] {
-  color: #a85c20;
-}
-
-.hud .status-value[data-tone="sand"] {
-  color: #a08248;
-}
-
-.hud .status-value[data-tone="rock"] {
-  color: #6a6e72;
-}
-
-.hud-subtitle {
-  color: var(--label);
-}
-
-/* ── HUD Glyphs ── */
-
-.hud-glyph {
-  position: relative;
-  display: inline-block;
-  flex: 0 0 auto;
-}
-
-.hud-glyph--relay {
-  width: 12px;
-  height: 12px;
-}
-
-.hud-glyph--relay::before,
-.hud-glyph--relay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-
-.hud-glyph--relay::before {
-  left: 4px;
-  right: 4px;
-  bottom: 0;
-  top: 2px;
-  border-radius: 999px 999px 2px 2px;
-  background: linear-gradient(180deg, rgba(193, 163, 98, 0.94), rgba(193, 163, 98, 0.3));
-}
-
-.hud-glyph--relay::after {
-  left: 1px;
-  right: 1px;
-  top: 0;
-  height: 4px;
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-  background: rgba(180, 150, 80, 0.92);
-}
-
-.hud-glyph--weather {
-  width: 14px;
-  height: 14px;
-}
-
-.hud-glyph--weather::before,
-.hud-glyph--weather::after {
-  content: "";
-  position: absolute;
-}
-
-.hud-glyph--weather[data-condition="sunny"]::before {
-  inset: 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow:
-    0 -6px 0 -5px var(--accent),
-    0 6px 0 -5px var(--accent),
-    6px 0 0 -5px var(--accent),
-    -6px 0 0 -5px var(--accent),
-    4px 4px 0 -5px var(--accent),
-    -4px 4px 0 -5px var(--accent),
-    4px -4px 0 -5px var(--accent),
-    -4px -4px 0 -5px var(--accent);
-}
-
-.hud-glyph--weather[data-condition="sunny"]::after {
-  display: none;
-}
-
-.hud-glyph--weather[data-condition="cloudy"]::before,
-.hud-glyph--weather[data-condition="rainy"]::before {
-  left: 1px;
-  right: 1px;
-  top: 4px;
-  bottom: 3px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 28% 38%, var(--label) 0 33%, transparent 35%),
-    radial-gradient(circle at 52% 28%, var(--label) 0 42%, transparent 44%),
-    radial-gradient(circle at 76% 44%, rgba(100, 114, 141, 0.88) 0 30%, transparent 32%),
-    linear-gradient(180deg, var(--label), rgba(100, 114, 141, 0.86));
-}
-
-.hud-glyph--weather[data-condition="cloudy"]::after,
-.hud-glyph--weather[data-condition="rainy"]::after {
-  left: 3px;
-  right: 3px;
-  bottom: 0;
-  height: 4px;
-}
-
-.hud-glyph--weather[data-condition="cloudy"]::after {
-  background: linear-gradient(180deg, rgba(100, 114, 141, 0.5), rgba(100, 114, 141, 0));
-}
-
-.hud-glyph--weather[data-condition="rainy"]::after {
-  background:
-    linear-gradient(90deg, transparent 0 12%, rgba(100, 114, 141, 0.9) 12% 22%, transparent 22% 40%, rgba(100, 114, 141, 0.9) 40% 50%, transparent 50% 68%, rgba(100, 114, 141, 0.9) 68% 78%, transparent 78% 100%);
 }
 
 /* ── Map Device ── */
