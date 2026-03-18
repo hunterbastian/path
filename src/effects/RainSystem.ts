@@ -17,6 +17,26 @@ const FIELD_WIDTH = 92;
 const FIELD_DEPTH = 74;
 const FIELD_HEIGHT = 46;
 
+// Rain vs snow constants
+const RAIN_COLOR = 0xc7d6da;
+const SNOW_COLOR = 0xe8e8f0;
+const RAIN_OPACITY = 0.22;
+const SNOW_OPACITY = 0.16;
+const RAIN_SPEED_MIN = 28;
+const RAIN_SPEED_MAX = 40;
+const SNOW_SPEED_MIN = 8;
+const SNOW_SPEED_MAX = 12;
+const RAIN_LENGTH_MIN = 2.6;
+const RAIN_LENGTH_MAX = 4.4;
+const SNOW_LENGTH_MIN = 0.4;
+const SNOW_LENGTH_MAX = 0.8;
+const RAIN_DRIFT_MIN = 0.82;
+const RAIN_DRIFT_MAX = 1.18;
+const SNOW_DRIFT_MIN = 1.6;
+const SNOW_DRIFT_MAX = 2.8;
+
+export type PrecipitationMode = 'rain' | 'snow';
+
 export class RainSystem {
   readonly #terrain: Terrain;
   readonly #geometry: THREE.BufferGeometry;
@@ -28,6 +48,7 @@ export class RainSystem {
   readonly #wind = new THREE.Vector3(-2.8, -1, 1.05);
   #densityScale = 1;
   #sampleFrame = 0;
+  #mode: PrecipitationMode = 'rain';
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.#terrain = terrain;
@@ -62,8 +83,17 @@ export class RainSystem {
 
   setDensityScale(scale: number): void {
     this.#densityScale = Math.max(0, scale);
+    const baseOpacity = this.#mode === 'snow' ? SNOW_OPACITY : RAIN_OPACITY;
     this.#material.opacity =
-      0.22 * THREE.MathUtils.clamp(0.2 + this.#densityScale * 0.8, 0, 1.5);
+      baseOpacity * THREE.MathUtils.clamp(0.2 + this.#densityScale * 0.8, 0, 1.5);
+  }
+
+  setMode(mode: PrecipitationMode): void {
+    if (mode === this.#mode) return;
+    this.#mode = mode;
+    this.#material.color.setHex(mode === 'snow' ? SNOW_COLOR : RAIN_COLOR);
+    // Re-apply opacity for the new base
+    this.setDensityScale(this.#densityScale);
   }
 
   update(dt: number, cameraPosition: THREE.Vector3): void {

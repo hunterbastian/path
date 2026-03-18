@@ -1,7 +1,21 @@
 // src/world/BiomeConfig.ts
 import type { SurfaceType } from './Terrain';
+import type { WeatherCondition } from '../config/GameTuning';
 
 export type BiomeName = 'alpine-meadows' | 'canyon' | 'salt-flats' | 'jagged-peaks' | 'coast';
+
+export interface BiomeWeatherConfig {
+  /** Available conditions (besides 'sunny'/'cloudy' which are always available) */
+  conditions: WeatherCondition[];
+  /** Minimum seconds of clear weather between events */
+  minClearDuration: number;
+  /** Maximum seconds of clear weather between events */
+  maxClearDuration: number;
+  /** How long active weather lasts (seconds) */
+  eventDuration: number;
+  /** Fade in/out time (seconds) */
+  fadeDuration: number;
+}
 
 export interface BiomeNoiseParams {
   /** Primary terrain amplitude — controls how tall/dramatic the terrain is */
@@ -66,6 +80,7 @@ export interface BiomeDefinition {
   grass: BiomeGrassConfig;
   fog: BiomeFogConfig;
   skyTint: BiomeSkyTint;
+  weather: BiomeWeatherConfig;
 }
 
 // --- Biome Definitions ---
@@ -104,6 +119,13 @@ export const BIOME_ALPINE_MEADOWS: BiomeDefinition = {
     night: 0x0a0a14,       // neutral dark
     noon: 0x000000,        // no tint
   },
+  weather: {
+    conditions: ['rainy'],
+    minClearDuration: 180,
+    maxClearDuration: 480,
+    eventDuration: 30,
+    fadeDuration: 12,
+  },
 };
 
 export const BIOME_CANYON: BiomeDefinition = {
@@ -139,6 +161,13 @@ export const BIOME_CANYON: BiomeDefinition = {
     goldenHour: 0x4a2000,  // deep orange
     night: 0x140a18,       // purple tint
     noon: 0x000000,
+  },
+  weather: {
+    conditions: ['dust'],
+    minClearDuration: 240,
+    maxClearDuration: 600,
+    eventDuration: 30,
+    fadeDuration: 15,
   },
 };
 
@@ -176,6 +205,13 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
     night: 0x0a0c18,      // pale blue
     noon: 0x0a0a08,        // harsh white boost
   },
+  weather: {
+    conditions: [],
+    minClearDuration: Infinity,
+    maxClearDuration: Infinity,
+    eventDuration: 0,
+    fadeDuration: 0,
+  },
 };
 
 export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
@@ -212,6 +248,13 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
     night: 0x0a1020,       // cold blue
     noon: 0x000000,
   },
+  weather: {
+    conditions: ['snowy', 'blizzard'],
+    minClearDuration: 120,
+    maxClearDuration: 360,
+    eventDuration: 30,
+    fadeDuration: 12,
+  },
 };
 
 export const BIOME_COAST: BiomeDefinition = {
@@ -247,6 +290,13 @@ export const BIOME_COAST: BiomeDefinition = {
     goldenHour: 0x2a1800,  // warm amber
     night: 0x0a0e14,       // grey-blue
     noon: 0x000000,
+  },
+  weather: {
+    conditions: ['rainy'],
+    minClearDuration: 180,
+    maxClearDuration: 480,
+    eventDuration: 30,
+    fadeDuration: 10,
   },
 };
 

@@ -453,6 +453,33 @@ const WEATHER_SCALES: Record<WeatherCondition, WeatherScale> = {
     glowMult: 0.25,
     blurrinessAdd: 0.06,
   },
+  snowy: {
+    sunIntensity: 0.55,
+    fillIntensity: 0.90,
+    hemisphereIntensity: 0.90,
+    rimIntensity: 0.62,
+    desaturation: 0.18,
+    glowMult: 0.35,
+    blurrinessAdd: 0.05,
+  },
+  blizzard: {
+    sunIntensity: 0.32,
+    fillIntensity: 0.78,
+    hemisphereIntensity: 0.82,
+    rimIntensity: 0.42,
+    desaturation: 0.30,
+    glowMult: 0.15,
+    blurrinessAdd: 0.10,
+  },
+  dust: {
+    sunIntensity: 0.52,
+    fillIntensity: 0.88,
+    hemisphereIntensity: 0.86,
+    rimIntensity: 0.54,
+    desaturation: 0.12,
+    glowMult: 0.30,
+    blurrinessAdd: 0.08,
+  },
 };
 
 // ---------------------------------------------------------------------------

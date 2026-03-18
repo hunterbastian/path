@@ -76,7 +76,7 @@ export interface CameraDriveTuning {
   orbitReturnPitchResponse: number;
 }
 
-export type WeatherCondition = 'cloudy' | 'rainy' | 'sunny';
+export type WeatherCondition = 'cloudy' | 'rainy' | 'sunny' | 'snowy' | 'blizzard' | 'dust';
 
 export interface WeatherProfile {
   condition: WeatherCondition;
