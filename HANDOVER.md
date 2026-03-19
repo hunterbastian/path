@@ -4,76 +4,60 @@ Last updated: 2026-03-18
 ## Project
 PATH — Three.js arcade driving game, Ghibli countryside island
 Directory: ~/Desktop/code/PATH
-Deployed: https://drive-path.vercel.app
+Deployed: https://path-mu-eight.vercel.app (NOT drive-path.vercel.app — that's a different project)
 
 ## What Was Built This Session
 
-### Phase 1: Amber Terminal UI
-- Title screen as "The Device" (TE-inspired boot-up)
-- Pause screen as "Compact Console" (square controls, settings wiring)
-- Floating amber HUD: compass, boost, drift, surface, weather, minimap, XP bar
-- Settings wired: volume, graphics, cam shake, deadzone → localStorage
-
-### Phase 2: 5-Biome Radial Island
-- Alpine Meadows (center, elevated), Canyon, Salt Flats, Jagged Peaks, Coast
-- Per-biome terrain generation, vertex colors, surface types
-- Per-biome grass density/color/height, clutter, fog, clouds, sky tinting
-- Biome discovery notifications, HUD biome display
-
-### Phase 3: Routes + Ambience + Weather
-- Per-biome road width and color
-- Biome-local weather: brief 30s rain/snow/dust events
-- Snow variant for RainSystem
-- BiomeAmbience: wildlife sprites + ambient particles per biome
-
-### Phase 4: Progression System
-- XP from driving (1.0/m) + fog discovery (15/cell) + viewpoints (100 XP)
-- 8 levels, 4+1 level gates with visible amber barriers
+### UI — Amber Terminal (TE-inspired)
+- Title screen "The Device", pause "Compact Console", all screens restyled
+- Floating HUD: compass, boost, drift, surface, weather, minimap, XP bar
+- Settings wired to systems + localStorage persistence
 - Level-up overlay with unlock notifications
-- XP bar below speedometer
+- Device boot animation on title screen
 
-### Car Feel Overhaul
-- Doubled steering response, removed input lag hacks
-- Stronger weight transfer (pitch/roll), higher gravity (28)
+### World — 5-Biome Radial Island
+- Alpine Meadows (center), Canyon, Salt Flats, Jagged Peaks, Coast
+- Per-biome: terrain, colors, grass, clutter, fog, clouds, sky tinting
+- Ghibli overhaul: Howl's Moving Castle palette, smooth rolling terrain, lavender fog
+- 150×150 mesh, 800 grass patches, zero detail noise on meadows/coast
+
+### Gameplay
+- Progression: XP from driving + discovery, 8 levels, gates, viewpoints
+- Combo drift multiplier (2x-4x chain drifts)
+- Per-biome weather: brief rain/snow/dust events
+- Wildlife sprites + ambient particles per biome
+- Per-biome road styles
+
+### Multiplayer
+- Ghost player name labels (billboard sprites)
+- Global chat system (server + client, Enter to open)
+- Weather/time sync via SpacetimeDB world_state
+- Network reconnection (3 retries)
+
+### Car Feel
 - Forza Horizon-responsive handling
-
-### Multiplayer Upgrades
-- Floating name labels above ghost players
-- Global chat system (Enter to open, amber terminal UI)
-- Server: chat_message table + send_chat reducer
-- Shared weather/time sync via world_state table
-- Network reconnection with 3 retry attempts
-
-### Ghibli Landscape Overhaul
-- Howl's Moving Castle warm palette (emerald, gold, lavender)
-- Dramatically smoother terrain (zero detail noise on meadows/coast)
-- 150×150 mesh (from 100×100), 800 grass patches (from 480)
-- Warmer fog (lavender/peach), expanded starter zone (150m radius)
-- Softer vehicle ride with more suspension feel
+- Fast terrain alignment (14x blend rate)
+- Idle orbit camera (360° after 5s no input)
 
 ### Polish
-- Accessibility: contrast fix, focus indicators, 9px font floor
-- All screens restyled to amber terminal (loading, arrival, toasts)
-- Combo drift multiplier (2x-4x chain drifts)
-- Hardening: text overflow, WebGL context loss, network recovery
-- Camera centering (reduced look-ahead)
+- Accessibility (contrast, focus indicators, font floor)
+- Hardening (text overflow, WebGL context loss, network recovery)
+- Camera centering
 
 ## Current State
-- Build: clean (tsc + vite)
-- All changes pushed to GitHub and deployed to Vercel
+- Build: clean, all pushed to GitHub, deployed to Vercel
 - SpacetimeDB server needs `spacetimedb publish` for chat + sync reducers
-- Visual state: Ghibli warm countryside with amber terminal UI
+- SampleAudio system built but no audio files
 
 ## Next Steps
-1. **Deploy SpacetimeDB server** — `spacetimedb publish` for chat + world sync
-2. **Sound files** — SampleAudio needs .ogg files in public/audio/
-3. **More visual tuning** — playtest and adjust biome colors/terrain after seeing it
+1. **Deploy SpacetimeDB server** — chat + world sync won't work until published
+2. **Sound files** — grab .ogg files for public/audio/
+3. **More biome clutter** — cairns, arches, crystals, shipwrecks
 4. **Arrival summary card** — restyle to amber terminal
-5. **More clutter types** — biome-specific objects (cairns, arches, crystals, shipwrecks)
+5. **Visual polish** — playtest biome colors, terrain shapes, gate positions
+6. **Performance pass** — profile GPU, optimize if needed
 
-## Key Files Created This Session
-- `src/world/BiomeConfig.ts` — biome definitions + sampleBiome()
-- `src/world/BiomeAmbience.ts` — wildlife + ambient particles
-- `src/gameplay/ProgressionSystem.ts` — XP, levels, persistence
-- `src/gameplay/LevelGate.ts` — gated paths with barriers
-- `src/gameplay/ViewpointSystem.ts` — discoverable viewpoints
+## Key URLs
+- **Live:** https://path-mu-eight.vercel.app
+- **GitHub:** hunterbastian/path (main branch)
+- **SpacetimeDB:** path-multiplayer module on maincloud
