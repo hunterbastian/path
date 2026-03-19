@@ -867,23 +867,22 @@ export class VehicleController {
       this.position.z,
     );
     if (isGrounded) {
-      // Smooth ride height — absorb micro-bumps instead of snapping to terrain
+      // Smooth ride height — terrain is already smooth from Ghibli overhaul
       const targetY = finalSurfaceSample.rideHeight;
       const heightDiff = targetY - this.position.y;
-      if (heightDiff > 1.5) {
+      if (heightDiff > 0.6) {
         // Big step up — snap to avoid clipping through terrain
         this.position.y = targetY;
       } else {
-        // Softer smoothing: fast when below terrain (10), gentle when above (7)
-        const rate = heightDiff > 0 ? 10 : 7;
-        this.position.y = expLerp(this.position.y, targetY, rate, dt);
+        // Fast tracking — terrain is smooth so no micro-bumps to absorb
+        this.position.y = expLerp(this.position.y, targetY, 18, dt);
       }
-      // Soft floor clamp — don't let car sink more than 0.3m below terrain
-      if (this.position.y < targetY - 0.3) {
-        this.position.y = targetY - 0.3;
+      // Hard floor clamp — never sink below terrain
+      if (this.position.y < targetY) {
+        this.position.y = targetY;
       }
       if (this.velocity.y < 0) {
-        this.velocity.y *= 0.3; // Dampen downward velocity instead of zeroing
+        this.velocity.y = 0;
       }
     }
 
