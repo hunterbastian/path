@@ -619,6 +619,11 @@ export class Sky {
     return this.#dayTime;
   }
 
+  /** Set day time directly for multiplayer sync. */
+  set dayTime(value: number) {
+    this.#dayTime = ((value % 1) + 1) % 1; // Normalize to 0-1
+  }
+
   /** Sun world position for specular/shadow calculations. */
   get sunPosition(): THREE.Vector3 {
     return this.#sun.position;

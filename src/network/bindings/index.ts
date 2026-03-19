@@ -35,12 +35,15 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import SendChatReducer from "./send_chat_reducer";
 import SetNameReducer from "./set_name_reducer";
+import SyncWorldStateReducer from "./sync_world_state_reducer";
 import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ChatMessageRow from "./chat_message_table";
 import PlayerRow from "./player_table";
 import WorldStateRow from "./world_state_table";
 
@@ -48,6 +51,17 @@ import WorldStateRow from "./world_state_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  chat_message: __table({
+    name: 'chat_message',
+    indexes: [
+      { accessor: 'id', name: 'chat_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'chat_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ChatMessageRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -74,7 +88,9 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("send_chat", SendChatReducer),
   __reducerSchema("set_name", SetNameReducer),
+  __reducerSchema("sync_world_state", SyncWorldStateReducer),
   __reducerSchema("update_position", UpdatePositionReducer),
 );
 

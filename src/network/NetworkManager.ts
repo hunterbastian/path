@@ -52,6 +52,19 @@ export interface RemotePlayerState {
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_MS = 5000;
 
+/** Matches the auto-generated ChatMessage row shape from SpacetimeDB bindings. */
+interface ChatMessageRow {
+  senderName: string;
+  text: string;
+}
+
+/** Matches the auto-generated WorldState row shape from SpacetimeDB bindings. */
+interface WorldStateRow {
+  id: number;
+  weatherElapsedS: number;
+  dayTime: number;
+}
+
 export class NetworkManager {
   #connection: DbConnection | null = null;
   #localIdentity: string | null = null;
@@ -62,6 +75,8 @@ export class NetworkManager {
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   #lastHost: string | null = null;
   #lastModule: string | null = null;
+  #chatCallbacks: Array<(sender: string, text: string) => void> = [];
+  #worldStateCallbacks: Array<(weatherElapsed: number, dayTime: number) => void> = [];
 
   /**
    * Connect to a SpacetimeDB module. Non-blocking — the game works offline
@@ -91,6 +106,14 @@ export class NetworkManager {
           conn.subscriptionBuilder()
             .onApplied(this.#onSubscriptionApplied.bind(this))
             .subscribe('SELECT * FROM player WHERE online = true');
+
+          // Subscribe to recent chat messages
+          conn.subscriptionBuilder()
+            .subscribe('SELECT * FROM chat_message');
+
+          // Subscribe to world state (weather + time-of-day sync)
+          conn.subscriptionBuilder()
+            .subscribe('SELECT * FROM world_state');
         })
         .onConnectError((_ctx: unknown, err: Error) => {
           console.log(`[Network] Connection failed: ${err.message} — single-player mode`);
@@ -124,6 +147,25 @@ export class NetworkManager {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (conn.db.player as any).onDelete((_ctx: unknown, row: PlayerRow) => {
         this.onRemotePlayerRemove(row.identity.toHexString());
+      });
+
+      // Chat message callbacks
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (conn.db.chat_message as any).onInsert((_ctx: unknown, row: ChatMessageRow) => {
+        for (const cb of this.#chatCallbacks) {
+          cb(row.senderName, row.text);
+        }
+      });
+
+      // World state callbacks (weather + time-of-day sync)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (conn.db.world_state as any).onInsert((_ctx: unknown, row: WorldStateRow) => {
+        this.#fireWorldStateCallbacks(row);
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (conn.db.world_state as any).onUpdate((_ctx: unknown, _old: WorldStateRow, row: WorldStateRow) => {
+        this.#fireWorldStateCallbacks(row);
       });
     } catch {
       console.log('[Network] No server available — single-player mode');
@@ -272,6 +314,36 @@ export class NetworkManager {
     if (!this.#connected || !this.#connection) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this.#connection.reducers as any).setName(name);
+  }
+
+  /** Send a chat message to the server. */
+  sendChat(text: string): void {
+    if (!this.#connected || !this.#connection) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.#connection.reducers as any).sendChat(text);
+  }
+
+  /** Register a callback for incoming chat messages. */
+  onChatMessage(callback: (sender: string, text: string) => void): void {
+    this.#chatCallbacks.push(callback);
+  }
+
+  /** Broadcast local weather/time state to the server (call at ~1Hz). */
+  syncWorldState(weatherElapsed: number, dayTime: number): void {
+    if (!this.#connected || !this.#connection) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.#connection.reducers as any).syncWorldState(weatherElapsed, dayTime);
+  }
+
+  /** Register a callback for world state updates (weather + time-of-day sync). */
+  onWorldStateUpdate(callback: (weatherElapsed: number, dayTime: number) => void): void {
+    this.#worldStateCallbacks.push(callback);
+  }
+
+  #fireWorldStateCallbacks(row: WorldStateRow): void {
+    for (const cb of this.#worldStateCallbacks) {
+      cb(row.weatherElapsedS, row.dayTime);
+    }
   }
 
   disconnect(): void {

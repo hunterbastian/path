@@ -6,9 +6,13 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import SendChatReducer from "../send_chat_reducer";
 import SetNameReducer from "../set_name_reducer";
+import SyncWorldStateReducer from "../sync_world_state_reducer";
 import UpdatePositionReducer from "../update_position_reducer";
 
+export type SendChatParams = __Infer<typeof SendChatReducer>;
 export type SetNameParams = __Infer<typeof SetNameReducer>;
+export type SyncWorldStateParams = __Infer<typeof SyncWorldStateReducer>;
 export type UpdatePositionParams = __Infer<typeof UpdatePositionReducer>;
 

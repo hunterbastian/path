@@ -142,6 +142,7 @@ export class PathGame {
   #checkpointBannerLabel = '';
   #activeScenario: ScenarioFixtureId = 'spawn';
   #renderDebugView: RenderDebugViewId = 'final';
+  #worldSyncTimer = 0;
   #prevWeatherCondition: string = '';
   #prevDamageHealth = 1;
   #discoveredSurfaces = new Set<string>();

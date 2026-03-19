@@ -158,6 +158,9 @@ export class WeatherState {
   readonly #sky: Sky;
   readonly #rainSystem: RainSystem;
 
+  // Total elapsed time for multiplayer sync
+  #totalElapsed = 0;
+
   // Event state machine
   #phase: EventPhase = 'clear';
   #phaseTimer = 0;
@@ -192,6 +195,16 @@ export class WeatherState {
     return this.#snapshot;
   }
 
+  /** Total elapsed weather time in seconds (for multiplayer sync). */
+  get elapsedTime(): number {
+    return this.#totalElapsed;
+  }
+
+  /** Set total elapsed weather time from a remote sync source. */
+  set elapsedTime(value: number) {
+    this.#totalElapsed = value;
+  }
+
   forceCondition(condition: WeatherCondition | null): WeatherSnapshot {
     this.#forcedCondition = condition;
     if (condition && condition !== 'sunny' && condition !== 'cloudy') {
@@ -215,6 +228,8 @@ export class WeatherState {
   }
 
   update(dt: number, routeActivity: number, playerPosition?: THREE.Vector3): WeatherSnapshot {
+    this.#totalElapsed += dt;
+
     // Determine current biome from player position
     if (playerPosition) {
       const sample = sampleBiome(playerPosition.x, playerPosition.z);
