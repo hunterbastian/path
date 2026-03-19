@@ -28,6 +28,10 @@ export class GhostPlayerSystem {
   #instancedMesh: THREE.InstancedMesh | null = null;
   #activeCount = 0;
 
+  // Name label sprites keyed by player identity
+  readonly #nameSprites = new Map<string, THREE.Sprite>();
+  readonly #nameSpriteTexts = new Map<string, string>(); // track current text for change detection
+
   // Pre-allocated objects for per-frame matrix composition (zero allocations)
   readonly #instanceMatrix = new THREE.Matrix4();
   readonly #hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -113,6 +117,50 @@ export class GhostPlayerSystem {
     this.#scene.add(instanced);
   }
 
+  /** Create a canvas texture with the player's name in amber text. */
+  #createNameTexture(name: string): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.font = '700 28px "Geist Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(212, 167, 74, 0.85)';
+    ctx.fillText(name || 'Anonymous', 128, 32);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /** Create a name label sprite for a ghost player. */
+  #createNameSprite(identity: string, name: string): THREE.Sprite {
+    const texture = this.#createNameTexture(name);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(2, 0.5, 1);
+    this.#scene.add(sprite);
+    this.#nameSprites.set(identity, sprite);
+    this.#nameSpriteTexts.set(identity, name);
+    return sprite;
+  }
+
+  /** Dispose and remove a single name label sprite. */
+  #disposeNameSprite(identity: string): void {
+    const sprite = this.#nameSprites.get(identity);
+    if (sprite) {
+      sprite.removeFromParent();
+      (sprite.material as THREE.SpriteMaterial).map?.dispose();
+      (sprite.material as THREE.SpriteMaterial).dispose();
+      this.#nameSprites.delete(identity);
+      this.#nameSpriteTexts.delete(identity);
+    }
+  }
+
   /**
    * Update ghost positions from network state. Called every frame.
    * Reads interpolated positions from the remote player iterator and
@@ -120,6 +168,9 @@ export class GhostPlayerSystem {
    */
   update(remotePlayers: IterableIterator<RemotePlayerState>): void {
     if (!this.#instancedMesh) return;
+
+    // Track which identities are active this frame
+    const activeIdentities = new Set<string>();
 
     let index = 0;
     for (const remote of remotePlayers) {
@@ -159,12 +210,37 @@ export class GhostPlayerSystem {
 
       this.#instanceMatrix.compose(this.#position, this.#quaternion, UNIT_SCALE);
       this.#instancedMesh.setMatrixAt(index, this.#instanceMatrix);
+
+      // -- Name label sprite --
+      activeIdentities.add(remote.identity);
+      let sprite = this.#nameSprites.get(remote.identity);
+      const currentText = this.#nameSpriteTexts.get(remote.identity);
+
+      if (!sprite) {
+        // New ghost — create sprite
+        sprite = this.#createNameSprite(remote.identity, remote.name);
+      } else if (currentText !== remote.name) {
+        // Name changed — recreate texture
+        this.#disposeNameSprite(remote.identity);
+        sprite = this.#createNameSprite(remote.identity, remote.name);
+      }
+
+      sprite.position.set(this.#position.x, this.#position.y + 3.5, this.#position.z);
+      sprite.visible = true;
+
       index++;
     }
 
     // Hide unused instances
     for (let i = index; i < this.#activeCount; i++) {
       this.#instancedMesh.setMatrixAt(i, this.#hiddenMatrix);
+    }
+
+    // Remove sprites for ghosts that are no longer active
+    for (const identity of this.#nameSprites.keys()) {
+      if (!activeIdentities.has(identity)) {
+        this.#disposeNameSprite(identity);
+      }
     }
 
     this.#activeCount = index;
@@ -176,6 +252,11 @@ export class GhostPlayerSystem {
   }
 
   dispose(): void {
+    // Dispose all name label sprites
+    for (const identity of [...this.#nameSprites.keys()]) {
+      this.#disposeNameSprite(identity);
+    }
+
     if (this.#instancedMesh) {
       this.#instancedMesh.removeFromParent();
       this.#instancedMesh.geometry.dispose();
