@@ -1045,7 +1045,7 @@ export class VehicleController {
       const targetNormal = grounded
         ? this.#terrain.getNormalAt(this.position.x, this.position.z)
         : this.#worldUp;
-      const blend = 1 - Math.exp(-(grounded ? 5.0 : 1.8) * dt);
+      const blend = 1 - Math.exp(-(grounded ? 14.0 : 2.5) * dt);
       this.#groundNormal.lerp(targetNormal, blend).normalize();
       this.#composeBaseOrientation();
     }
