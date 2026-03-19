@@ -20,7 +20,7 @@ export type BiomeType = 'default' | 'meadow' | 'desert' | 'hollow';
 export class Terrain {
   readonly mesh: THREE.Mesh;
   readonly size = 920;
-  readonly segments = 100;
+  readonly segments = 150;
   readonly landmarkCenter = new THREE.Vector2(44, 360);
   readonly cityCenter: THREE.Vector2;
   readonly objectiveCenter: THREE.Vector2;
