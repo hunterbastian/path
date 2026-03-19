@@ -5,6 +5,17 @@ import { expDecay, expLerp } from '../core/math';
 import type { DrivingState } from '../vehicle/DrivingState';
 import type { Terrain } from '../world/Terrain';
 
+/** Seconds of no input before the idle orbit activates. */
+const IDLE_TIMEOUT = 5;
+/** Radians per second for the orbit rotation (~42 seconds for a full 360). */
+const IDLE_ORBIT_SPEED = 0.15;
+/** Distance from the vehicle center for the orbit camera. */
+const IDLE_ORBIT_DISTANCE = 18;
+/** Height above the vehicle for the orbit camera. */
+const IDLE_ORBIT_HEIGHT = 6;
+/** How fast the blend transitions in and out (per second). */
+const IDLE_ORBIT_BLEND_SPEED = 2;
+
 export type CameraView = 'chase' | 'cockpit';
 
 export class ThirdPersonCamera {
@@ -62,6 +73,14 @@ export class ThirdPersonCamera {
   #godPitch = 0;
   #godPitchTarget = 0;
   #godPitchMomentum = 0;
+
+  // --- Idle orbit state ---
+  #idleTimer = 0;
+  #idleOrbitAngle = 0;
+  #idleOrbitActive = false;
+  #idleOrbitBlend = 0; // 0 = chase cam, 1 = full orbit
+  #idleOrbitPosition = new THREE.Vector3();
+  #idleOrbitLookTarget = new THREE.Vector3();
 
   // --- Camera juice state ---
   // Impact shake (translational + rotational, decaying)
@@ -179,6 +198,10 @@ export class ThirdPersonCamera {
     this.#tumbleHeightExtra = 0;
     this.#boostPullBack = 0;
     this.#landingCompression = 0;
+    // Reset idle orbit (keep angle so it resumes from the same position)
+    this.#idleTimer = 0;
+    this.#idleOrbitActive = false;
+    this.#idleOrbitBlend = 0;
   }
 
   enterGodMode(camera: THREE.PerspectiveCamera): void {
@@ -287,6 +310,7 @@ export class ThirdPersonCamera {
     vehicleQuaternion: THREE.Quaternion,
     state: DrivingState,
     nextCheckpointPoint: THREE.Vector3 | null,
+    hasInput = true,
   ): void {
     const driveTuning = this.#tuning.camera.drive;
     this.#updateOrbitDrag(dt);
@@ -532,10 +556,45 @@ export class ThirdPersonCamera {
       this.#currentLookTarget.y += this.#tumbleHeightExtra * 0.3;
     }
 
+    // --- Idle orbit ---
+    // Cancel on any driving input or recent mouse movement
+    const hasActivity = hasInput || this.#mouseIdleTime < 0.1;
+    if (hasActivity) {
+      this.#idleTimer = 0;
+      this.#idleOrbitActive = false;
+    } else {
+      this.#idleTimer += dt;
+      if (this.#idleTimer >= IDLE_TIMEOUT) {
+        this.#idleOrbitActive = true;
+      }
+    }
+
+    if (this.#idleOrbitActive) {
+      this.#idleOrbitAngle += IDLE_ORBIT_SPEED * dt;
+      this.#idleOrbitBlend = Math.min(1, this.#idleOrbitBlend + IDLE_ORBIT_BLEND_SPEED * dt);
+    } else {
+      this.#idleOrbitBlend = Math.max(0, this.#idleOrbitBlend - IDLE_ORBIT_BLEND_SPEED * dt);
+    }
+
+    if (this.#idleOrbitBlend > 0) {
+      this.#idleOrbitPosition.set(
+        vehiclePosition.x + Math.sin(this.#idleOrbitAngle) * IDLE_ORBIT_DISTANCE,
+        vehiclePosition.y + IDLE_ORBIT_HEIGHT,
+        vehiclePosition.z + Math.cos(this.#idleOrbitAngle) * IDLE_ORBIT_DISTANCE,
+      );
+      camera.position.lerp(this.#idleOrbitPosition, this.#idleOrbitBlend);
+
+      this.#idleOrbitLookTarget.copy(vehiclePosition);
+      this.#idleOrbitLookTarget.y += 1;
+      this.#currentLookTarget.lerp(this.#idleOrbitLookTarget, this.#idleOrbitBlend);
+    }
+
     camera.up.copy(this.#worldUp);
-    camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll + this.#shakeRollOffset);
-    // Apply shake pitch offset to the look target (subtle vertical jitter)
-    this.#currentLookTarget.y += this.#shakePitchOffset;
+    if (this.#idleOrbitBlend < 1) {
+      camera.up.applyAxisAngle(forward.normalize(), this.#driveRoll + this.#shakeRollOffset);
+      // Apply shake pitch offset to the look target (subtle vertical jitter)
+      this.#currentLookTarget.y += this.#shakePitchOffset * (1 - this.#idleOrbitBlend);
+    }
     camera.lookAt(this.#currentLookTarget);
   }
 

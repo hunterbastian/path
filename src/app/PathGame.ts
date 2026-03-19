@@ -944,6 +944,7 @@ export class PathGame {
           pose.quaternion,
           this.#controller.state,
           this.#getNextCheckpointPosition(),
+          this.#input.hasAnyInput,
         );
       }
     } else if (this.#runSession.mode === 'arrived') {

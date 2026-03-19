@@ -132,6 +132,18 @@ export class InputManager {
     return this.#handbrake;
   }
 
+  /** True when any driving input (throttle, steering, brake, boost, handbrake) is active this frame. */
+  get hasAnyInput(): boolean {
+    return (
+      Math.abs(this.#throttle) > 0.01
+      || Math.abs(this.#steering) > 0.01
+      || this.#brake
+      || this.#boost
+      || this.#handbrake
+      || this.#keys.size > 0
+    );
+  }
+
   get activeSource(): InputSource {
     return this.#gamepadConnected && this.#lastSource === 'gamepad'
       ? 'gamepad'
