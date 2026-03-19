@@ -1,71 +1,79 @@
 # Session Handover
-Last updated: 2026-03-17
+Last updated: 2026-03-18
 
 ## Project
-PATH — Three.js arcade driving game, Patagonian steppe island
+PATH — Three.js arcade driving game, Ghibli countryside island
 Directory: ~/Desktop/code/PATH
 Deployed: https://drive-path.vercel.app
 
 ## What Was Built This Session
 
-### Visual Overhaul
-- Full palette shift from Ghibli green to Patagonian steppe (terrain, grass, trees, sky, fog, wildflowers)
-- Dustier valley fog with higher midday/golden-hour/night opacity
-- Power towers (8 rusted lattice structures) with sagging 3-wire power lines
+### Phase 1: Amber Terminal UI
+- Title screen as "The Device" (TE-inspired boot-up)
+- Pause screen as "Compact Console" (square controls, settings wiring)
+- Floating amber HUD: compass, boost, drift, surface, weather, minimap, XP bar
+- Settings wired: volume, graphics, cam shake, deadzone → localStorage
 
-### Ocean & Coastline (from prior uncommitted work)
-- Ocean system with Gerstner waves, shore foam, whitecaps, sky reflection
-- Cloud billboard system, coastal rocks (boulders + sea stacks)
-- Island terrain with coastline falloff, beach biome
-- Removed AI traffic system (784 lines deleted)
+### Phase 2: 5-Biome Radial Island
+- Alpine Meadows (center, elevated), Canyon, Salt Flats, Jagged Peaks, Coast
+- Per-biome terrain generation, vertex colors, surface types
+- Per-biome grass density/color/height, clutter, fog, clouds, sky tinting
+- Biome discovery notifications, HUD biome display
 
-### Driving & Physics
-- Water drag with drown timer (2.5s) and shore respawn
-- Smoothed ride height (expLerp instead of Y-snap)
-- Fixed suspension pitch/roll lerp (framerate-independent)
-- Removed double camera FOV update
-- Gamepad handbrake (B button) now works
+### Phase 3: Routes + Ambience + Weather
+- Per-biome road width and color
+- Biome-local weather: brief 30s rain/snow/dust events
+- Snow variant for RainSystem
+- BiomeAmbience: wildlife sprites + ambient particles per biome
 
-### Performance
-- Terrain 160→100 segments (61% fewer vertices)
-- Shadow map 1024→512, PCFSoft→PCF, frustum ±28→±20
-- 5 per-frame allocations eliminated in physics loop
-- Independent terrain cache eviction, road cache 12k limit
+### Phase 4: Progression System
+- XP from driving (1.0/m) + fog discovery (15/cell) + viewpoints (100 XP)
+- 8 levels, 4+1 level gates with visible amber barriers
+- Level-up overlay with unlock notifications
+- XP bar below speedometer
 
-### UI
-- Bottom-center speedometer (36px Geist Mono, speed bar, color shift)
-- Damage vignette (red radial gradient flash on impact)
-- Screen transitions (scale + blur with spring easing)
-- Settings panel in pause menu (volume, graphics, camera shake, gamepad deadzone)
-- Achievement toast redesign (eyebrow label, larger icon, progress bar countdown)
+### Car Feel Overhaul
+- Doubled steering response, removed input lag hacks
+- Stronger weight transfer (pitch/roll), higher gravity (28)
+- Forza Horizon-responsive handling
 
-### Audio
-- Howler.js installed + SampleAudio system built (awaiting sound files)
+### Multiplayer Upgrades
+- Floating name labels above ghost players
+- Global chat system (Enter to open, amber terminal UI)
+- Server: chat_message table + send_chat reducer
+- Shared weather/time sync via world_state table
+- Network reconnection with 3 retry attempts
+
+### Ghibli Landscape Overhaul
+- Howl's Moving Castle warm palette (emerald, gold, lavender)
+- Dramatically smoother terrain (zero detail noise on meadows/coast)
+- 150×150 mesh (from 100×100), 800 grass patches (from 480)
+- Warmer fog (lavender/peach), expanded starter zone (150m radius)
+- Softer vehicle ride with more suspension feel
+
+### Polish
+- Accessibility: contrast fix, focus indicators, 9px font floor
+- All screens restyled to amber terminal (loading, arrival, toasts)
+- Combo drift multiplier (2x-4x chain drifts)
+- Hardening: text overflow, WebGL context loss, network recovery
+- Camera centering (reduced look-ahead)
 
 ## Current State
 - Build: clean (tsc + vite)
-- All features committed and pushed (8fe132e)
-- Settings values exposed but not wired to actual systems yet
-- Sound files needed in `public/audio/` (8 files — see SampleAudio.ts header)
-- Visual state untested in browser for most changes this session
+- All changes pushed to GitHub and deployed to Vercel
+- SpacetimeDB server needs `spacetimedb publish` for chat + sync reducers
+- Visual state: Ghibli warm countryside with amber terminal UI
 
 ## Next Steps
-1. **Wire settings** — connect volume/quality/deadzone to SampleAudio, Engine, InputManager
-2. **Sound files** — grab from freesound.org, drop in public/audio/
-3. **Minimap** — corner minimap using existing MapDiscoverySystem + mapCanvas
-4. **Arrival summary card** — run stats when reaching relay
-5. **Combo drift multiplier** — chain drifts for bigger scores
-6. **Dramatic jagged peaks** — Fitz Roy-style mountain terrain generation
+1. **Deploy SpacetimeDB server** — `spacetimedb publish` for chat + world sync
+2. **Sound files** — SampleAudio needs .ogg files in public/audio/
+3. **More visual tuning** — playtest and adjust biome colors/terrain after seeing it
+4. **Arrival summary card** — restyle to amber terminal
+5. **More clutter types** — biome-specific objects (cairns, arches, crystals, shipwrecks)
 
-## Key Files Changed
-- `src/world/Terrain.ts` — Patagonian palette, 100 segments, island falloff
-- `src/world/Ocean.ts` — NEW: Gerstner wave ocean
-- `src/world/CloudSystem.ts` — NEW: billboard clouds
-- `src/world/CoastalRocks.ts` — NEW: merged boulders + sea stacks
-- `src/world/EnvironmentalClutter.ts` — power towers + power lines
-- `src/vehicle/VehicleController.ts` — water drag, smoothed ride, perf fixes
-- `src/audio/SampleAudio.ts` — NEW: Howler-based audio (needs files)
-- `src/core/AppShell.ts` — speedometer, damage vignette, settings panel, achievement redesign
-- `src/styles/app.css` — all new UI styles
-- `src/core/Engine.ts` — PCFShadowMap, 512 shadow map
-- `src/core/InputManager.ts` — gamepad handbrake fix
+## Key Files Created This Session
+- `src/world/BiomeConfig.ts` — biome definitions + sampleBiome()
+- `src/world/BiomeAmbience.ts` — wildlife + ambient particles
+- `src/gameplay/ProgressionSystem.ts` — XP, levels, persistence
+- `src/gameplay/LevelGate.ts` — gated paths with barriers
+- `src/gameplay/ViewpointSystem.ts` — discoverable viewpoints
