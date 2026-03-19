@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const VEHICLE_CLEARANCE = 0.98;
+export const VEHICLE_CLEARANCE = 1.28;
 export const VEHICLE_WHEEL_RADIUS = 0.48;
 export const VEHICLE_WHEEL_CONTACT_CLEARANCE = 0.22;
 export const VEHICLE_WHEEL_TRAVEL = 0.34;

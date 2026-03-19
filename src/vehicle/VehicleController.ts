@@ -870,20 +870,20 @@ export class VehicleController {
       // Smooth ride height — absorb micro-bumps instead of snapping to terrain
       const targetY = finalSurfaceSample.rideHeight;
       const heightDiff = targetY - this.position.y;
-      if (heightDiff > 0.8) {
+      if (heightDiff > 1.5) {
         // Big step up — snap to avoid clipping through terrain
         this.position.y = targetY;
       } else {
-        // Softer smoothing: fast when below terrain (14), gentle when above (10)
-        const rate = heightDiff > 0 ? 14 : 10;
+        // Softer smoothing: fast when below terrain (10), gentle when above (7)
+        const rate = heightDiff > 0 ? 10 : 7;
         this.position.y = expLerp(this.position.y, targetY, rate, dt);
       }
-      // Soft floor clamp — don't let car sink more than 0.15m below terrain
-      if (this.position.y < targetY - 0.15) {
-        this.position.y = targetY - 0.15;
+      // Soft floor clamp — don't let car sink more than 0.3m below terrain
+      if (this.position.y < targetY - 0.3) {
+        this.position.y = targetY - 0.3;
       }
       if (this.velocity.y < 0) {
-        this.velocity.y *= 0.5; // Dampen downward velocity instead of zeroing
+        this.velocity.y *= 0.3; // Dampen downward velocity instead of zeroing
       }
     }
 

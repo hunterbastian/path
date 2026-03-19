@@ -89,33 +89,33 @@ export const BIOME_ALPINE_MEADOWS: BiomeDefinition = {
   name: 'alpine-meadows',
   displayName: 'Alpine Meadows',
   noise: {
-    amplitude: 14,
-    frequency: 0.006,
-    detailAmplitude: 1.2,
-    detailFrequency: 0.02,
-    baseElevation: 35,
-    elevationFalloff: 0.15,
+    amplitude: 10,
+    frequency: 0.004,
+    detailAmplitude: 0,
+    detailFrequency: 0,
+    baseElevation: 25,
+    elevationFalloff: 0.08,
   },
   palette: {
-    ground: 0x6d9948,  // rich green meadow
-    slope: 0x8b7d5a,   // exposed earth
-    peak: 0x9a9080,    // rocky outcrop
-    accent: 0xd4b840,  // bright wildflower gold
+    ground: 0x4a8a38,  // rich emerald green
+    slope: 0x8a7a50,   // warm golden earth
+    peak: 0x9890a0,    // soft lavender-grey rock
+    accent: 0xe8c040,  // bright wildflower gold
   },
   primarySurface: 'grass',
   secondarySurface: 'dirt',
   grass: {
     density: 1.0,
-    baseColor: 0x5a8a3a,
-    tipColor: 0xd4c050,
-    heightScale: 1.0,
+    baseColor: 0x3a7a28,
+    tipColor: 0xe0c848,
+    heightScale: 1.2,
   },
   fog: {
-    color: 0xa0b898,
-    density: 0.35,
+    color: 0xc8b8d0,
+    density: 0.28,
   },
   skyTint: {
-    goldenHour: 0x663400,  // warm orange boost
+    goldenHour: 0x884400,  // rich golden sunset
     night: 0x0a0a14,       // neutral dark
     noon: 0x000000,        // no tint
   },
@@ -132,18 +132,18 @@ export const BIOME_CANYON: BiomeDefinition = {
   name: 'canyon',
   displayName: 'Canyon',
   noise: {
-    amplitude: 30,
-    frequency: 0.009,
-    detailAmplitude: 3,
-    detailFrequency: 0.03,
+    amplitude: 22,
+    frequency: 0.006,
+    detailAmplitude: 1.5,
+    detailFrequency: 0.015,
     baseElevation: 10,
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0x9e5a3a,  // red clay
-    slope: 0xb06040,    // warm sandstone
-    peak: 0x5e4030,     // dark rock
-    accent: 0xc09060,   // warm sand
+    ground: 0xa06840,  // warm terracotta
+    slope: 0xc08050,    // burnt sienna
+    peak: 0x6a4a38,     // deep brown
+    accent: 0xd09860,   // warm ochre
   },
   primarySurface: 'rock',
   secondarySurface: 'dirt',
@@ -154,11 +154,11 @@ export const BIOME_CANYON: BiomeDefinition = {
     heightScale: 0.4,
   },
   fog: {
-    color: 0x8a6a50,
-    density: 0.7,
+    color: 0xb8a088,
+    density: 0.56,
   },
   skyTint: {
-    goldenHour: 0x944000,  // deep orange
+    goldenHour: 0xa85000,  // deep warm orange
     night: 0x281430,       // purple tint
     noon: 0x000000,
   },
@@ -175,18 +175,18 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
   name: 'salt-flats',
   displayName: 'Salt Flats',
   noise: {
-    amplitude: 2,
-    frequency: 0.005,
-    detailAmplitude: 0.5,
-    detailFrequency: 0.02,
+    amplitude: 1.5,
+    frequency: 0.003,
+    detailAmplitude: 0,
+    detailFrequency: 0,
     baseElevation: 8,
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0xf0ebe0,  // white salt crust
-    slope: 0xd0c8b8,   // cream
-    peak: 0xc0b8a8,    // slightly darker
-    accent: 0xf8f4ec,  // near-white
+    ground: 0xf0ece4,  // soft ivory
+    slope: 0xe0d8d0,   // warm cream
+    peak: 0xd0c8c0,    // pale warmth
+    accent: 0xf8f4f0,  // near-white with warmth
   },
   primarySurface: 'sand',  // fast surface, reuse sand
   secondarySurface: 'sand',
@@ -197,8 +197,8 @@ export const BIOME_SALT_FLATS: BiomeDefinition = {
     heightScale: 0,
   },
   fog: {
-    color: 0xd0c8c0,
-    density: 0.12,
+    color: 0xe0d8d0,
+    density: 0.096,
   },
   skyTint: {
     goldenHour: 0x1a1000,
@@ -218,18 +218,18 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
   name: 'jagged-peaks',
   displayName: 'Jagged Peaks',
   noise: {
-    amplitude: 45,
-    frequency: 0.01,
-    detailAmplitude: 5,
-    detailFrequency: 0.04,
+    amplitude: 35,
+    frequency: 0.007,
+    detailAmplitude: 2.5,
+    detailFrequency: 0.02,
     baseElevation: 15,
     elevationFalloff: 0,
   },
   palette: {
-    ground: 0x556070,  // blue-grey rock
-    slope: 0x454c58,   // dark blue-grey
-    peak: 0xe8e8f4,    // bright snow
-    accent: 0x708090,  // blue-grey
+    ground: 0x6a6a7a,  // soft blue-grey
+    slope: 0x585868,   // lavender-grey
+    peak: 0xf0eef4,    // warm white snow
+    accent: 0x8080a0,  // lavender accent
   },
   primarySurface: 'rock',
   secondarySurface: 'snow',
@@ -240,11 +240,11 @@ export const BIOME_JAGGED_PEAKS: BiomeDefinition = {
     heightScale: 0.3,
   },
   fog: {
-    color: 0x708898,
-    density: 0.9,
+    color: 0x8890a8,
+    density: 0.72,
   },
   skyTint: {
-    goldenHour: 0x401420,  // pink alpenglow
+    goldenHour: 0x502030,  // pink-lavender alpenglow
     night: 0x142040,       // cold blue
     noon: 0x000000,
   },
@@ -261,33 +261,33 @@ export const BIOME_COAST: BiomeDefinition = {
   name: 'coast',
   displayName: 'Coast',
   noise: {
-    amplitude: 10,
-    frequency: 0.006,
-    detailAmplitude: 1,
-    detailFrequency: 0.02,
+    amplitude: 7,
+    frequency: 0.004,
+    detailAmplitude: 0,
+    detailFrequency: 0,
     baseElevation: 5,
     elevationFalloff: 0.05,
   },
   palette: {
-    ground: 0xb0a070,  // sandy ground
-    slope: 0x6a8a5a,   // coastal green
-    peak: 0x808080,    // grey rock
-    accent: 0xc0b890,  // beach sand
+    ground: 0xc0a868,  // warm sand gold
+    slope: 0x5a8a4a,   // turquoise-influenced green
+    peak: 0x909088,    // soft warm grey
+    accent: 0xd8c890,  // beach gold
   },
   primarySurface: 'sand',
   secondarySurface: 'dirt',
   grass: {
-    density: 0.3,
+    density: 0.5,
     baseColor: 0x3a6a30,
     tipColor: 0x6a8a50,
-    heightScale: 0.6,
+    heightScale: 0.8,
   },
   fog: {
-    color: 0x90a0a8,
-    density: 0.5,
+    color: 0xa0b0b8,
+    density: 0.4,
   },
   skyTint: {
-    goldenHour: 0x543000,  // warm amber
+    goldenHour: 0x704000,  // amber warmth
     night: 0x0a0e14,       // grey-blue
     noon: 0x000000,
   },
@@ -309,10 +309,10 @@ export const BIOMES: readonly BiomeDefinition[] = [
 ] as const;
 
 /** Radius of the central Alpine Meadows zone */
-export const MEADOWS_RADIUS = 120;
+export const MEADOWS_RADIUS = 150;
 
 /** Width of transition blend between biomes */
-export const BIOME_TRANSITION = 40;
+export const BIOME_TRANSITION = 50;
 
 export interface BiomeSample {
   /** Primary biome at this location */

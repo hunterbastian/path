@@ -353,7 +353,7 @@ export class GrassField {
     const tipColorA = new THREE.Color();
     const tipColorB = new THREE.Color();
 
-    for (let attempt = 0; attempt < 7000 && patches.length < 480; attempt += 1) {
+    for (let attempt = 0; attempt < 12000 && patches.length < 800; attempt += 1) {
       const x = random.range(-halfSize, halfSize);
       const z = random.range(-halfSize, halfSize);
       if (!this.#terrain.isWithinBounds(x, z)) continue;
