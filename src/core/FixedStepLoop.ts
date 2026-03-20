@@ -3,7 +3,9 @@ interface FixedStepLoopOptions {
   maxFrameSeconds?: number;
   maxSubSteps?: number;
   onStep: (dt: number) => void;
-  onRender: (frameSeconds: number) => void;
+  /** Called once per animation frame. alpha is the fractional position (0–1)
+   *  within the current physics tick — use it to interpolate rendered state. */
+  onRender: (frameSeconds: number, alpha: number) => void;
 }
 
 export class FixedStepLoop {
@@ -11,7 +13,7 @@ export class FixedStepLoop {
   #maxFrameSeconds: number;
   #maxSubSteps: number;
   #onStep: (dt: number) => void;
-  #onRender: (frameSeconds: number) => void;
+  #onRender: (frameSeconds: number, alpha: number) => void;
   #accumulator = 0;
   #lastFrameTime = 0;
   #frameHandle = 0;
@@ -52,7 +54,7 @@ export class FixedStepLoop {
     for (let index = 0; index < steps; index += 1) {
       this.#onStep(this.#stepSeconds);
     }
-    this.#onRender(Math.max(totalSeconds, this.#stepSeconds));
+    this.#onRender(Math.max(totalSeconds, this.#stepSeconds), 1);
     this.#lastFrameTime = performance.now();
   }
 
@@ -80,7 +82,8 @@ export class FixedStepLoop {
       this.#accumulator %= this.#stepSeconds;
     }
 
-    this.#onRender(frameSeconds);
+    const alpha = this.#accumulator / this.#stepSeconds;
+    this.#onRender(frameSeconds, alpha);
     this.#frameHandle = window.requestAnimationFrame(this.#tick);
   };
 }

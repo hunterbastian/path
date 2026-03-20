@@ -7,9 +7,81 @@ import {
 
 const MAX_WATER_DEBUG_POOLS = 12;
 
+const FULLSCREEN_VERT = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+// Pass 1: Bright-pixel extract + horizontal Gaussian blur (writes to half-res)
+const BLOOM_EXTRACT_SHADER = {
+  uniforms: {
+    tScene: { value: null as THREE.Texture | null },
+    uSceneRes: { value: new THREE.Vector2(1, 1) },
+    uBloomThreshold: { value: 0.38 },
+  },
+  vertexShader: FULLSCREEN_VERT,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tScene;
+    uniform vec2 uSceneRes;
+    uniform float uBloomThreshold;
+    varying vec2 vUv;
+
+    vec3 thresholdSample(vec2 uv) {
+      vec3 col = texture2D(tScene, uv).rgb;
+      float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      return col * smoothstep(uBloomThreshold - 0.05, uBloomThreshold + 0.15, luma);
+    }
+
+    void main() {
+      vec2 texel = 1.0 / uSceneRes;
+      // 7-tap horizontal Gaussian, stride 2 full-res pixels for wide soft glow
+      vec3 c  = thresholdSample(vUv)                         * 0.2270;
+      c += thresholdSample(vUv + vec2(texel.x * 2.0, 0.0))  * 0.1945;
+      c += thresholdSample(vUv - vec2(texel.x * 2.0, 0.0))  * 0.1945;
+      c += thresholdSample(vUv + vec2(texel.x * 4.0, 0.0))  * 0.1216;
+      c += thresholdSample(vUv - vec2(texel.x * 4.0, 0.0))  * 0.1216;
+      c += thresholdSample(vUv + vec2(texel.x * 6.0, 0.0))  * 0.0541;
+      c += thresholdSample(vUv - vec2(texel.x * 6.0, 0.0))  * 0.0541;
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `,
+};
+
+// Pass 2: Vertical Gaussian blur (half-res → half-res)
+const BLOOM_BLUR_SHADER = {
+  uniforms: {
+    tBloomH: { value: null as THREE.Texture | null },
+    uBloomRes: { value: new THREE.Vector2(1, 1) },
+  },
+  vertexShader: FULLSCREEN_VERT,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tBloomH;
+    uniform vec2 uBloomRes;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 texel = 1.0 / uBloomRes;
+      // 7-tap vertical Gaussian
+      vec3 c  = texture2D(tBloomH, vUv).rgb                         * 0.2270;
+      c += texture2D(tBloomH, vUv + vec2(0.0, texel.y * 1.0)).rgb  * 0.1945;
+      c += texture2D(tBloomH, vUv - vec2(0.0, texel.y * 1.0)).rgb  * 0.1945;
+      c += texture2D(tBloomH, vUv + vec2(0.0, texel.y * 2.0)).rgb  * 0.1216;
+      c += texture2D(tBloomH, vUv - vec2(0.0, texel.y * 2.0)).rgb  * 0.1216;
+      c += texture2D(tBloomH, vUv + vec2(0.0, texel.y * 3.0)).rgb  * 0.0541;
+      c += texture2D(tBloomH, vUv - vec2(0.0, texel.y * 3.0)).rgb  * 0.0541;
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `,
+};
+
+// Pass 3: Composite (full-res) — scene + bloom + tone map + effects
 const POST_SHADER = {
   uniforms: {
     tScene: { value: null as THREE.Texture | null },
+    tBloom: { value: null as THREE.Texture | null },
     tDepth: { value: null as THREE.DepthTexture | null },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uTime: { value: 0 },
@@ -26,21 +98,14 @@ const POST_SHADER = {
     },
     uDamageFlash: { value: 0 },
     uEffectScale: { value: 1 },
-    uBloomThreshold: { value: 0.38 },
     uSpeedBlur: { value: 0 },
   },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-
-    void main() {
-      vUv = uv;
-      gl_Position = vec4(position.xy, 0.0, 1.0);
-    }
-  `,
+  vertexShader: FULLSCREEN_VERT,
   fragmentShader: /* glsl */ `
     #define MAX_WATER_DEBUG_POOLS ${MAX_WATER_DEBUG_POOLS}
 
     uniform sampler2D tScene;
+    uniform sampler2D tBloom;
     uniform sampler2D tDepth;
     uniform vec2 uResolution;
     uniform float uTime;
@@ -55,7 +120,6 @@ const POST_SHADER = {
     uniform vec4 uWaterPools[MAX_WATER_DEBUG_POOLS];
     uniform float uDamageFlash;
     uniform float uEffectScale;
-    uniform float uBloomThreshold;
     uniform float uSpeedBlur;
 
     varying vec2 vUv;
@@ -118,26 +182,6 @@ const POST_SHADER = {
       return vec2(mask, depth);
     }
 
-    // Soft bloom — 9-tap weighted cross (wider glow, still cheap)
-    vec3 sampleBloom(sampler2D tex, vec2 uv, vec2 resolution) {
-      vec2 texel = 3.0 / resolution;
-      vec3 center = texture2D(tex, uv).rgb;
-      float centerLuma = dot(center, vec3(0.2126, 0.7152, 0.0722));
-      if (centerLuma < uBloomThreshold) return vec3(0.0);
-      vec3 acc = center * 0.3;
-      acc += texture2D(tex, uv + vec2(texel.x, 0.0)).rgb * 0.2;
-      acc += texture2D(tex, uv - vec2(texel.x, 0.0)).rgb * 0.2;
-      acc += texture2D(tex, uv + vec2(0.0, texel.y)).rgb * 0.2;
-      acc += texture2D(tex, uv - vec2(0.0, texel.y)).rgb * 0.2;
-      // Diagonal taps for rounder glow
-      vec2 diag = texel * 0.7;
-      acc += texture2D(tex, uv + diag).rgb * 0.1;
-      acc += texture2D(tex, uv - diag).rgb * 0.1;
-      acc += texture2D(tex, uv + vec2(diag.x, -diag.y)).rgb * 0.1;
-      acc += texture2D(tex, uv + vec2(-diag.x, diag.y)).rgb * 0.1;
-      return acc * smoothstep(uBloomThreshold, uBloomThreshold + 0.42, centerLuma);
-    }
-
     // ACES filmic tone mapping
     vec3 acesToneMap(vec3 x) {
       float a = 2.51;
@@ -185,10 +229,10 @@ const POST_SHADER = {
         preGrade = blurAcc * 0.25;
       }
 
-      // 1. Bloom — HDR space, soft 9-tap
+      // 1. Bloom — pre-blurred half-res texture (separable Gaussian, 2-pass)
       if (uEffectScale > 0.3) {
-        vec3 bloom = sampleBloom(tScene, sampleUv, uResolution);
-        preGrade += bloom * 0.22 * uEffectScale;
+        vec3 bloom = texture2D(tBloom, sampleUv).rgb;
+        preGrade += bloom * 0.35 * uEffectScale;
       }
 
       // 2–3. ACES tone map + warm grade + vignette
@@ -252,10 +296,17 @@ export class GritPostProcess {
   readonly #scene: THREE.Scene;
   readonly #camera: THREE.PerspectiveCamera;
   readonly #sceneTarget: THREE.WebGLRenderTarget;
+  readonly #bloomTargetA: THREE.WebGLRenderTarget;
+  readonly #bloomTargetB: THREE.WebGLRenderTarget;
   readonly #quadScene: THREE.Scene;
+  readonly #bloomExtractScene: THREE.Scene;
+  readonly #bloomBlurScene: THREE.Scene;
   readonly #quadCamera: THREE.OrthographicCamera;
   readonly #quadMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  readonly #bloomExtractMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  readonly #bloomBlurMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   #debugView: RenderDebugViewId = 'final';
+  #bloomThreshold = 0.38;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -266,13 +317,54 @@ export class GritPostProcess {
     this.#scene = scene;
     this.#camera = camera;
 
+    // Full-res scene target with depth
     this.#sceneTarget = new THREE.WebGLRenderTarget(1, 1, {
       depthBuffer: true,
     });
     this.#sceneTarget.depthTexture = new THREE.DepthTexture(1, 1);
     this.#sceneTarget.depthTexture.type = THREE.UnsignedIntType;
 
-    const material = new THREE.ShaderMaterial({
+    // Half-res bloom ping-pong targets (no depth needed)
+    const bloomOpts = {
+      depthBuffer: false,
+      generateMipmaps: false,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+    };
+    this.#bloomTargetA = new THREE.WebGLRenderTarget(1, 1, bloomOpts);
+    this.#bloomTargetB = new THREE.WebGLRenderTarget(1, 1, bloomOpts);
+
+    // Shared ortho camera for all fullscreen passes
+    this.#quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    // Bloom extract mesh (bright extract + horizontal Gaussian)
+    const extractMaterial = new THREE.ShaderMaterial({
+      vertexShader: BLOOM_EXTRACT_SHADER.vertexShader,
+      fragmentShader: BLOOM_EXTRACT_SHADER.fragmentShader,
+      uniforms: THREE.UniformsUtils.clone(BLOOM_EXTRACT_SHADER.uniforms),
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+    });
+    this.#bloomExtractScene = new THREE.Scene();
+    this.#bloomExtractMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), extractMaterial);
+    this.#bloomExtractScene.add(this.#bloomExtractMesh);
+
+    // Bloom blur mesh (vertical Gaussian)
+    const blurMaterial = new THREE.ShaderMaterial({
+      vertexShader: BLOOM_BLUR_SHADER.vertexShader,
+      fragmentShader: BLOOM_BLUR_SHADER.fragmentShader,
+      uniforms: THREE.UniformsUtils.clone(BLOOM_BLUR_SHADER.uniforms),
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+    });
+    this.#bloomBlurScene = new THREE.Scene();
+    this.#bloomBlurMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurMaterial);
+    this.#bloomBlurScene.add(this.#bloomBlurMesh);
+
+    // Composite mesh
+    const compositeMaterial = new THREE.ShaderMaterial({
       vertexShader: POST_SHADER.vertexShader,
       fragmentShader: POST_SHADER.fragmentShader,
       uniforms: THREE.UniformsUtils.clone(POST_SHADER.uniforms),
@@ -280,18 +372,32 @@ export class GritPostProcess {
       depthTest: false,
       toneMapped: false,
     });
-    const uniforms = material.uniforms as typeof POST_SHADER.uniforms;
+    const uniforms = compositeMaterial.uniforms as typeof POST_SHADER.uniforms;
     uniforms.tScene.value = this.#sceneTarget.texture;
     uniforms.tDepth.value = this.#sceneTarget.depthTexture;
+    uniforms.tBloom.value = this.#bloomTargetB.texture;
 
     this.#quadScene = new THREE.Scene();
-    this.#quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    this.#quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+    this.#quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial);
     this.#quadScene.add(this.#quadMesh);
   }
 
   setSize(width: number, height: number): void {
     this.#sceneTarget.setSize(width, height);
+
+    const hw = Math.max(1, Math.floor(width / 2));
+    const hh = Math.max(1, Math.floor(height / 2));
+    this.#bloomTargetA.setSize(hw, hh);
+    this.#bloomTargetB.setSize(hw, hh);
+
+    const extractUniforms = this.#bloomExtractMesh.material
+      .uniforms as typeof BLOOM_EXTRACT_SHADER.uniforms;
+    extractUniforms.uSceneRes.value.set(width, height);
+
+    const blurUniforms = this.#bloomBlurMesh.material
+      .uniforms as typeof BLOOM_BLUR_SHADER.uniforms;
+    blurUniforms.uBloomRes.value.set(hw, hh);
+
     const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
     uniforms.uResolution.value.set(width, height);
     uniforms.uPixelSize.value = 1;
@@ -349,37 +455,62 @@ export class GritPostProcess {
 
   /** Scale bloom threshold with scene brightness (sunIntensity 0–2.4). */
   setBloomThreshold(sunIntensity: number): void {
-    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
     // Bright midday (2.4) → threshold 0.5 (suppress over-bloom)
     // Dark night (0.06) → threshold 0.2 (let headlights glow)
     const t = Math.min(sunIntensity / 2.4, 1);
-    uniforms.uBloomThreshold.value = 0.2 + t * 0.3;
+    this.#bloomThreshold = 0.2 + t * 0.3;
   }
 
-  render(): void {
-    const uniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+  render(frameSeconds: number): void {
+    const compositeUniforms = this.#quadMesh.material.uniforms as typeof POST_SHADER.uniforms;
+    const extractUniforms = this.#bloomExtractMesh.material
+      .uniforms as typeof BLOOM_EXTRACT_SHADER.uniforms;
+    const blurUniforms = this.#bloomBlurMesh.material
+      .uniforms as typeof BLOOM_BLUR_SHADER.uniforms;
     const fog = this.#scene.fog;
 
-    uniforms.uTime.value += 1 / 60;
-    uniforms.uNearFar.value.set(this.#camera.near, this.#camera.far);
-    uniforms.uProjectionInverse.value.copy(this.#camera.projectionMatrixInverse);
-    uniforms.uCameraMatrixWorld.value.copy(this.#camera.matrixWorld);
+    compositeUniforms.uTime.value += frameSeconds;
+    compositeUniforms.uNearFar.value.set(this.#camera.near, this.#camera.far);
+    compositeUniforms.uProjectionInverse.value.copy(this.#camera.projectionMatrixInverse);
+    compositeUniforms.uCameraMatrixWorld.value.copy(this.#camera.matrixWorld);
 
     if (fog instanceof THREE.Fog) {
-      uniforms.uFogNearFar.value.set(fog.near, fog.far);
+      compositeUniforms.uFogNearFar.value.set(fog.near, fog.far);
     } else {
-      uniforms.uFogNearFar.value.set(this.#camera.near, this.#camera.far);
+      compositeUniforms.uFogNearFar.value.set(this.#camera.near, this.#camera.far);
     }
 
+    // Pass 1: Render 3D scene → full-res sceneTarget
     this.#renderer.setRenderTarget(this.#sceneTarget);
     this.#renderer.clear();
     this.#renderer.render(this.#scene, this.#camera);
+
+    // Pass 2: Extract bright pixels + horizontal Gaussian → half-res bloomTargetA
+    extractUniforms.tScene.value = this.#sceneTarget.texture;
+    extractUniforms.uBloomThreshold.value = this.#bloomThreshold;
+    this.#renderer.setRenderTarget(this.#bloomTargetA);
+    this.#renderer.clear();
+    this.#renderer.render(this.#bloomExtractScene, this.#quadCamera);
+
+    // Pass 3: Vertical Gaussian → half-res bloomTargetB
+    blurUniforms.tBloomH.value = this.#bloomTargetA.texture;
+    this.#renderer.setRenderTarget(this.#bloomTargetB);
+    this.#renderer.clear();
+    this.#renderer.render(this.#bloomBlurScene, this.#quadCamera);
+
+    // Pass 4: Composite (scene + bloom + effects) → screen
     this.#renderer.setRenderTarget(null);
     this.#renderer.render(this.#quadScene, this.#quadCamera);
   }
 
   dispose(): void {
     this.#sceneTarget.dispose();
+    this.#bloomTargetA.dispose();
+    this.#bloomTargetB.dispose();
+    this.#bloomExtractMesh.geometry.dispose();
+    this.#bloomExtractMesh.material.dispose();
+    this.#bloomBlurMesh.geometry.dispose();
+    this.#bloomBlurMesh.material.dispose();
     this.#quadMesh.geometry.dispose();
     this.#quadMesh.material.dispose();
   }

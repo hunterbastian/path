@@ -87,7 +87,7 @@ export class Engine {
       this.renderer.render(this.scene, this.camera);
     } else {
       this.postProcess.setEffectScale(scale);
-      this.postProcess.render();
+      this.postProcess.render(frameSeconds);
     }
   }
 
@@ -183,7 +183,7 @@ export class Engine {
       return;
     }
 
-    if (this.#fastFrameCount >= 48 && this.#currentPixelRatio < this.#maxPixelRatio) {
+    if (this.#fastFrameCount >= 24 && this.#currentPixelRatio < this.#maxPixelRatio) {
       this.#currentPixelRatio = Math.min(
         this.#maxPixelRatio,
         this.#currentPixelRatio + 0.04,
