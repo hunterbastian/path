@@ -4,8 +4,6 @@ extends RigidBody3D
 ## Raycast vehicle with custom arcade physics.
 ## All forces applied in _integrate_forces().
 
-const VehicleInputScript := preload("res://scripts/vehicle/vehicle_input.gd")
-
 # --- Suspension ---
 @export var spring_strength: float = 55.0
 @export var spring_damping: float = 5.0
@@ -64,6 +62,6 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			var car_forward := -global_transform.basis.z
 			var speed := linear_velocity.length()
 			var speed_factor := 1.0 - clampf(speed / max_speed, 0.0, 1.0)
-			var drive: float = input.get("throttle") * max_engine_force * speed_factor
-			var brake_force: float = input.get("brake") * max_engine_force * 0.6
+			var drive: float = float(input.throttle) * max_engine_force * speed_factor
+			var brake_force: float = float(input.brake) * max_engine_force * 0.6
 			state.apply_force(car_forward * (drive - brake_force), wheel_local)
