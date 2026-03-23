@@ -23,8 +23,19 @@ extends RigidBody3D
 @export var yaw_damping: float = 2.5
 @export var countersteer_grip_bonus: float = 1.3
 
+# --- Boost ---
+@export var boost_force: float = 35.0
+@export var boost_max_speed: float = 60.0  # m/s — higher cap when boosting
+
+# --- Downforce ---
+@export var downforce_coefficient: float = 0.02  # scales with speed squared
+
+# --- Weight transfer ---
+@export var roll_intensity: float = 0.03  # visual lean in turns
+
 # --- References ---
 @onready var input: Node = $VehicleInput
+@onready var body_mesh: MeshInstance3D = $MeshInstance3D
 @onready var wheels: Array[RayCast3D] = [
 	$WheelFL, $WheelFR, $WheelRL, $WheelRR
 ]
@@ -32,6 +43,14 @@ extends RigidBody3D
 # Wheel indices
 const FRONT := [0, 1]
 const REAR := [2, 3]
+
+func _process(delta: float) -> void:
+	if not body_mesh:
+		return
+	# Visual roll from lateral velocity
+	var lateral := linear_velocity.dot(global_transform.basis.x)
+	var target_roll := -lateral * roll_intensity
+	body_mesh.rotation.z = lerpf(body_mesh.rotation.z, target_roll, 10.0 * delta)
 
 func _ready() -> void:
 	# Ensure raycasts are enabled and pointing down in local space
@@ -120,3 +139,14 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	# --- Yaw damping (prevents infinite spinning) ---
 	var yaw_damp := -state.angular_velocity.y * yaw_damping * mass
 	state.apply_torque(Vector3.UP * yaw_damp)
+
+	# --- Boost ---
+	if input and bool(input.boost):
+		var speed := linear_velocity.length()
+		if speed < boost_max_speed:
+			var boost_dir := -global_transform.basis.z
+			state.apply_central_force(boost_dir * boost_force * mass)
+
+	# --- Aerodynamic downforce (keeps car planted at high speed) ---
+	var speed_sq := linear_velocity.length_squared()
+	state.apply_central_force(Vector3.DOWN * downforce_coefficient * speed_sq * mass)
