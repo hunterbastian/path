@@ -1,0 +1,49 @@
+[gd_scene load_steps=7 format=3 uid="uid://d2kxw9p5r3snx"]
+
+[ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
+[ext_resource type="Script" path="res://scripts/camera/third_person_camera.gd" id="2_follow_camera"]
+[ext_resource type="Script" path="res://scripts/world/terrain.gd" id="3_terrain"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.35, 0.55, 0.82, 1.0)
+sky_horizon_color = Color(0.72, 0.75, 0.82, 1.0)
+ground_bottom_color = Color(0.25, 0.22, 0.2, 1.0)
+ground_horizon_color = Color(0.72, 0.75, 0.82, 1.0)
+
+[sub_resource type="Sky" id="Sky_world"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_world")
+ambient_light_source = 2
+ambient_light_color = Color(0.85, 0.8, 0.7, 1.0)
+ambient_light_energy = 0.5
+fog_enabled = true
+fog_light_color = Color(0.8, 0.75, 0.65, 1.0)
+fog_density = 0.002
+fog_sky_affect = 0.5
+
+[node name="GameWorld" type="Node3D"]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.28868, 0.408248, 0, 0.816497, 0.57735, -0.5, -0.5, 0.707107, 0, 50, 0)
+light_color = Color(1.0, 0.92, 0.78, 1.0)
+light_energy = 1.2
+shadow_enabled = true
+directional_shadow_max_distance = 300.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("3_terrain")
+
+[node name="Vehicle" parent="." instance=ExtResource("1_vehicle")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 30, 0)
+
+[node name="FollowCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 35, 10)
+script = ExtResource("2_follow_camera")
+current = true
+target_path = NodePath("../Vehicle")
