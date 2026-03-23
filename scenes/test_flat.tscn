@@ -1,7 +1,7 @@
 [gd_scene load_steps=9 format=3 uid="uid://c7mxv8p4q2rnw"]
 
 [ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
-[ext_resource type="Script" path="res://scripts/camera/basic_follow_camera.gd" id="2_follow_camera"]
+[ext_resource type="Script" path="res://scripts/camera/third_person_camera.gd" id="2_follow_camera"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
