@@ -1,6 +1,7 @@
-[gd_scene load_steps=8 format=3 uid="uid://c7mxv8p4q2rnw"]
+[gd_scene load_steps=9 format=3 uid="uid://c7mxv8p4q2rnw"]
 
 [ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
+[ext_resource type="Script" path="res://scripts/camera/basic_follow_camera.gd" id="2_follow_camera"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -42,5 +43,8 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ground")
 [node name="Vehicle" parent="." instance=ExtResource("1_vehicle")]
 position = Vector3(0.0, 2.0, 0.0)
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.894427, -0.447214, 0, 0.447214, 0.894427, 0, 5, 10)
+[node name="FollowCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 10)
+script = ExtResource("2_follow_camera")
+current = true
+target_path = NodePath("../Vehicle")
