@@ -1,0 +1,48 @@
+[gd_scene load_steps=6 format=3 uid="uid://b3kxv5p2q8rnw"]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_controller.gd" id="1_ctrl"]
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_input.gd" id="2_input"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(2.0, 0.5, 4.0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(2.0, 0.5, 4.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.2, 0.2, 0.8, 1.0)
+
+[node name="Vehicle" type="RigidBody3D"]
+mass = 1200.0
+gravity_scale = 0.0
+script = ExtResource("1_ctrl")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_body")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_body")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="VehicleInput" type="Node" parent="."]
+script = ExtResource("2_input")
+
+[node name="WheelFL" type="RayCast3D" parent="."]
+position = Vector3(-0.8, -0.1, 1.4)
+enabled = true
+target_position = Vector3(0.0, -0.6, 0.0)
+
+[node name="WheelFR" type="RayCast3D" parent="."]
+position = Vector3(0.8, -0.1, 1.4)
+enabled = true
+target_position = Vector3(0.0, -0.6, 0.0)
+
+[node name="WheelRL" type="RayCast3D" parent="."]
+position = Vector3(-0.8, -0.1, -1.4)
+enabled = true
+target_position = Vector3(0.0, -0.6, 0.0)
+
+[node name="WheelRR" type="RayCast3D" parent="."]
+position = Vector3(0.8, -0.1, -1.4)
+enabled = true
+target_position = Vector3(0.0, -0.6, 0.0)
