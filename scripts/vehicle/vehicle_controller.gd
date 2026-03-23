@@ -61,6 +61,14 @@ func _physics_process(delta: float) -> void:
 		var forward_speed := -linear_velocity.dot(global_transform.basis.z)
 		drift_score.update_drift(lateral_speed, forward_speed, bool(input.handbrake), delta)
 
+	# Surface detection from terrain
+	var terrain_node := get_node_or_null("/root/GameWorld/Terrain")
+	if terrain_node and terrain_node.has_method("get_surface_at"):
+		var pos := global_position
+		var surface: int = terrain_node.get_surface_at(pos.x, pos.z)
+		if surface != current_surface:
+			set_surface(surface)
+
 func _process(delta: float) -> void:
 	if not body_mesh:
 		return
