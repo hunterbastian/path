@@ -14,6 +14,15 @@ extends RigidBody3D
 @export var max_speed: float = 45.0  # m/s (~162 km/h)
 @export var custom_gravity: float = 28.0
 
+# --- Steering ---
+@export var max_steer_angle: float = 0.45  # radians (~26 degrees)
+
+# --- Grip ---
+@export var lateral_grip: float = 8.0
+@export var handbrake_grip_factor: float = 0.15  # grip multiplier when drifting
+@export var yaw_damping: float = 2.5
+@export var countersteer_grip_bonus: float = 1.3
+
 # --- References ---
 @onready var input: Node = $VehicleInput
 @onready var wheels: Array[RayCast3D] = [
@@ -65,3 +74,49 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			var drive: float = float(input.throttle) * max_engine_force * speed_factor
 			var brake_force: float = float(input.brake) * max_engine_force * 0.6
 			state.apply_force(car_forward * (drive - brake_force), wheel_local)
+
+		# --- Wheel orientation ---
+		var wheel_forward := -global_transform.basis.z
+		var wheel_right := global_transform.basis.x
+
+		# Steer front wheels
+		if i in FRONT and input:
+			var steer_angle: float = float(input.steer) * max_steer_angle
+			wheel_forward = wheel_forward.rotated(Vector3.UP, steer_angle)
+			wheel_right = wheel_right.rotated(Vector3.UP, steer_angle)
+
+		# Project velocity onto ground plane
+		var ground_vel := vel_at_wheel - contact_normal * vel_at_wheel.dot(contact_normal)
+		var forward_vel := ground_vel.dot(wheel_forward)
+		var lateral_vel := ground_vel.dot(wheel_right)
+
+		# --- Slip angle (Pacejka-like curve) ---
+		# Grip peaks at 0.3 slip angle, drops after 0.5
+		var slip_angle := 0.0
+		if absf(forward_vel) > 0.5:
+			slip_angle = atan2(absf(lateral_vel), absf(forward_vel))
+		var peak_angle := 0.3
+		var drop_angle := 0.5
+		var slip_grip: float
+		if slip_angle < peak_angle:
+			slip_grip = slip_angle / peak_angle  # ramp up to peak
+		elif slip_angle < drop_angle:
+			slip_grip = 1.0  # peak grip zone
+		else:
+			slip_grip = maxf(0.3, 1.0 - (slip_angle - drop_angle) * 1.5)  # falloff
+
+		# --- Lateral grip force ---
+		var grip := lateral_grip * slip_grip
+		if input and bool(input.handbrake) and i in REAR:
+			grip *= handbrake_grip_factor
+
+		# Counter-steer bonus: if steering into the slide, boost grip slightly
+		if input and signf(float(input.steer)) != signf(lateral_vel) and absf(float(input.steer)) > 0.1:
+			grip *= countersteer_grip_bonus
+
+		var lateral_force := -lateral_vel * grip * mass
+		state.apply_force(wheel_right * lateral_force, wheel_local)
+
+	# --- Yaw damping (prevents infinite spinning) ---
+	var yaw_damp := -state.angular_velocity.y * yaw_damping * mass
+	state.apply_torque(Vector3.UP * yaw_damp)
