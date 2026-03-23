@@ -33,6 +33,14 @@ extends RigidBody3D
 # --- Weight transfer ---
 @export var roll_intensity: float = 0.03  # visual lean in turns
 
+# --- Surface ---
+var current_surface: int = SurfaceConfig.SurfaceType.DIRT
+var surface_config: Dictionary = SurfaceConfig.get_default()
+
+func set_surface(surface: int) -> void:
+	current_surface = surface
+	surface_config = SurfaceConfig.get_config(surface)
+
 # --- References ---
 @onready var input: Node = $VehicleInput
 @onready var body_mesh: MeshInstance3D = $MeshInstance3D
@@ -89,8 +97,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		if i in REAR and input:
 			var car_forward := -global_transform.basis.z
 			var speed := linear_velocity.length()
-			var speed_factor := 1.0 - clampf(speed / max_speed, 0.0, 1.0)
-			var drive: float = float(input.throttle) * max_engine_force * speed_factor
+			var speed_factor := 1.0 - clampf(speed / (max_speed * surface_config["max_speed"]), 0.0, 1.0)
+			var drive: float = float(input.throttle) * max_engine_force * surface_config["accel"] * speed_factor
 			var brake_force: float = float(input.brake) * max_engine_force * 0.6
 			state.apply_force(car_forward * (drive - brake_force), wheel_local)
 
@@ -100,7 +108,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 		# Steer front wheels
 		if i in FRONT and input:
-			var steer_angle: float = float(input.steer) * max_steer_angle
+			var steer_angle: float = float(input.steer) * max_steer_angle * surface_config["steer_response"]
 			wheel_forward = wheel_forward.rotated(Vector3.UP, steer_angle)
 			wheel_right = wheel_right.rotated(Vector3.UP, steer_angle)
 
@@ -125,19 +133,19 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			slip_grip = maxf(0.3, 1.0 - (slip_angle - drop_angle) * 1.5)  # falloff
 
 		# --- Lateral grip force ---
-		var grip := lateral_grip * slip_grip
+		var grip := lateral_grip * slip_grip * surface_config["grip"]
 		if input and bool(input.handbrake) and i in REAR:
 			grip *= handbrake_grip_factor
 
 		# Counter-steer bonus: if steering into the slide, boost grip slightly
 		if input and signf(float(input.steer)) != signf(lateral_vel) and absf(float(input.steer)) > 0.1:
-			grip *= countersteer_grip_bonus
+			grip *= countersteer_grip_bonus * surface_config["counter_steer"]
 
 		var lateral_force := -lateral_vel * grip * mass
 		state.apply_force(wheel_right * lateral_force, wheel_local)
 
 	# --- Yaw damping (prevents infinite spinning) ---
-	var yaw_damp := -state.angular_velocity.y * yaw_damping * mass
+	var yaw_damp := -state.angular_velocity.y * yaw_damping * surface_config["yaw_damp"] * mass
 	state.apply_torque(Vector3.UP * yaw_damp)
 
 	# --- Boost ---
