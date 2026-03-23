@@ -45,6 +45,7 @@ func set_surface(surface: int) -> void:
 
 # --- References ---
 @onready var input: Node = $VehicleInput
+@onready var drift_score: Node = $DriftScore
 @onready var body_mesh: MeshInstance3D = $MeshInstance3D
 @onready var wheels: Array[RayCast3D] = [
 	$WheelFL, $WheelFR, $WheelRL, $WheelRR
@@ -53,6 +54,12 @@ func set_surface(surface: int) -> void:
 # Wheel indices
 const FRONT := [0, 1]
 const REAR := [2, 3]
+
+func _physics_process(delta: float) -> void:
+	if drift_score and input:
+		var lateral_speed := linear_velocity.dot(global_transform.basis.x)
+		var forward_speed := -linear_velocity.dot(global_transform.basis.z)
+		drift_score.update_drift(lateral_speed, forward_speed, bool(input.handbrake), delta)
 
 func _process(delta: float) -> void:
 	if not body_mesh:

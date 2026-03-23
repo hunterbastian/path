@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3 uid="uid://b3kxv5p2q8rnw"]
+[gd_scene load_steps=7 format=3 uid="uid://b3kxv5p2q8rnw"]
 
 [ext_resource type="Script" path="res://scripts/vehicle/vehicle_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://scripts/vehicle/vehicle_input.gd" id="2_input"]
+[ext_resource type="Script" path="res://scripts/gameplay/drift_score.gd" id="3_drift"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_body"]
 size = Vector3(2.0, 0.5, 4.0)
@@ -26,6 +27,9 @@ surface_material_override/0 = SubResource("StandardMaterial3D_body")
 
 [node name="VehicleInput" type="Node" parent="."]
 script = ExtResource("2_input")
+
+[node name="DriftScore" type="Node" parent="."]
+script = ExtResource("3_drift")
 
 [node name="WheelFL" type="RayCast3D" parent="."]
 position = Vector3(-0.8, -0.1, 1.4)
