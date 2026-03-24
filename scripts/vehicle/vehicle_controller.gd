@@ -86,9 +86,31 @@ func _physics_process(delta: float) -> void:
 	if global_position.y < -20.0:
 		respawn()
 
+var _freecam: Node
+var _game_camera: Camera3D
+var _god_mode: bool = false
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		respawn()
+	if event is InputEventKey and event.pressed and event.keycode == KEY_G:
+		_toggle_god_mode()
+
+func _toggle_god_mode() -> void:
+	_god_mode = not _god_mode
+	if _god_mode:
+		# Find or create freecam
+		if not _game_camera:
+			_game_camera = get_viewport().get_camera_3d()
+		if not _freecam:
+			var FreecamScript := load("res://scripts/camera/freecam.gd")
+			_freecam = Camera3D.new()
+			_freecam.set_script(FreecamScript)
+			get_tree().current_scene.add_child(_freecam)
+		_freecam.activate(self, _game_camera)
+	else:
+		if _freecam:
+			_freecam.deactivate()
 
 func respawn() -> void:
 	_resolve_terrain()
