@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://d2kxw9p5r3snx"]
+[gd_scene load_steps=13 format=3 uid="uid://d2kxw9p5r3snx"]
 
 [ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
 [ext_resource type="Script" path="res://scripts/camera/third_person_camera.gd" id="2_follow_camera"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/world/cloud_system.gd" id="6_cloud_system"]
 [ext_resource type="Script" path="res://scripts/world/weather_system.gd" id="7_weather_system"]
 [ext_resource type="Script" path="res://scripts/world/post_process.gd" id="8_post_process"]
+[ext_resource type="Script" path="res://scripts/world/ocean.gd" id="9_ocean"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.35, 0.55, 0.82, 1.0)
@@ -46,6 +47,9 @@ environment = SubResource("Environment_world")
 
 [node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("3_terrain")
+
+[node name="Ocean" type="Node3D" parent="."]
+script = ExtResource("9_ocean")
 
 [node name="Vehicle" parent="." instance=ExtResource("1_vehicle")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 30, 0)
