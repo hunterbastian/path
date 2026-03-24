@@ -4,25 +4,10 @@ extends CanvasLayer
 ## Full-screen post-processing: vignette, grain, speed desaturation.
 ## Also configures WorldEnvironment bloom.
 
-var _overlay: ColorRect
-var _material: ShaderMaterial
-
 func _ready() -> void:
-	layer = 10  # render on top of everything
-
-	_material = ShaderMaterial.new()
-	var shader := load("res://assets/shaders/post_process.gdshader") as Shader
-	if shader:
-		_material.shader = shader
-		_material.set_shader_parameter("vignette_intensity", 0.09)
-		_material.set_shader_parameter("grain_intensity", 0.03)
-		_material.set_shader_parameter("desaturation", 0.0)
-
 	# Post-process overlay disabled — CanvasLayer can't read screen texture.
-	# TODO: Re-implement with BackBufferCopy or SubViewport approach.
-	# Bloom still works via WorldEnvironment glow settings below.
-
-	# Configure bloom on WorldEnvironment
+	# TODO: Re-implement vignette/grain with BackBufferCopy or SubViewport.
+	# Bloom works via WorldEnvironment glow settings below.
 	_setup_bloom()
 
 func _setup_bloom() -> void:
