@@ -48,8 +48,8 @@ func _physics_process(delta: float) -> void:
 	# Speed-responsive distance and height
 	var target_distance := base_distance + speed_distance_add * speed_ratio
 	var target_height := base_height + speed_height_add * speed_ratio
-	_current_distance = lerpf(_current_distance, target_distance, 3.0 * delta)
-	_current_height = lerpf(_current_height, target_height, 3.0 * delta)
+	_current_distance = lerpf(_current_distance, target_distance, follow_smooth * delta)
+	_current_height = lerpf(_current_height, target_height, follow_smooth * delta)
 
 	# Position behind vehicle
 	var target_pos := _target.global_position
