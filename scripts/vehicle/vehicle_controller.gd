@@ -46,7 +46,8 @@ func set_surface(surface: int) -> void:
 # --- References ---
 @onready var input: Node = $VehicleInput
 @onready var drift_score: Node = $DriftScore
-@onready var body_mesh: MeshInstance3D = $MeshInstance3D
+@onready var body_mesh: Node3D = $MeshInstance3D
+@export var car_model_path: String = "res://assets/models/porsche.glb"
 @onready var wheels: Array[RayCast3D] = [
 	$WheelFL, $WheelFR, $WheelRL, $WheelRR
 ]
@@ -82,6 +83,26 @@ func _ready() -> void:
 	for wheel in wheels:
 		wheel.enabled = true
 		wheel.target_position = Vector3.DOWN * ray_length
+
+	# Load car model, replace placeholder box
+	_load_car_model()
+
+func _load_car_model() -> void:
+	if not ResourceLoader.exists(car_model_path):
+		return
+	var scene: PackedScene = load(car_model_path)
+	if not scene:
+		return
+	var model := scene.instantiate()
+
+	# Remove placeholder mesh
+	if body_mesh:
+		body_mesh.queue_free()
+
+	# Add model as child, assign as body_mesh for visual roll
+	model.name = "CarModel"
+	add_child(model)
+	body_mesh = model
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	# Custom gravity (stronger than default for planted feel)
