@@ -1,10 +1,11 @@
-[gd_scene load_steps=9 format=3 uid="uid://d2kxw9p5r3snx"]
+[gd_scene load_steps=10 format=3 uid="uid://d2kxw9p5r3snx"]
 
 [ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
 [ext_resource type="Script" path="res://scripts/camera/third_person_camera.gd" id="2_follow_camera"]
 [ext_resource type="Script" path="res://scripts/world/terrain.gd" id="3_terrain"]
 [ext_resource type="Script" path="res://scripts/world/valley_fog.gd" id="4_valley_fog"]
 [ext_resource type="Script" path="res://scripts/world/day_night_cycle.gd" id="5_day_night_cycle"]
+[ext_resource type="Script" path="res://scripts/world/cloud_system.gd" id="6_cloud_system"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.35, 0.55, 0.82, 1.0)
@@ -58,3 +59,6 @@ script = ExtResource("4_valley_fog")
 
 [node name="DayNightCycle" type="Node3D" parent="."]
 script = ExtResource("5_day_night_cycle")
+
+[node name="CloudSystem" type="Node3D" parent="."]
+script = ExtResource("6_cloud_system")
