@@ -8,46 +8,46 @@ const BIOMES := {
     BiomeType.ALPINE_MEADOWS: {
         "name": "Alpine Meadows",
         "surface": 2,  # GRASS
-        "color_base": Color(0.3, 0.6, 0.15),       # rich Ghibli green
-        "color_slope": Color(0.5, 0.42, 0.25),     # warm earth
+        "color_base": Color(0.35, 0.72, 0.22),     # vivid pixel-art green
+        "color_slope": Color(0.55, 0.45, 0.28),    # warm brown earth
         "noise_scale": 0.01,
-        "noise_amplitude": 20.0,                    # rolling hills
+        "noise_amplitude": 20.0,
         "grass_density": 1.0,
     },
     BiomeType.CANYON: {
         "name": "Canyon",
         "surface": 0,  # DIRT
-        "color_base": Color(0.7, 0.3, 0.12),       # deep red clay
-        "color_slope": Color(0.55, 0.25, 0.1),     # dark red rock
+        "color_base": Color(0.72, 0.38, 0.18),     # warm terracotta
+        "color_slope": Color(0.58, 0.28, 0.14),    # deep clay
         "noise_scale": 0.025,
-        "noise_amplitude": 45.0,                    # dramatic canyon walls
+        "noise_amplitude": 45.0,
         "grass_density": 0.15,
     },
     BiomeType.SALT_FLATS: {
         "name": "Salt Flats",
         "surface": 3,  # ROCK
-        "color_base": Color(0.9, 0.88, 0.8),       # bright white salt
-        "color_slope": Color(0.75, 0.7, 0.6),      # cracked salt edges
+        "color_base": Color(0.88, 0.85, 0.72),     # warm cream
+        "color_slope": Color(0.72, 0.68, 0.55),    # sandy beige
         "noise_scale": 0.004,
-        "noise_amplitude": 4.0,                     # mostly flat with subtle ripples
+        "noise_amplitude": 4.0,
         "grass_density": 0.0,
     },
     BiomeType.JAGGED_PEAKS: {
         "name": "Jagged Peaks",
         "surface": 3,  # ROCK
-        "color_base": Color(0.45, 0.45, 0.5),      # cold grey stone
-        "color_slope": Color(0.95, 0.95, 1.0),     # bright snow on slopes
+        "color_base": Color(0.52, 0.5, 0.55),      # cool grey stone
+        "color_slope": Color(0.92, 0.92, 0.96),    # snow white
         "noise_scale": 0.035,
-        "noise_amplitude": 60.0,                    # jagged mountains
+        "noise_amplitude": 60.0,
         "grass_density": 0.05,
     },
     BiomeType.COAST: {
         "name": "Coast",
         "surface": 1,  # SAND
-        "color_base": Color(0.85, 0.78, 0.5),      # warm golden sand
-        "color_slope": Color(0.35, 0.55, 0.25),    # coastal vegetation
+        "color_base": Color(0.88, 0.8, 0.48),      # golden sand
+        "color_slope": Color(0.4, 0.62, 0.28),     # lush coastal green
         "noise_scale": 0.012,
-        "noise_amplitude": 12.0,                    # gentle coastal hills
+        "noise_amplitude": 12.0,
         "grass_density": 0.5,
     },
 }
