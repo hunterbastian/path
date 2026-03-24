@@ -59,6 +59,9 @@ func set_surface(surface: int) -> void:
 const FRONT := [0, 1]
 const REAR := [2, 3]
 
+# Damage system
+var _damage: Node  # DamageSystem
+
 # Cached node refs (resolved once)
 var _terrain_node: Node
 var _terrain_resolved: bool = false
@@ -121,6 +124,8 @@ func respawn() -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	rotation = Vector3.ZERO
+	if _damage and _damage.has_method("reset"):
+		_damage.reset()
 	var spawn_height := 30.0
 	if _terrain_node and _terrain_node.has_method("get_height_at"):
 		spawn_height = _terrain_node.get_height_at(0.0, 0.0) + 3.0
@@ -142,6 +147,14 @@ func _ready() -> void:
 
 	# Load car model, replace placeholder box
 	_load_car_model()
+
+	# Damage system
+	var DamageScript := load("res://scripts/vehicle/damage_system.gd")
+	_damage = Node.new()
+	_damage.set_script(DamageScript)
+	_damage.name = "DamageSystem"
+	add_child(_damage)
+	_damage.setup(self)
 
 	# Snap to terrain so we always spawn on land
 	await get_tree().process_frame
@@ -207,7 +220,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			var car_forward := -global_transform.basis.z
 			var speed := linear_velocity.length()
 			var speed_factor := 1.0 - clampf(speed / (max_speed * float(surface_config["max_speed"])), 0.0, 1.0)
-			var drive: float = float(input.throttle) * max_engine_force * float(surface_config["accel"]) * speed_factor * mass
+			var accel_penalty: float = _damage.get_penalty("accel") if _damage else 1.0
+			var drive: float = float(input.throttle) * max_engine_force * float(surface_config["accel"]) * speed_factor * mass * accel_penalty
 			var brake_force: float = float(input.brake) * max_engine_force * 0.6 * mass
 			state.apply_force(car_forward * (drive - brake_force), wheel_local)
 
@@ -217,7 +231,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 		# Steer front wheels
 		if i in FRONT and input:
-			var steer_angle: float = float(input.steer) * max_steer_angle * float(surface_config["steer_response"])
+			var steer_penalty: float = _damage.get_penalty("steer") if _damage else 1.0
+			var steer_angle: float = float(input.steer) * max_steer_angle * float(surface_config["steer_response"]) * steer_penalty
 			wheel_forward = wheel_forward.rotated(Vector3.UP, steer_angle)
 			wheel_right = wheel_right.rotated(Vector3.UP, steer_angle)
 
@@ -242,7 +257,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			slip_grip = maxf(0.3, 1.0 - (slip_angle - drop_angle) * 1.5)  # falloff
 
 		# --- Lateral grip force ---
-		var grip: float = lateral_grip * slip_grip * float(surface_config["grip"])
+		var grip_penalty: float = _damage.get_penalty("grip") if _damage else 1.0
+		var grip: float = lateral_grip * slip_grip * float(surface_config["grip"]) * grip_penalty
 		if input and bool(input.handbrake) and i in REAR:
 			grip *= handbrake_grip_factor
 
@@ -254,7 +270,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.apply_force(wheel_right * lateral_force, wheel_local)
 
 		# --- Forward friction / rolling drag ---
-		var drag: float = forward_drag * float(surface_config["drag"])
+		var drag_penalty: float = _damage.get_penalty("drag") if _damage else 1.0
+		var drag: float = forward_drag * float(surface_config["drag"]) * drag_penalty
 		if input and float(input.throttle) < 0.1 and float(input.brake) < 0.1:
 			drag += 2.0  # heavy engine braking — car decelerates fast when you let off gas
 		state.apply_force(wheel_forward * -forward_vel * drag * mass * 0.25, wheel_local)

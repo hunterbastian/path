@@ -6,6 +6,8 @@ extends CanvasLayer
 var _speed_label: Label
 var _compass_label: Label
 var _boost_bar: ProgressBar
+var _health_bar: ProgressBar
+var _health_label: Label
 var _drift_label: Label
 var _surface_label: Label
 var _minimap: Control
@@ -13,6 +15,7 @@ var _minimap_canvas: Control  # custom draw for island + car dot
 
 var _vehicle: Node
 var _drift_node: Node
+var _damage_node: Node
 
 const AMBER := Color("#d4a033")
 const BRIGHT_AMBER := Color("#f0c040")
@@ -35,6 +38,7 @@ func _process(_delta: float) -> void:
 	_update_speed()
 	_update_compass()
 	_update_boost()
+	_update_health()
 	_update_drift()
 	_update_surface()
 	_update_minimap()
@@ -48,6 +52,7 @@ func _find_vehicle() -> void:
 		_vehicle = get_node_or_null("/root/GameWorld/Vehicle")
 	if _vehicle:
 		_drift_node = _vehicle.get_node_or_null("DriftScore")
+		_damage_node = _vehicle.get_node_or_null("DamageSystem")
 
 
 func _build_ui() -> void:
@@ -64,6 +69,45 @@ func _build_ui() -> void:
 	_speed_label.position.x = -100
 	_speed_label.custom_minimum_size = Vector2(200, 30)
 	root.add_child(_speed_label)
+
+	# --- Health bar (above speed) ---
+	_health_label = _make_label("DMG: 100%", 12)
+	_health_label.add_theme_color_override("font_color", DIM_AMBER)
+	_health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_health_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_health_label.position.y = -110
+	_health_label.position.x = -100
+	_health_label.custom_minimum_size = Vector2(200, 20)
+	root.add_child(_health_label)
+
+	_health_bar = ProgressBar.new()
+	_health_bar.max_value = 100
+	_health_bar.value = 100
+	_health_bar.show_percentage = false
+	_health_bar.custom_minimum_size = Vector2(200, 6)
+	_health_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_health_bar.position.y = -95
+	_health_bar.position.x = -100
+	var health_bg := StyleBoxFlat.new()
+	health_bg.bg_color = Color("#1a1a15")
+	health_bg.border_color = DIM_AMBER
+	health_bg.border_width_top = 1
+	health_bg.border_width_bottom = 1
+	health_bg.border_width_left = 1
+	health_bg.border_width_right = 1
+	health_bg.corner_radius_top_left = 0
+	health_bg.corner_radius_top_right = 0
+	health_bg.corner_radius_bottom_left = 0
+	health_bg.corner_radius_bottom_right = 0
+	_health_bar.add_theme_stylebox_override("background", health_bg)
+	var health_fill := StyleBoxFlat.new()
+	health_fill.bg_color = AMBER
+	health_fill.corner_radius_top_left = 0
+	health_fill.corner_radius_top_right = 0
+	health_fill.corner_radius_bottom_left = 0
+	health_fill.corner_radius_bottom_right = 0
+	_health_bar.add_theme_stylebox_override("fill", health_fill)
+	root.add_child(_health_bar)
 
 	# --- Boost bar (below speed) ---
 	_boost_bar = ProgressBar.new()
@@ -177,6 +221,22 @@ func _update_boost() -> void:
 	# Boost is always available in current design -- show as full
 	# Later: connect to an actual boost meter
 	_boost_bar.value = 100
+
+
+func _update_health() -> void:
+	if not _damage_node:
+		return
+	if _damage_node.has_method("get_health_percent"):
+		var pct: float = float(_damage_node.get_health_percent()) * 100.0
+		_health_bar.value = pct
+		_health_label.text = "DMG: %d%%" % roundi(pct)
+		# Color shifts from amber to red as health drops
+		if pct < 30.0:
+			_health_label.add_theme_color_override("font_color", Color("#cc3333"))
+		elif pct < 60.0:
+			_health_label.add_theme_color_override("font_color", AMBER)
+		else:
+			_health_label.add_theme_color_override("font_color", DIM_AMBER)
 
 
 func _update_drift() -> void:
