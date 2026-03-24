@@ -179,24 +179,26 @@ func _build_visual_mesh(height_data: PackedFloat32Array) -> void:
 
 # ── Collision ────────────────────────────────────────────────────────────────
 
-func _build_collision(height_data: PackedFloat32Array) -> void:
-	var heightmap_shape := HeightMapShape3D.new()
-	heightmap_shape.map_width = GRID_SIZE
-	heightmap_shape.map_depth = GRID_SIZE
-	heightmap_shape.map_data = height_data
-
-	var collision_shape := CollisionShape3D.new()
-	collision_shape.shape = heightmap_shape
-
+func _build_collision(_height_data: PackedFloat32Array) -> void:
+	# Use trimesh collision from the visual mesh — guaranteed to match
 	_collision_body = StaticBody3D.new()
-	_collision_body.add_child(collision_shape)
 
-	# HeightMapShape3D is centered at its parent origin and spans
-	# map_width and map_depth in local units. We need to scale it so
-	# that (GRID_SIZE) local units map to WORLD_SIZE world units.
-	var scale_xz: float = WORLD_SIZE / float(GRID_SIZE - 1)
-	_collision_body.scale = Vector3(scale_xz, 1.0, scale_xz)
+	if _mesh_instance and _mesh_instance.mesh:
+		_mesh_instance.create_trimesh_collision()
+		# create_trimesh_collision adds a StaticBody3D child to the mesh instance
+		# Move it to be our collision body instead
+		var auto_body := _mesh_instance.get_child(_mesh_instance.get_child_count() - 1)
+		if auto_body is StaticBody3D:
+			_mesh_instance.remove_child(auto_body)
+			add_child(auto_body)
+			_collision_body = auto_body
+			return
 
+	# Fallback: flat ground plane
+	var boundary := WorldBoundaryShape3D.new()
+	var col_shape := CollisionShape3D.new()
+	col_shape.shape = boundary
+	_collision_body.add_child(col_shape)
 	add_child(_collision_body)
 
 
