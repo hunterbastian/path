@@ -200,7 +200,7 @@ func _update_surface() -> void:
 
 func _update_minimap() -> void:
 	if _minimap_canvas and _minimap_canvas is MinimapDraw:
-		var pos := _vehicle.global_position
+		var pos: Vector3 = _vehicle.global_position
 		var forward: Vector3 = -_vehicle.global_transform.basis.z
 		_minimap_canvas.car_x = pos.x
 		_minimap_canvas.car_z = pos.z
