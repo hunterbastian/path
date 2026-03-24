@@ -7,30 +7,30 @@ extends RigidBody3D
 const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 
 # --- Suspension ---
-@export var spring_strength: float = 65.0   # stiffer for responsive feel
-@export var spring_damping: float = 6.0     # less bounce
-@export var ray_length: float = 0.7         # slightly longer for terrain clearance
+@export var spring_strength: float = 80.0   # stiff — car doesn't bounce, it LANDS
+@export var spring_damping: float = 8.0     # kills bounce instantly
+@export var ray_length: float = 0.8         # long travel for rough terrain
 
 # --- Drive ---
-@export var max_engine_force: float = 55.0  # snappier acceleration
-@export var max_speed: float = 50.0         # ~180 km/h
-@export var custom_gravity: float = 32.0    # heavier, more planted
+@export var max_engine_force: float = 70.0  # violent acceleration
+@export var max_speed: float = 60.0         # ~216 km/h — fury road speed
+@export var custom_gravity: float = 25.0    # heavy but not glued — cars catch air off bumps
 
 # --- Steering ---
-@export var max_steer_angle: float = 0.5    # more responsive turns
+@export var max_steer_angle: float = 0.4    # tight at speed, commit to your line
 
 # --- Grip ---
-@export var lateral_grip: float = 10.0      # higher grip = more responsive
-@export var handbrake_grip_factor: float = 0.12  # easier to initiate drift
-@export var yaw_damping: float = 3.0        # stops spinning faster
-@export var countersteer_grip_bonus: float = 1.4  # more reward for counter-steering
+@export var lateral_grip: float = 7.0       # lower grip = more slide, more mad max
+@export var handbrake_grip_factor: float = 0.08  # handbrake = instant chaos
+@export var yaw_damping: float = 2.0        # car rotates freely, big sweeping slides
+@export var countersteer_grip_bonus: float = 1.5  # skilled drivers recover from slides
 
 # --- Boost ---
-@export var boost_force: float = 40.0       # punchier boost
-@export var boost_max_speed: float = 65.0   # faster boost cap
+@export var boost_force: float = 55.0       # nitro hit — feels like a kick in the back
+@export var boost_max_speed: float = 80.0   # insane boost top speed
 
 # --- Downforce ---
-@export var downforce_coefficient: float = 0.025  # more planted at speed
+@export var downforce_coefficient: float = 0.03  # planted at speed, loose at low speed
 
 # --- Weight transfer ---
 @export var roll_intensity: float = 0.03  # visual lean in turns
