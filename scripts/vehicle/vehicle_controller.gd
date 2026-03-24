@@ -9,7 +9,7 @@ const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 # --- Suspension ---
 @export var spring_strength: float = 80.0   # stiff — car doesn't bounce, it LANDS
 @export var spring_damping: float = 8.0     # kills bounce instantly
-@export var ray_length: float = 0.8         # long travel for rough terrain
+@export var ray_length: float = 1.5          # long enough to always reach ground
 
 # --- Drive ---
 @export var max_engine_force: float = 70.0  # violent acceleration
@@ -216,3 +216,17 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	# --- Aerodynamic downforce (keeps car planted at high speed) ---
 	var speed_sq := linear_velocity.length_squared()
 	state.apply_central_force(Vector3.DOWN * downforce_coefficient * speed_sq * mass)
+
+	# --- Airborne drive (reduced force when no wheels touching) ---
+	var any_wheel_grounded := false
+	for w in wheels:
+		if w.is_colliding():
+			any_wheel_grounded = true
+			break
+	if not any_wheel_grounded and input:
+		var air_forward := -global_transform.basis.z
+		var air_drive: float = float(input.throttle) * max_engine_force * 0.3
+		state.apply_central_force(air_forward * air_drive)
+		# Air steering
+		var air_steer: float = float(input.steer) * 3.0
+		state.apply_torque(Vector3.UP * -air_steer * mass)

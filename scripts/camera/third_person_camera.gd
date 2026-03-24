@@ -31,9 +31,9 @@ extends Camera3D
 @export var drift_offset_smooth: float = 3.0
 
 # --- Freelook ---
-@export var mouse_sensitivity: float = 0.003
-@export var freelook_return_delay: float = 1.0
-@export var freelook_return_speed: float = 3.0
+@export var mouse_sensitivity: float = 0.002  # less twitchy
+@export var freelook_return_delay: float = 0.3  # snaps back fast
+@export var freelook_return_speed: float = 8.0  # fast return
 @export var min_pitch: float = -0.5
 @export var max_pitch: float = 0.8
 
