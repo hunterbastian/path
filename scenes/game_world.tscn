@@ -42,6 +42,7 @@ transform = Transform3D(0.866025, -0.28868, 0.408248, 0, 0.816497, 0.57735, -0.5
 light_color = Color(1.0, 0.95, 0.85, 1.0)
 light_energy = 1.6
 shadow_enabled = true
+shadow_blur = 2.0
 directional_shadow_max_distance = 300.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
