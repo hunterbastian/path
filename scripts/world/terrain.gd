@@ -180,25 +180,17 @@ func _build_visual_mesh(height_data: PackedFloat32Array) -> void:
 # ── Collision ────────────────────────────────────────────────────────────────
 
 func _build_collision(_height_data: PackedFloat32Array) -> void:
-	# Use trimesh collision from the visual mesh — guaranteed to match
-	_collision_body = StaticBody3D.new()
-
+	# Let Godot create trimesh collision as a child of the mesh instance
 	if _mesh_instance and _mesh_instance.mesh:
 		_mesh_instance.create_trimesh_collision()
-		# create_trimesh_collision adds a StaticBody3D child to the mesh instance
-		# Move it to be our collision body instead
-		var auto_body := _mesh_instance.get_child(_mesh_instance.get_child_count() - 1)
-		if auto_body is StaticBody3D:
-			_mesh_instance.remove_child(auto_body)
-			add_child(auto_body)
-			_collision_body = auto_body
-			return
 
-	# Fallback: flat ground plane
+	# Always add a flat floor as absolute fallback (at y = -5)
+	_collision_body = StaticBody3D.new()
 	var boundary := WorldBoundaryShape3D.new()
 	var col_shape := CollisionShape3D.new()
 	col_shape.shape = boundary
 	_collision_body.add_child(col_shape)
+	_collision_body.position.y = -5.0
 	add_child(_collision_body)
 
 
