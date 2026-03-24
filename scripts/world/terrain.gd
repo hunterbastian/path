@@ -192,18 +192,44 @@ func _build_visual_mesh(height_data: PackedFloat32Array) -> void:
 # ── Collision ────────────────────────────────────────────────────────────────
 
 func _build_collision(_height_data: PackedFloat32Array) -> void:
-	# Let Godot create trimesh collision as a child of the mesh instance
+	# Trimesh collision from the visual mesh
 	if _mesh_instance and _mesh_instance.mesh:
 		_mesh_instance.create_trimesh_collision()
 
-	# Always add a flat floor as absolute fallback (at y = -5)
-	_collision_body = StaticBody3D.new()
-	var boundary := WorldBoundaryShape3D.new()
-	var col_shape := CollisionShape3D.new()
-	col_shape.shape = boundary
-	_collision_body.add_child(col_shape)
-	_collision_body.position.y = -5.0
-	add_child(_collision_body)
+	# Flat spawn pad at center — guaranteed collision that always works
+	# This is the green field where the player starts
+	var pad_body := StaticBody3D.new()
+	var pad_shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(40.0, 1.0, 40.0)  # 40x40m flat pad
+	pad_shape.shape = box
+	pad_body.add_child(pad_shape)
+	# Position at center dome height
+	var center_h := _sample_height(0.0, 0.0)
+	pad_body.position = Vector3(0.0, center_h - 0.5, 0.0)
+	add_child(pad_body)
+
+	# Also add a visual green pad so it looks like a field
+	var pad_mesh := MeshInstance3D.new()
+	var plane := BoxMesh.new()
+	plane.size = Vector3(40.0, 0.2, 40.0)
+	var pad_mat := StandardMaterial3D.new()
+	pad_mat.albedo_color = Color(0.28, 0.55, 0.18)  # Ghibli grass green
+	pad_mesh.mesh = plane
+	pad_mesh.material_override = pad_mat
+	pad_mesh.position = Vector3(0.0, center_h, 0.0)
+	pad_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(pad_mesh)
+
+	# Absolute fallback floor — infinite plane at y = -10
+	var floor_body := StaticBody3D.new()
+	var floor_shape := CollisionShape3D.new()
+	var big_box := BoxShape3D.new()
+	big_box.size = Vector3(1000.0, 1.0, 1000.0)  # use box instead of WorldBoundary
+	floor_shape.shape = big_box
+	floor_body.add_child(floor_shape)
+	floor_body.position.y = -10.0
+	add_child(floor_body)
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

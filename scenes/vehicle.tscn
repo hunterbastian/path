@@ -15,7 +15,7 @@ albedo_color = Color(0.2, 0.2, 0.8, 1.0)
 
 [node name="Vehicle" type="RigidBody3D"]
 mass = 1200.0
-gravity_scale = 0.0
+gravity_scale = 1.0
 script = ExtResource("1_ctrl")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

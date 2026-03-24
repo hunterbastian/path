@@ -14,7 +14,7 @@ const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 # --- Drive ---
 @export var max_engine_force: float = 70.0  # violent acceleration
 @export var max_speed: float = 60.0         # ~216 km/h — fury road speed
-@export var custom_gravity: float = 35.0    # heavy — car stays glued to ground
+@export var custom_gravity: float = 20.0    # extra gravity on top of Godot's 9.8 (total ~30)
 
 # --- Steering ---
 @export var max_steer_angle: float = 0.4    # tight at speed, commit to your line
@@ -145,10 +145,14 @@ func _ready() -> void:
 	_snap_to_terrain()
 
 func _snap_to_terrain() -> void:
+	# Spawn at center (0, 0) on the flat green pad
 	_resolve_terrain()
+	var spawn_h := 35.0  # safe default above most terrain
 	if _terrain_node and _terrain_node.has_method("get_height_at"):
-		var h: float = _terrain_node.get_height_at(global_position.x, global_position.z)
-		global_position.y = h + 3.0  # spawn 3m above terrain
+		spawn_h = _terrain_node.get_height_at(0.0, 0.0) + 2.0
+	global_position = Vector3(0.0, spawn_h, 0.0)
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 
 func _load_car_model() -> void:
 	if not ResourceLoader.exists(car_model_path):
