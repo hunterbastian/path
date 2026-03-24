@@ -17,8 +17,8 @@ func _ready() -> void:
 	var material := ShaderMaterial.new()
 	if shader:
 		material.shader = shader
-		material.set_shader_parameter("deep_color", Color(0.05, 0.15, 0.3, 0.9))
-		material.set_shader_parameter("shallow_color", Color(0.1, 0.4, 0.5, 0.7))
+		material.set_shader_parameter("deep_color", Color(0.08, 0.22, 0.42, 0.85))
+		material.set_shader_parameter("shallow_color", Color(0.18, 0.48, 0.55, 0.6))
 		material.set_shader_parameter("foam_color", Color(0.9, 0.95, 1.0, 1.0))
 		material.set_shader_parameter("wave_speed", 0.8)
 		material.set_shader_parameter("wave_height", 0.6)

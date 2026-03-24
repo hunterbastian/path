@@ -9,7 +9,7 @@ const _BiomeConfig := preload("res://scripts/world/biome_config.gd")
 const GRID_SIZE := 256
 const WORLD_SIZE := 500.0
 const CELL_SIZE: float = WORLD_SIZE / (GRID_SIZE - 1)
-const CENTER_HEIGHT := 40.0  # taller dome — visible from everywhere
+const CENTER_HEIGHT := 30.0  # mesa plateau — flat top, steep sides
 const SEA_LEVEL := 0.0
 const ISLAND_RADIUS := 220.0
 
@@ -214,7 +214,7 @@ func _build_collision(_height_data: PackedFloat32Array) -> void:
 	var plane := BoxMesh.new()
 	plane.size = Vector3(40.0, 0.2, 40.0)
 	var pad_mat := StandardMaterial3D.new()
-	pad_mat.albedo_color = Color(0.28, 0.55, 0.18)  # Ghibli grass green
+	pad_mat.albedo_color = Color(0.62, 0.5, 0.35)  # sandy desert floor
 	pad_mesh.mesh = plane
 	pad_mesh.material_override = pad_mat
 	pad_mesh.position = Vector3(0.0, center_h, 0.0)

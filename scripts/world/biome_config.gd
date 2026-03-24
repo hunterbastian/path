@@ -6,49 +6,49 @@ enum BiomeType { ALPINE_MEADOWS, CANYON, SALT_FLATS, JAGGED_PEAKS, COAST }
 # Per-biome definitions
 const BIOMES := {
     BiomeType.ALPINE_MEADOWS: {
-        "name": "Alpine Meadows",
+        "name": "Valley Floor",
         "surface": 2,  # GRASS
-        "color_base": Color(0.35, 0.72, 0.22),     # vivid pixel-art green
-        "color_slope": Color(0.55, 0.45, 0.28),    # warm brown earth
-        "noise_scale": 0.01,
-        "noise_amplitude": 20.0,
-        "grass_density": 1.0,
+        "color_base": Color(0.6, 0.52, 0.35),      # warm sandy valley floor
+        "color_slope": Color(0.45, 0.38, 0.25),    # darker sand
+        "noise_scale": 0.008,
+        "noise_amplitude": 8.0,                     # gentle valley — relatively flat
+        "grass_density": 0.3,
     },
     BiomeType.CANYON: {
-        "name": "Canyon",
+        "name": "Red Rock Canyon",
         "surface": 0,  # DIRT
-        "color_base": Color(0.72, 0.38, 0.18),     # warm terracotta
-        "color_slope": Color(0.58, 0.28, 0.14),    # deep clay
-        "noise_scale": 0.025,
-        "noise_amplitude": 45.0,
-        "grass_density": 0.15,
+        "color_base": Color(0.78, 0.32, 0.12),     # deep Utah red sandstone
+        "color_slope": Color(0.88, 0.45, 0.18),    # bright orange on steep faces
+        "noise_scale": 0.03,
+        "noise_amplitude": 55.0,                    # dramatic canyon walls and mesas
+        "grass_density": 0.05,
     },
     BiomeType.SALT_FLATS: {
-        "name": "Salt Flats",
+        "name": "Salt Flat Basin",
         "surface": 3,  # ROCK
-        "color_base": Color(0.88, 0.85, 0.72),     # warm cream
-        "color_slope": Color(0.72, 0.68, 0.55),    # sandy beige
-        "noise_scale": 0.004,
-        "noise_amplitude": 4.0,
+        "color_base": Color(0.92, 0.88, 0.78),     # Bonneville white
+        "color_slope": Color(0.82, 0.75, 0.62),    # cracked salt edge
+        "noise_scale": 0.003,
+        "noise_amplitude": 2.0,                     # dead flat
         "grass_density": 0.0,
     },
     BiomeType.JAGGED_PEAKS: {
-        "name": "Jagged Peaks",
+        "name": "Monument Spires",
         "surface": 3,  # ROCK
-        "color_base": Color(0.52, 0.5, 0.55),      # cool grey stone
-        "color_slope": Color(0.92, 0.92, 0.96),    # snow white
-        "noise_scale": 0.035,
-        "noise_amplitude": 60.0,
-        "grass_density": 0.05,
+        "color_base": Color(0.65, 0.35, 0.18),     # dark red-brown rock
+        "color_slope": Color(0.85, 0.55, 0.25),    # warm orange on exposed faces
+        "noise_scale": 0.04,
+        "noise_amplitude": 70.0,                    # tall monument spires
+        "grass_density": 0.02,
     },
     BiomeType.COAST: {
-        "name": "Coast",
+        "name": "Desert Sage",
         "surface": 1,  # SAND
-        "color_base": Color(0.88, 0.8, 0.48),      # golden sand
-        "color_slope": Color(0.4, 0.62, 0.28),     # lush coastal green
-        "noise_scale": 0.012,
-        "noise_amplitude": 12.0,
-        "grass_density": 0.5,
+        "color_base": Color(0.72, 0.62, 0.42),     # dusty sand
+        "color_slope": Color(0.45, 0.48, 0.3),     # sage green patches
+        "noise_scale": 0.015,
+        "noise_amplitude": 15.0,                    # rolling desert hills
+        "grass_density": 0.15,
     },
 }
 
