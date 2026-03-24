@@ -70,6 +70,7 @@ func _ready() -> void:
 		_target = get_node(target_path)
 	_current_distance = base_distance
 	_current_height = base_height
+	make_current()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
