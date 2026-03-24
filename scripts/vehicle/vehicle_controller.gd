@@ -203,8 +203,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			var car_forward := -global_transform.basis.z
 			var speed := linear_velocity.length()
 			var speed_factor := 1.0 - clampf(speed / (max_speed * float(surface_config["max_speed"])), 0.0, 1.0)
-			var drive: float = float(input.throttle) * max_engine_force * float(surface_config["accel"]) * speed_factor
-			var brake_force: float = float(input.brake) * max_engine_force * 0.6
+			var drive: float = float(input.throttle) * max_engine_force * float(surface_config["accel"]) * speed_factor * mass
+			var brake_force: float = float(input.brake) * max_engine_force * 0.6 * mass
 			state.apply_force(car_forward * (drive - brake_force), wheel_local)
 
 		# --- Wheel orientation ---
@@ -278,7 +278,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			break
 	if not any_wheel_grounded and input:
 		var air_forward := -global_transform.basis.z
-		var air_drive: float = float(input.throttle) * max_engine_force * 0.3
+		var air_drive: float = float(input.throttle) * max_engine_force * 0.3 * mass
 		state.apply_central_force(air_forward * air_drive)
 		# Air steering
 		var air_steer: float = float(input.steer) * 3.0
