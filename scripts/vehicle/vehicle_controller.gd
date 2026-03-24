@@ -82,6 +82,25 @@ func _physics_process(delta: float) -> void:
 		if surface != current_surface:
 			set_surface(surface)
 
+	# Auto-respawn if fallen off map
+	if global_position.y < -20.0:
+		respawn()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("pause"):
+		respawn()
+
+func respawn() -> void:
+	_resolve_terrain()
+	# Reset to center of island
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	rotation = Vector3.ZERO
+	var spawn_height := 30.0
+	if _terrain_node and _terrain_node.has_method("get_height_at"):
+		spawn_height = _terrain_node.get_height_at(0.0, 0.0) + 3.0
+	global_position = Vector3(0.0, spawn_height, 0.0)
+
 func _process(delta: float) -> void:
 	if not body_mesh:
 		return
