@@ -196,32 +196,7 @@ func _build_collision(_height_data: PackedFloat32Array) -> void:
 	if _mesh_instance and _mesh_instance.mesh:
 		_mesh_instance.create_trimesh_collision()
 
-	# Flat spawn pad at center — guaranteed collision that always works
-	# This is the green field where the player starts
-	var pad_body := StaticBody3D.new()
-	var pad_shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(40.0, 1.0, 40.0)  # 40x40m flat pad
-	pad_shape.shape = box
-	pad_body.add_child(pad_shape)
-	# Position at center dome height
-	var center_h := _sample_height(0.0, 0.0)
-	pad_body.position = Vector3(0.0, center_h - 0.5, 0.0)
-	add_child(pad_body)
-
-	# Also add a visual green pad so it looks like a field
-	var pad_mesh := MeshInstance3D.new()
-	var plane := BoxMesh.new()
-	plane.size = Vector3(40.0, 0.2, 40.0)
-	var pad_mat := StandardMaterial3D.new()
-	pad_mat.albedo_color = Color(0.62, 0.5, 0.35)  # sandy desert floor
-	pad_mesh.mesh = plane
-	pad_mesh.material_override = pad_mat
-	pad_mesh.position = Vector3(0.0, center_h, 0.0)
-	pad_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(pad_mesh)
-
-	# Absolute fallback floor — infinite plane at y = -10
+	# Fallback floor at y = -10
 	var floor_body := StaticBody3D.new()
 	var floor_shape := CollisionShape3D.new()
 	var big_box := BoxShape3D.new()
