@@ -304,3 +304,18 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		# Air steering
 		var air_steer: float = float(input.steer) * 3.0
 		state.apply_torque(Vector3.UP * -air_steer * mass)
+
+	# --- Terrain ground constraint (replaces unreliable trimesh collision) ---
+	_resolve_terrain()
+	if _terrain_node and _terrain_node.has_method("get_height_at"):
+		var pos := global_position
+		var terrain_h: float = _terrain_node.get_height_at(pos.x, pos.z)
+		var min_height := terrain_h + 0.5  # car bottom clearance
+		if pos.y < min_height:
+			# Push car up — acts like a ground plane
+			var penetration := min_height - pos.y
+			var push_force := penetration * 200.0 * mass  # strong spring
+			state.apply_central_force(Vector3.UP * push_force)
+			# Kill downward velocity
+			if state.linear_velocity.y < 0.0:
+				state.linear_velocity.y *= 0.3  # dampen bounce
