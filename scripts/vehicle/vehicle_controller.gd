@@ -7,14 +7,14 @@ extends RigidBody3D
 const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 
 # --- Suspension ---
-@export var spring_strength: float = 80.0   # stiff — car doesn't bounce, it LANDS
-@export var spring_damping: float = 8.0     # kills bounce instantly
-@export var ray_length: float = 1.5          # long enough to always reach ground
+@export var spring_strength: float = 100.0  # very stiff — no bounce
+@export var spring_damping: float = 12.0    # heavy damping kills ALL oscillation
+@export var ray_length: float = 1.5         # long enough to always reach ground
 
 # --- Drive ---
 @export var max_engine_force: float = 70.0  # violent acceleration
 @export var max_speed: float = 60.0         # ~216 km/h — fury road speed
-@export var custom_gravity: float = 25.0    # heavy but not glued — cars catch air off bumps
+@export var custom_gravity: float = 35.0    # heavy — car stays glued to ground
 
 # --- Steering ---
 @export var max_steer_angle: float = 0.4    # tight at speed, commit to your line
@@ -30,7 +30,7 @@ const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 @export var boost_max_speed: float = 80.0   # insane boost top speed
 
 # --- Downforce ---
-@export var downforce_coefficient: float = 0.03  # planted at speed, loose at low speed
+@export var downforce_coefficient: float = 0.05  # heavy downforce — car hugs terrain
 
 # --- Weight transfer ---
 @export var roll_intensity: float = 0.03  # visual lean in turns
