@@ -9,13 +9,14 @@ const _BiomeConfig := preload("res://scripts/world/biome_config.gd")
 const GRID_SIZE := 256
 const WORLD_SIZE := 500.0
 const CELL_SIZE: float = WORLD_SIZE / (GRID_SIZE - 1)
-const CENTER_HEIGHT := 25.0
+const CENTER_HEIGHT := 40.0  # taller dome — visible from everywhere
 const SEA_LEVEL := 0.0
 const ISLAND_RADIUS := 220.0
 
 const CACHE_LIMIT := 8000
 
 var _noise: FastNoiseLite
+var _detail_noise: FastNoiseLite  # small-scale bumps
 var _height_cache: Dictionary = {}
 var _mesh_instance: MeshInstance3D
 var _collision_body: StaticBody3D
@@ -35,8 +36,15 @@ func _init_noise() -> void:
 	_noise.seed = 42
 	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	_noise.fractal_octaves = 4
+	_noise.fractal_octaves = 5
 	_noise.frequency = 0.01
+
+	_detail_noise = FastNoiseLite.new()
+	_detail_noise.seed = 137
+	_detail_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_detail_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_detail_noise.fractal_octaves = 3
+	_detail_noise.frequency = 0.05  # high frequency for small bumps
 
 
 # ── Height sampling ──────────────────────────────────────────────────────────
@@ -69,6 +77,10 @@ func _sample_height(x: float, z: float) -> float:
 	# Sample noise with blended scale
 	var scaled_noise: float = _noise.get_noise_2d(x * noise_scale / 0.01, z * noise_scale / 0.01)
 	var height: float = scaled_noise * amplitude
+
+	# Detail noise — small bumps and texture
+	var detail: float = _detail_noise.get_noise_2d(x, z) * 3.0
+	height += detail
 
 	# Center dome (Alpine Meadows)
 	var center_factor: float = 1.0 - clampf(dist / (ISLAND_RADIUS * 0.3), 0.0, 1.0)
