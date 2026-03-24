@@ -168,6 +168,7 @@ func _load_car_model() -> void:
 
 	# Add model as child, assign as body_mesh for visual roll
 	model.name = "CarModel"
+	model.rotation.y = PI  # GLB faces +Z, Godot forward is -Z — flip 180°
 	add_child(model)
 	body_mesh = model
 
