@@ -34,6 +34,14 @@ fog_sky_affect = 0.5
 volumetric_fog_enabled = true
 volumetric_fog_density = 0.005
 volumetric_fog_albedo = Color(0.8, 0.75, 0.65, 1.0)
+ssao_enabled = true
+ssao_radius = 2.0
+ssao_intensity = 2.0
+ssao_power = 1.5
+ssao_light_affect = 0.3
+ssil_enabled = true
+ssil_radius = 5.0
+ssil_intensity = 1.0
 
 [node name="GameWorld" type="Node3D"]
 
