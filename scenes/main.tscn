@@ -6,4 +6,4 @@
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 
-[node name="TitleScreen" type="Control" parent="." instance=ExtResource("2_title_screen")]
+[node name="TitleScreen" parent="." instance=ExtResource("2_title_screen")]
