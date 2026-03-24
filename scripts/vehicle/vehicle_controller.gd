@@ -7,30 +7,30 @@ extends RigidBody3D
 const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 
 # --- Suspension ---
-@export var spring_strength: float = 55.0
-@export var spring_damping: float = 5.0
-@export var ray_length: float = 0.6
+@export var spring_strength: float = 65.0   # stiffer for responsive feel
+@export var spring_damping: float = 6.0     # less bounce
+@export var ray_length: float = 0.7         # slightly longer for terrain clearance
 
 # --- Drive ---
-@export var max_engine_force: float = 45.0
-@export var max_speed: float = 45.0  # m/s (~162 km/h)
-@export var custom_gravity: float = 28.0
+@export var max_engine_force: float = 55.0  # snappier acceleration
+@export var max_speed: float = 50.0         # ~180 km/h
+@export var custom_gravity: float = 32.0    # heavier, more planted
 
 # --- Steering ---
-@export var max_steer_angle: float = 0.45  # radians (~26 degrees)
+@export var max_steer_angle: float = 0.5    # more responsive turns
 
 # --- Grip ---
-@export var lateral_grip: float = 8.0
-@export var handbrake_grip_factor: float = 0.15  # grip multiplier when drifting
-@export var yaw_damping: float = 2.5
-@export var countersteer_grip_bonus: float = 1.3
+@export var lateral_grip: float = 10.0      # higher grip = more responsive
+@export var handbrake_grip_factor: float = 0.12  # easier to initiate drift
+@export var yaw_damping: float = 3.0        # stops spinning faster
+@export var countersteer_grip_bonus: float = 1.4  # more reward for counter-steering
 
 # --- Boost ---
-@export var boost_force: float = 35.0
-@export var boost_max_speed: float = 60.0  # m/s — higher cap when boosting
+@export var boost_force: float = 40.0       # punchier boost
+@export var boost_max_speed: float = 65.0   # faster boost cap
 
 # --- Downforce ---
-@export var downforce_coefficient: float = 0.02  # scales with speed squared
+@export var downforce_coefficient: float = 0.025  # more planted at speed
 
 # --- Weight transfer ---
 @export var roll_intensity: float = 0.03  # visual lean in turns
@@ -88,6 +88,18 @@ func _ready() -> void:
 
 	# Load car model, replace placeholder box
 	_load_car_model()
+
+	# Snap to terrain so we always spawn on land
+	await get_tree().process_frame
+	_snap_to_terrain()
+
+func _snap_to_terrain() -> void:
+	var terrain := get_node_or_null("/root/Main/GameWorld/Terrain")
+	if not terrain:
+		terrain = get_node_or_null("/root/GameWorld/Terrain")
+	if terrain and terrain.has_method("get_height_at"):
+		var h: float = terrain.get_height_at(global_position.x, global_position.z)
+		global_position.y = h + 3.0  # spawn 3m above terrain
 
 func _load_car_model() -> void:
 	if not ResourceLoader.exists(car_model_path):
@@ -183,6 +195,12 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 		var lateral_force: float = -lateral_vel * grip * mass
 		state.apply_force(wheel_right * lateral_force, wheel_local)
+
+		# --- Forward friction / rolling drag ---
+		var drag: float = 0.4 * float(surface_config["drag"])
+		if input and float(input.throttle) < 0.1 and float(input.brake) < 0.1:
+			drag += 0.8  # extra drag when coasting (engine braking)
+		state.apply_force(wheel_forward * -forward_vel * drag * mass * 0.25, wheel_local)
 
 	# --- Yaw damping (prevents infinite spinning) ---
 	var yaw_damp: float = -state.angular_velocity.y * yaw_damping * float(surface_config["yaw_damp"]) * mass
