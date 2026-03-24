@@ -48,11 +48,5 @@ func update_fog(time_of_day: float) -> void:
 	var warmth := event_factor * 0.3
 	_fog_material.albedo = fog_color.lerp(Color(1.0, 0.7, 0.4), warmth)
 
-func _process(_delta: float) -> void:
-	var cycle := get_node_or_null("/root/Main/GameWorld/DayNightCycle")
-	if not cycle:
-		cycle = get_node_or_null("/root/GameWorld/DayNightCycle")
-	if not cycle:
-		cycle = get_node_or_null("../DayNightCycle")
-	if cycle and "time_of_day" in cycle:
-		update_fog(float(cycle.time_of_day))
+# Fog updates are driven by DayNightCycle calling update_fog() directly.
+# No _process needed here.

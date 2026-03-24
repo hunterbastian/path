@@ -34,6 +34,7 @@ var _snow_particles: GPUParticles3D
 var _dust_particles: GPUParticles3D
 
 var _player: Node3D
+var _player_resolved: bool = false
 
 func _ready() -> void:
     _next_event_time = randf_range(clear_min * 0.3, clear_min)  # first event comes sooner
@@ -45,11 +46,10 @@ func _ready() -> void:
 func _process(delta: float) -> void:
     _timer += delta
 
-    # Follow player position
-    _update_player_ref()
+    # Follow player position (resolve once)
+    _resolve_player()
     if _player:
         global_position = _player.global_position
-        # Update biome based on player position
         var pos := _player.global_position
         var biome_data := _BiomeConfig.sample_biome(pos.x, pos.z)
         _current_biome = biome_data["biome"]
@@ -61,11 +61,14 @@ func _process(delta: float) -> void:
         if _timer >= _next_event_time:
             _start_event()
 
-func _update_player_ref() -> void:
+func _resolve_player() -> void:
+    if _player_resolved:
+        return
+    _player = get_node_or_null("/root/Main/GameWorld/Vehicle")
     if not _player:
-        _player = get_node_or_null("/root/Main/GameWorld/Vehicle")
-        if not _player:
-            _player = get_node_or_null("/root/GameWorld/Vehicle")
+        _player = get_node_or_null("/root/GameWorld/Vehicle")
+    if _player:
+        _player_resolved = true
 
 func _start_event() -> void:
     var possible_weather: Array = BIOME_WEATHER.get(_current_biome, [])

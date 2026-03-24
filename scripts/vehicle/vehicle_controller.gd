@@ -56,19 +56,29 @@ func set_surface(surface: int) -> void:
 const FRONT := [0, 1]
 const REAR := [2, 3]
 
+# Cached node refs (resolved once)
+var _terrain_node: Node
+var _terrain_resolved: bool = false
+
+func _resolve_terrain() -> void:
+	if _terrain_resolved:
+		return
+	_terrain_node = get_node_or_null("/root/Main/GameWorld/Terrain")
+	if not _terrain_node:
+		_terrain_node = get_node_or_null("/root/GameWorld/Terrain")
+	_terrain_resolved = true
+
 func _physics_process(delta: float) -> void:
 	if drift_score and input:
 		var lateral_speed := linear_velocity.dot(global_transform.basis.x)
 		var forward_speed := -linear_velocity.dot(global_transform.basis.z)
 		drift_score.update_drift(lateral_speed, forward_speed, bool(input.handbrake), delta)
 
-	# Surface detection from terrain
-	var terrain_node := get_node_or_null("/root/Main/GameWorld/Terrain")
-	if not terrain_node:
-		terrain_node = get_node_or_null("/root/GameWorld/Terrain")
-	if terrain_node and terrain_node.has_method("get_surface_at"):
+	# Surface detection from terrain (cached ref)
+	_resolve_terrain()
+	if _terrain_node and _terrain_node.has_method("get_surface_at"):
 		var pos := global_position
-		var surface: int = terrain_node.get_surface_at(pos.x, pos.z)
+		var surface: int = _terrain_node.get_surface_at(pos.x, pos.z)
 		if surface != current_surface:
 			set_surface(surface)
 
@@ -94,11 +104,9 @@ func _ready() -> void:
 	_snap_to_terrain()
 
 func _snap_to_terrain() -> void:
-	var terrain := get_node_or_null("/root/Main/GameWorld/Terrain")
-	if not terrain:
-		terrain = get_node_or_null("/root/GameWorld/Terrain")
-	if terrain and terrain.has_method("get_height_at"):
-		var h: float = terrain.get_height_at(global_position.x, global_position.z)
+	_resolve_terrain()
+	if _terrain_node and _terrain_node.has_method("get_height_at"):
+		var h: float = _terrain_node.get_height_at(global_position.x, global_position.z)
 		global_position.y = h + 3.0  # spawn 3m above terrain
 
 func _load_car_model() -> void:

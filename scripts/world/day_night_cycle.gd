@@ -59,6 +59,10 @@ const SKY_HORIZON_COLORS := {
 	1.0: Color(0.1, 0.08, 0.15),
 }
 
+var _clouds: Node
+var _fog: Node
+var _linked_resolved: bool = false
+
 func _ready() -> void:
 	time_of_day = start_time
 
@@ -105,10 +109,20 @@ func _update_sky() -> void:
 	env.fog_light_color = _sample_gradient(SKY_HORIZON_COLORS, time_of_day)
 
 # --- Gradient helpers ---
+# Pre-sorted key arrays (avoids sorting every frame)
+var _sorted_keys_cache: Dictionary = {}
 
-func _sample_gradient(gradient: Dictionary, t: float) -> Color:
+func _get_sorted_keys(gradient: Dictionary) -> Array:
+	var id := gradient.hash()
+	if _sorted_keys_cache.has(id):
+		return _sorted_keys_cache[id]
 	var keys := gradient.keys()
 	keys.sort()
+	_sorted_keys_cache[id] = keys
+	return keys
+
+func _sample_gradient(gradient: Dictionary, t: float) -> Color:
+	var keys := _get_sorted_keys(gradient)
 
 	if t <= keys[0]:
 		return gradient[keys[0]]
@@ -125,8 +139,7 @@ func _sample_gradient(gradient: Dictionary, t: float) -> Color:
 	return gradient[keys[0]]
 
 func _sample_gradient_float(gradient: Dictionary, t: float) -> float:
-	var keys := gradient.keys()
-	keys.sort()
+	var keys := _get_sorted_keys(gradient)
 
 	if t <= keys[0]:
 		return float(gradient[keys[0]])
@@ -144,11 +157,16 @@ func _sample_gradient_float(gradient: Dictionary, t: float) -> float:
 
 # --- Linked systems ---
 
-func _update_linked_systems() -> void:
-	var clouds := get_node_or_null("../CloudSystem")
-	if clouds and clouds.has_method("update_time_of_day"):
-		clouds.update_time_of_day(time_of_day)
+func _resolve_linked() -> void:
+	if _linked_resolved:
+		return
+	_clouds = get_node_or_null("../CloudSystem")
+	_fog = get_node_or_null("../ValleyFog")
+	_linked_resolved = true
 
-	var fog := get_node_or_null("../ValleyFog")
-	if fog and fog.has_method("update_fog"):
-		fog.update_fog(time_of_day)
+func _update_linked_systems() -> void:
+	_resolve_linked()
+	if _clouds and _clouds.has_method("update_time_of_day"):
+		_clouds.update_time_of_day(time_of_day)
+	if _fog and _fog.has_method("update_fog"):
+		_fog.update_fog(time_of_day)

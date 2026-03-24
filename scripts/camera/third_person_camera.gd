@@ -24,12 +24,15 @@ extends Camera3D
 @export var fov_smooth: float = 6.0
 
 var _target: Node3D
+var _vehicle_input: Node
 var _current_distance: float
 var _current_height: float
 
 func _ready() -> void:
 	if target_path:
 		_target = get_node(target_path)
+	if _target:
+		_vehicle_input = _target.get_node_or_null("VehicleInput")
 	_current_distance = base_distance
 	_current_height = base_height
 	make_current()
@@ -62,9 +65,8 @@ func _physics_process(delta: float) -> void:
 	var look_target := target_pos + target_forward * look_ahead + Vector3.UP * 1.0
 	look_at(look_target, Vector3.UP)
 
-	# Dynamic FOV
+	# Dynamic FOV (cached vehicle_input ref)
 	var target_fov := base_fov + speed_fov_add * speed_ratio
-	var vehicle_input: Node = _target.get_node_or_null("VehicleInput")
-	if vehicle_input and bool(vehicle_input.get("boost")):
+	if _vehicle_input and bool(_vehicle_input.get("boost")):
 		target_fov += boost_fov_add
 	fov = lerpf(fov, target_fov, fov_smooth * delta)

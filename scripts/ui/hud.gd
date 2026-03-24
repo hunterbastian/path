@@ -11,6 +11,7 @@ var _surface_label: Label
 var _minimap_rect: ColorRect  # placeholder for now
 
 var _vehicle: Node
+var _drift_node: Node
 
 const AMBER := Color("#d4a033")
 const BRIGHT_AMBER := Color("#f0c040")
@@ -43,6 +44,8 @@ func _find_vehicle() -> void:
 	_vehicle = get_node_or_null("/root/Main/GameWorld/Vehicle")
 	if not _vehicle:
 		_vehicle = get_node_or_null("/root/GameWorld/Vehicle")
+	if _vehicle:
+		_drift_node = _vehicle.get_node_or_null("DriftScore")
 
 
 func _build_ui() -> void:
@@ -161,15 +164,14 @@ func _update_boost() -> void:
 
 
 func _update_drift() -> void:
-	var drift_node := _vehicle.get_node_or_null("DriftScore")
-	if not drift_node:
+	if not _drift_node:
 		return
-	if bool(drift_node.is_drifting):
-		var score: int = roundi(float(drift_node.current_drift_score))
+	if bool(_drift_node.is_drifting):
+		var score: int = roundi(float(_drift_node.current_drift_score))
 		_drift_label.text = "DRIFT: %d" % score
 		_drift_label.add_theme_color_override("font_color", BRIGHT_AMBER)
 	else:
-		var total: int = roundi(float(drift_node.session_drift_total))
+		var total: int = roundi(float(_drift_node.session_drift_total))
 		_drift_label.text = "TOTAL: %d" % total
 		_drift_label.add_theme_color_override("font_color", AMBER)
 
