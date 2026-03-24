@@ -8,7 +8,8 @@ var _compass_label: Label
 var _boost_bar: ProgressBar
 var _drift_label: Label
 var _surface_label: Label
-var _minimap_rect: ColorRect  # placeholder for now
+var _minimap: Control
+var _minimap_canvas: Control  # custom draw for island + car dot
 
 var _vehicle: Node
 var _drift_node: Node
@@ -36,6 +37,7 @@ func _process(_delta: float) -> void:
 	_update_boost()
 	_update_drift()
 	_update_surface()
+	_update_minimap()
 
 
 func _find_vehicle() -> void:
@@ -116,20 +118,34 @@ func _build_ui() -> void:
 	_surface_label.position = Vector2(20, -130)
 	root.add_child(_surface_label)
 
-	# --- Minimap placeholder (bottom right) ---
-	_minimap_rect = ColorRect.new()
-	_minimap_rect.color = Color("#0f0f0c")
-	_minimap_rect.custom_minimum_size = Vector2(96, 96)
-	_minimap_rect.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_minimap_rect.position = Vector2(-116, -116)
-	# Minimap label
-	var minimap_label := Label.new()
-	minimap_label.text = "MAP"
-	minimap_label.add_theme_color_override("font_color", DIM_AMBER)
-	minimap_label.add_theme_font_size_override("font_size", 10)
-	minimap_label.position = Vector2(2, 2)
-	_minimap_rect.add_child(minimap_label)
-	root.add_child(_minimap_rect)
+	# --- Minimap (bottom right) ---
+	_minimap = Control.new()
+	_minimap.custom_minimum_size = Vector2(120, 120)
+	_minimap.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_minimap.position = Vector2(-140, -140)
+	_minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Background
+	var minimap_bg := ColorRect.new()
+	minimap_bg.color = Color("#0a0a08")
+	minimap_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	minimap_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minimap.add_child(minimap_bg)
+
+	# Custom draw canvas for island + car
+	_minimap_canvas = MinimapDraw.new()
+	_minimap_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_minimap_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minimap.add_child(_minimap_canvas)
+
+	# Border
+	var minimap_border := ColorRect.new()
+	minimap_border.color = Color(0, 0, 0, 0)
+	minimap_border.set_anchors_preset(Control.PRESET_FULL_RECT)
+	minimap_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minimap.add_child(minimap_border)
+
+	root.add_child(_minimap)
 
 
 func _make_label(text: String, size: int) -> Label:
@@ -181,3 +197,57 @@ func _update_surface() -> void:
 		var idx: int = int(_vehicle.current_surface)
 		if idx >= 0 and idx < SURFACE_NAMES.size():
 			_surface_label.text = "SURFACE: %s" % SURFACE_NAMES[idx]
+
+func _update_minimap() -> void:
+	if _minimap_canvas and _minimap_canvas is MinimapDraw:
+		var pos := _vehicle.global_position
+		var forward: Vector3 = -_vehicle.global_transform.basis.z
+		_minimap_canvas.car_x = pos.x
+		_minimap_canvas.car_z = pos.z
+		_minimap_canvas.car_angle = atan2(forward.x, forward.z)
+		_minimap_canvas.queue_redraw()
+
+
+## Inner class for minimap custom drawing
+class MinimapDraw extends Control:
+	const ISLAND_RADIUS := 220.0
+	const MAP_WORLD_RANGE := 260.0  # world units visible on minimap
+
+	var car_x: float = 0.0
+	var car_z: float = 0.0
+	var car_angle: float = 0.0
+
+	func _draw() -> void:
+		var s := size
+		var cx := s.x * 0.5
+		var cy := s.y * 0.5
+		var scale_factor := s.x / (MAP_WORLD_RANGE * 2.0)
+
+		# Draw island circle
+		var island_r := ISLAND_RADIUS * scale_factor
+		draw_arc(Vector2(cx, cy), island_r, 0.0, TAU, 48, Color("#2a2518"), 1.0)
+
+		# Draw biome sector lines
+		var biome_angles := [0.4, 1.8, 3.2, 4.6]
+		for a in biome_angles:
+			var end := Vector2(cx + cos(a) * island_r, cy + sin(a) * island_r)
+			draw_line(Vector2(cx, cy), end, Color("#1a1510"), 1.0)
+
+		# Draw center meadow circle
+		var meadow_r := 80.0 * scale_factor
+		draw_arc(Vector2(cx, cy), meadow_r, 0.0, TAU, 32, Color("#2a3518"), 1.0)
+
+		# Draw car position
+		var car_px := cx + car_x * scale_factor
+		var car_py := cy + car_z * scale_factor
+		var car_pos := Vector2(car_px, car_py)
+
+		# Car dot
+		draw_circle(car_pos, 3.0, Color("#f0c040"))
+
+		# Direction indicator (small line showing heading)
+		var dir := Vector2(sin(car_angle), cos(car_angle)) * 6.0
+		draw_line(car_pos, car_pos + dir, Color("#f0c040"), 2.0)
+
+		# Border
+		draw_rect(Rect2(Vector2.ZERO, s), Color("#8a6a20"), false, 1.0)
