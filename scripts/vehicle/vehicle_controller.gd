@@ -7,33 +7,36 @@ extends RigidBody3D
 const _SurfaceConfig := preload("res://scripts/vehicle/surface_config.gd")
 
 # --- Suspension ---
-@export var spring_strength: float = 100.0  # very stiff — no bounce
-@export var spring_damping: float = 12.0    # heavy damping kills ALL oscillation
-@export var ray_length: float = 1.5         # long enough to always reach ground
+@export var spring_strength: float = 45.0   # soft — car rocks over bumps like MudRunner
+@export var spring_damping: float = 5.0     # some bounce — feels like real weight
+@export var ray_length: float = 1.5         # long travel for rough terrain
 
 # --- Drive ---
-@export var max_engine_force: float = 70.0  # violent acceleration
-@export var max_speed: float = 60.0         # ~216 km/h — fury road speed
-@export var custom_gravity: float = 20.0    # extra gravity on top of Godot's 9.8 (total ~30)
+@export var max_engine_force: float = 18.0  # low power — fighting terrain, not racing
+@export var max_speed: float = 22.0         # ~80 km/h max — slow and heavy
+@export var custom_gravity: float = 12.0    # moderate extra gravity (total ~22 with Godot's 9.8)
 
 # --- Steering ---
-@export var max_steer_angle: float = 0.4    # tight at speed, commit to your line
+@export var max_steer_angle: float = 0.45   # decent turn radius
 
 # --- Grip ---
-@export var lateral_grip: float = 7.0       # lower grip = more slide, more mad max
-@export var handbrake_grip_factor: float = 0.08  # handbrake = instant chaos
-@export var yaw_damping: float = 2.0        # car rotates freely, big sweeping slides
-@export var countersteer_grip_bonus: float = 1.5  # skilled drivers recover from slides
+@export var lateral_grip: float = 12.0      # high grip — car doesn't slide easily
+@export var handbrake_grip_factor: float = 0.2   # handbrake loosens but doesn't go crazy
+@export var yaw_damping: float = 4.0        # resists spinning — heavy vehicle
+@export var countersteer_grip_bonus: float = 1.2  # mild counter-steer help
 
 # --- Boost ---
-@export var boost_force: float = 55.0       # nitro hit — feels like a kick in the back
-@export var boost_max_speed: float = 80.0   # insane boost top speed
+@export var boost_force: float = 15.0       # mild push, not rocket
+@export var boost_max_speed: float = 30.0   # ~108 km/h boost cap
 
 # --- Downforce ---
-@export var downforce_coefficient: float = 0.05  # heavy downforce — car hugs terrain
+@export var downforce_coefficient: float = 0.02  # light downforce
 
 # --- Weight transfer ---
-@export var roll_intensity: float = 0.03  # visual lean in turns
+@export var roll_intensity: float = 0.06    # more body roll — feels heavy
+
+# --- Drag ---
+@export var forward_drag: float = 1.2       # high drag — car slows naturally
 
 # --- Surface ---
 var current_surface: int = _SurfaceConfig.SurfaceType.DIRT
@@ -251,9 +254,9 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.apply_force(wheel_right * lateral_force, wheel_local)
 
 		# --- Forward friction / rolling drag ---
-		var drag: float = 0.4 * float(surface_config["drag"])
+		var drag: float = forward_drag * float(surface_config["drag"])
 		if input and float(input.throttle) < 0.1 and float(input.brake) < 0.1:
-			drag += 0.8  # extra drag when coasting (engine braking)
+			drag += 2.0  # heavy engine braking — car decelerates fast when you let off gas
 		state.apply_force(wheel_forward * -forward_vel * drag * mass * 0.25, wheel_local)
 
 	# --- Yaw damping (prevents infinite spinning) ---
@@ -279,7 +282,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			break
 	if not any_wheel_grounded and input:
 		var air_forward := -global_transform.basis.z
-		var air_drive: float = float(input.throttle) * max_engine_force * 0.3 * mass
+		var air_drive: float = float(input.throttle) * max_engine_force * 0.1 * mass
 		state.apply_central_force(air_forward * air_drive)
 		# Air steering
 		var air_steer: float = float(input.steer) * 3.0
