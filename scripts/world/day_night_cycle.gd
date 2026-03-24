@@ -67,6 +67,7 @@ func _process(delta: float) -> void:
 	time_of_day = fposmod(time_of_day, 1.0)
 	_update_sun()
 	_update_sky()
+	_update_linked_systems()
 
 func _update_sun() -> void:
 	if not sun:
@@ -140,3 +141,14 @@ func _sample_gradient_float(gradient: Dictionary, t: float) -> float:
 			return lerpf(a, b, local_t)
 
 	return float(gradient[keys[0]])
+
+# --- Linked systems ---
+
+func _update_linked_systems() -> void:
+	var clouds := get_node_or_null("../CloudSystem")
+	if clouds and clouds.has_method("update_time_of_day"):
+		clouds.update_time_of_day(time_of_day)
+
+	var fog := get_node_or_null("../ValleyFog")
+	if fog and fog.has_method("update_fog"):
+		fog.update_fog(time_of_day)
