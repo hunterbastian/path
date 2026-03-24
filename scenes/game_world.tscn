@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://d2kxw9p5r3snx"]
+[gd_scene load_steps=14 format=3 uid="uid://d2kxw9p5r3snx"]
 
 [ext_resource type="PackedScene" path="res://scenes/vehicle.tscn" id="1_vehicle"]
 [ext_resource type="Script" path="res://scripts/camera/third_person_camera.gd" id="2_follow_camera"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/world/weather_system.gd" id="7_weather_system"]
 [ext_resource type="Script" path="res://scripts/world/post_process.gd" id="8_post_process"]
 [ext_resource type="Script" path="res://scripts/world/ocean.gd" id="9_ocean"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="10_hud"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.35, 0.55, 0.82, 1.0)
@@ -71,6 +72,9 @@ script = ExtResource("6_cloud_system")
 
 [node name="WeatherSystem" type="Node3D" parent="."]
 script = ExtResource("7_weather_system")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("10_hud")
 
 [node name="PostProcess" type="CanvasLayer" parent="."]
 script = ExtResource("8_post_process")
