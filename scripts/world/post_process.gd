@@ -19,6 +19,7 @@ func _ready() -> void:
 		_material.set_shader_parameter("desaturation", 0.0)
 
 	_overlay = ColorRect.new()
+	_overlay.color = Color(0.0, 0.0, 0.0, 0.0)  # transparent fallback if shader fails
 	_overlay.material = _material
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Full screen
